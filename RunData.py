@@ -2,16 +2,7 @@
 from __future__ import print_function
 import sys
 import os
-import logging
-import argparse
-#import dash
-#import dash_core_components as dcc
-#import dash_html_components as html
-#from dash.dependencies import Input, Output, State
-#import plotly.graph_objs as go
-
-#import pandas as pd
-#import MySQLdb
+import re
 
 try:
     from rcdb.model import Run, ConditionType, Condition, all_value_types
@@ -38,10 +29,10 @@ from datetime import datetime,timedelta
 
 try:
     import pandas as pd
-    plotly_panda_ok=True
 except:
     print("Sorry, but you really need a computer with 'pandas' installed.")
     print("Try 'anaconda' python, which should have both.")
+    sys.exit(1)
 
 import json
 import numpy as np
@@ -99,21 +90,24 @@ class MyaData:
             't':'event',
             'u':'on'  }
 
+        if self.debug: print("Fetching channel '{}'".format(channel))
+
         try:
-            data=self._session.get(self._url_head,verify=False,params=params)
+            my_dat=self._session.get(self._url_head,verify=False,params=params)
         except ConnectionError:
             print("Could not connect to the Mya myQuery website. Was the password correctly entered? ")
             sys.exit(1)
 
-        if data is None:
-            print("Error, could not get the current data for run {}".format(run.number));
+        if my_dat.ok == False:
+            print("Error, could not get the data for run {}".format(channel))
+            print("Webserver responded with status: ",my_dat.status_code)
             return( pd.DataFrame({'ms':[start.timestamp()*1000,end.timestamp()*1000],'value':[0.,0.],'time':[start,end]}))
 
-        dat_len = len(data.json()['data'])
+        dat_len = len(my_dat.json()['data'])
         if dat_len == 0:                                           # EPICS sparsified the zeros.
             return( pd.DataFrame({'ms':[start.timestamp()*1000,end.timestamp()*1000],'value':[0.,0.],'time':[start,end]}))
 
-        pd_frame = pd.DataFrame(data.json()['data'])
+        pd_frame = pd.DataFrame(my_dat.json()['data'])
 
         if len(pd_frame.columns)>2:          # If there are issues with time stamps, 2 extra columns are added: 't' and 'x'
             if self.debug>3:
@@ -145,6 +139,44 @@ class MyaData:
         #
         return(pd_frame)
 
+    def get_multi(self,channels,start,end):
+        '''Get multiple channels in the list 'channels' into a single dataframe and return.
+        To do so, the first channel's time stamps are used as master. All the other channels are fetched,
+        and their time stamps are re-aligned with the first channel timestamps by interpolation.
+        arguments:
+            channels  - a list of channels to fetch, or a dictionary. If dict, then translate channel names.
+            start     - start time.
+            end       - end time'''
+
+        translate=False
+        if type(channels) is str:
+            return(self.get(channels,start,end))
+        if type(channels) is dict:
+            channels_dict = channels
+            channels = list(channels_dict.keys())
+            translate=True
+
+
+        pd_frame = self.get(channels[0],start,end)
+        columns = list(pd_frame.columns)
+
+        if translate:
+            columns[1]=channels_dict[channels[0]]
+        else:
+            columns[1]=channels[0]
+
+        pd_frame.columns=columns                     # Rename the "value" column to the channel name.
+
+        for i in range(1,len(channels)):
+            pd_tmp = self.get(channels[i],start,end)
+            tmp_corr = np.interp(pd_frame.ms,pd_tmp.ms,pd_tmp.value)
+            if translate:
+                pd_frame[channels_dict[channels[i]]] = tmp_corr
+            else:
+                pd_frame[channels[i]] = tmp_corr       # Add the interpolated data into the data frame.
+
+        return(pd_frame)
+
 #
 # Some global configuration settings.
 # These will need to go to input values on a web form.
@@ -157,23 +189,25 @@ class RunData:
         sqlcache='mysql://user.pwd@host/db' will use that DB as the cache. String is a sqlalchemy style DB string.
         sqlcache=True  will use a local sqlite3 file for caching.
         '''
-        self.Production_run_type = ["PROD66"]
+        self.Production_run_type = "PROD.*"
         self.Useful_conditions=['is_valid_run_end', 'user_comment', 'run_type',
         'target', 'beam_current_request', 'operators','event_count',
         'events_rate','run_config', 'status',
          'evio_files_count', 'megabyte_count']
-        self.good_triggers=[]
+        self.Good_triggers=[]
         self.not_good_triggers=[]
         self.min_event_count = 1000000
+        self.target_dict={}
         self.at_jlab=I_am_at_jlab
         self.All_Runs=None
-        self.debug=2
+        self.debug=0
 
         self._db=None
         self._session=None
 
         self._cache_engine=None
         self._cache_known_data=None
+        self._cache_file_name="run_data_cache.sqlite3"
 
 
         self.start_rcdb()
@@ -202,7 +236,7 @@ class RunData:
             return
 
         if connector_string is True:
-            connector_string = "sqlite:///run_data_cache.sqlite3"
+            connector_string = "sqlite:///"+self._cache_file_name
 
         self._cache_engine = sqlalchemy.create_engine(connector_string)
         #
@@ -272,19 +306,29 @@ class RunData:
             print("cache_fill_runs: {} - {}".format(start,end))
         num_runs = self.get_runs_from_rcdb(start,end,1)           # Get the new data from the RCDB.
         if num_runs == 0:
-            return
-        self.select_good_runs()
+            return num_runs
+        good_runs=self.select_good_runs()
         self.add_current_data_to_runs()                                 # Fill in the missing current info
+
         self.All_Runs.to_sql("Runs_Table",self._cache_engine,if_exists="append") # Add the new runs to the cache table
         # We only want to keep the runs with the min_event criteria
         test_num_too_small  = self.All_Runs["event_count"]< min_event
         self.All_Runs= self.All_Runs.drop(self.All_Runs[test_num_too_small].index)   # Drop the ones with too few counts.
+        return num_runs
 
     def _cache_get_runs(self,start,end,min_event):
         '''Get runs directly from the cache and only from the cache.
-        Result is stored in All_Runs, or appended to All_Runs and then sorted.
+        Result is stored in All_Runs if it was empty, or appended to All_Runs if not already there, and then sorted.
         return the number of runs added.'''
         # All the data is available in the cache, so just get it.
+
+        if not self._cache_engine.dialect.has_table(self._cache_engine, "Runs_Table"):
+            #
+            # Table is not there, so cache was not initialized, just return so data will be fetched
+            # from RCDB.
+            #
+            return 0
+
 
         start = start+timedelta(0,0,-start.microsecond)      # Round down on start
         if end.microsecond != 0: end   = end  +timedelta(0,0,1000000-end.microsecond) # Round up on end.
@@ -299,12 +343,23 @@ class RunData:
         if self.All_Runs is None or len(self.All_Runs) == 0:
             self.All_Runs = New_Runs
         else:
-            self.All_Runs = self.All_Runs.append(New_Runs)
-            if(len(self.All_Runs)>0):
+            #
+            # It is possible some (or all) of the new runs had already been fetched earlier.
+            # We do not want overlaps, so we need to sort this out.
+            if self.debug>1:
+                print("Checking overlap for runs {} to All_Runs.".format(len(New_Runs)))
+            New_Runs.drop(New_Runs[New_Runs.index.isin(self.All_Runs.index)].index,inplace=True) # Drop the overlapping runs.
+            if self.debug>1:
+                print("Number of runs that will be appended: {}".format(len(New_Runs)))
+            if len(New_Runs)>0:
+                self.All_Runs = self.All_Runs.append(New_Runs)
                 self.All_Runs.sort_index(inplace=True)
                 if np.any(self.All_Runs.duplicated()):
                     print("ARGGGGG: we have duplicates in All_Runs")
-                    self.All_Runs.drop_duplicates(subset="number",inplace=True)
+                    self.All_Runs.drop_duplicates(inplace=True)
+
+        if self.debug>1:
+            print("Got {} runs from cache.".format(len(New_Runs)))
 
         return(len(New_Runs))
 
@@ -333,9 +388,9 @@ class RunData:
 
 
     def get_runs(self,start,end,min_event):
-        '''Return a dictionary with a list of runs for each target in the run period.
+        '''Fetch the runs from start time to end time with at least min_event events.
         Checking local cache if runs have already been fetched (if self._cache_engine is not None)
-        If not get them from the rcdb and put them in the cache.
+        If not get them from the rcdb and update the cache (if not None).
         Times are rounded down to the second for start and up to the second for end.'''
 
         self.min_event_count = min_event
@@ -345,36 +400,53 @@ class RunData:
         if self.debug: print("get_runs from {} - {} ".format(start,end))
 
         if self._cache_engine is None or self._cache_engine is False:
-            if self.debug>0: print("Getting runs bypassing cache, for start={}, end={}, min_event={}".format(start,end,min_event))
-            self.get_runs_from_rcdb(start,end,min_event)
+            if self.debug>2: print("Getting runs bypassing cache, for start={}, end={}, min_event={}".format(start,end,min_event))
+            num_runs = self.get_runs_from_rcdb(start,end,min_event)
             self.select_good_runs()
             self.add_current_data_to_runs()                                 # Fill in the missing current info
-            return
+            return num_runs
 
-        self._cache_get_runs(start,end,min_event)  # Get whatever we have in the cache.
+        num_runs_cache = self._cache_get_runs(start,end,min_event)  # Get whatever we have in the cache.
 
         cache_overlaps,cache_extend_before,cache_extend_after = self._check_for_cache_hits(start,end)
 
         if(len(cache_overlaps)+len(cache_extend_before)+len(cache_extend_after) == 0): # No overlaps at all.
-            self._cache_fill_runs(start,end,min_event)
+            num_runs = self._cache_fill_runs(start,end,min_event)
+            if num_runs == 0:
+                 return num_runs_cache # No runs found, so don't update the cache.
 
             # Update a new cache record with the new run period.
+            # The 'end' for the cache period must be the 'end' of the last run, or if that is None (run end not recorded)
+            # then 'end' is the start of the last run + 0.1 second.
+            #
+            # See comment below why we adjuct end time.
+            last=self._db.session.query(Run).order_by(Run.start_time.desc()).limit(1).first()
+            if end > last.start_time : # This is scenario 2, adjust the end time
+                end_of_last_run = self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< end )].iloc[-1].end_time
+                if end_of_last_run is None or type(end_of_last_run) is not pd.Timestamp:
+                    print("WARNING: Last run added to cache does not have a proper end time!!!")
+                    end_of_last_run = self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< end )].iloc[-1].start_time
+                    end_of_last_run -= timedelta(0,1) # One second before last start, so the next time this run will get updated.
+            else:
+                end_of_last_run = end
+
             self._cache_known_data=self._cache_known_data.append({"start_time":start,
-                            "end_time":end,"min_event_count":1},ignore_index=True)
+                            "end_time":end_of_last_run,"min_event_count":1},ignore_index=True,sort=False)
 
             self._cache_known_data=self._cache_known_data.sort_values("start_time")
-            if self.debug>1:
+
+            if self.debug>2:
                 print("cache_known_data:")
                 print(self._cache_known_data)
 
             self._cache_known_data.to_sql("Known_Data_Ranges",self._cache_engine,if_exists='replace') # TODO: update sql instead
-            return
+            return num_runs + num_runs_cache
 
         if(len(cache_overlaps)>1):
             print("Cache is dirty: multiple full overlaps.")
 
         while(len(cache_overlaps)==0):
-            if self.debug > 1: print("check_cache_hits: ",cache_overlaps,cache_extend_before,cache_extend_after )
+            if self.debug > 2: print("check_cache_hits: ",cache_overlaps,cache_extend_before,cache_extend_after )
             #
             # Iteratively extend the cache with time periods, starting from below.
             #
@@ -382,6 +454,7 @@ class RunData:
                 min_before = np.min(cache_extend_before)
             else:
                 min_before = None
+
             if len(cache_extend_after)>0:
                 min_after  = np.min(cache_extend_after)
             else:
@@ -393,9 +466,9 @@ class RunData:
                 Save_Runs=None
                 Save_Runs, self.All_Runs = self.All_Runs, Save_Runs     # Save what is in All_Runs.
                 min_before_start = self._cache_known_data.loc[self._cache_known_data.index[min_before],"start_time"]
-                if self.debug>1: print("Extending {} before from {}  to {}".format(min_before,min_before_start,start))
+                if self.debug>2: print("Extending {} before from {}  to {}".format(min_before,min_before_start,start))
                 self._cache_fill_runs(start,min_before_start,min_event) # Add the new data to cache and All_Runs up to min_before_start
-                self.All_Runs = self.All_Runs.append(Save_Runs)         # Append the saved runs.
+                self.All_Runs = self.All_Runs.append(Save_Runs,sort=True)         # Append the saved runs.
                 self._cache_known_data.loc[self._cache_known_data.index[min_before],"start_time"]=start # Update the cache record.
             else:
                 # The earliest overlap is in extend_after, so "start" is inside this overlap period.
@@ -405,16 +478,49 @@ class RunData:
                     # extend to min_before_start
                     extend_to = self._cache_known_data.loc[self._cache_known_data.index[min_before],"start_time"]
                 else:
+                    # Try to extend to the requested end time.
                     extend_to = end
 
-                if self.debug>1: print("Extending {} after from {}  to {}".format(min_after,min_after_end,extend_to))
+                if self.debug>2: print("Extending {} after from {}  to {}".format(min_after,min_after_end,extend_to))
                 Save_Runs=None
                 Save_Runs, self.All_Runs = self.All_Runs, Save_Runs     # Save what is in All_Runs.
-                self._cache_fill_runs(min_after_end,extend_to,min_event) # Add the new data to cache and All_Runs.
-                self.All_Runs = Save_Runs.append(self.All_Runs)
-                self._cache_known_data.loc[self._cache_known_data.index[min_after],"end_time"]=extend_to
+                num_runs = self._cache_fill_runs(min_after_end,extend_to,min_event) # Add the new data to cache and All_Runs.
+                if num_runs != 0:
+                    if self.debug>2: print("Appending runs. ")
+                    self.All_Runs = Save_Runs.append(self.All_Runs,sort=True)
+                else:
+                    # No new runs, so restore what we had before.
+                    self.All_Runs = Save_Runs
 
-            if self.debug>1:
+                if self.All_Runs is None or len(self.All_Runs) == 0:  # There are no runs at all. Just quit.
+                    return 0
+
+                # Two scenarios now:
+                # 1: The run period we just added is somewhere in the middle of all possible runs. It is thus extremely unlikely
+                #    that a new run is added in between the 'end' and the last run we just fetched. It is thus OK to set the end
+                #    of this cache period to the end requested
+                #
+                # 2: The run period we just added stretches beyond the last possible run (e.g. now() or later). It is thus likely
+                #    that runs are added later, which may be added before the 'end' time selected. To avoid missing such runs, we
+                #    need to set the 'end' if the cache period to the end of the last run.
+                #
+                # To detect between 1 and 2, get the last run.
+                last=self._db.session.query(Run).order_by(Run.start_time.desc()).limit(1).first()
+                if end > last.start_time : # This is scenario 2, adjust the end time
+                    # The 'end' for the cache period must be the 'end' of the last run, or if that is None (run end not recorded)
+                    # then 'end' is the start of the last run + 0.1 second.
+                    end_of_last_run = self.All_Runs[(self.All_Runs["start_time"]>=start) & ( self.All_Runs["end_time"]<= extend_to )].iloc[-1].end_time
+                    if end_of_last_run is None or type(end_of_last_run) is not pd.Timestamp:
+                        print("WARNING: Last run added to cache does not have a proper end time!!!")
+                        end_of_last_run = self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< extend_to )].iloc[-1].start_time
+                        end_of_last_run -= timedelta(0,1) # One second before last start, so the next time this run will get updated.
+                    if self.debug>2: print("Change the end time from {} to {}".format(end,end_of_last_run))
+                    end = end_of_last_run # If you do not do this, we keep checking forever!
+
+                # Now update the table with the new extended time.
+                self._cache_known_data.loc[self._cache_known_data.index[min_after],"end_time"]=end
+
+            if self.debug>2:
                 print("New cache config:")
                 print(self._cache_known_data)
 
@@ -515,18 +621,44 @@ class RunData:
         # We also want to veto runs that do not have the correct configuration,
         # such as pulser runs, FEE runs, etc.
         #
-        for rnum in self.list_selected_runs(targets,run_config):
-            self.add_current_cor(rnum)
+        good_runs = self.list_selected_runs(targets,run_config)
+        if len(good_runs)>0:
+            for rnum in self.list_selected_runs(targets,run_config):
+                self.add_current_cor(rnum)
+        else:
+            # Even if there are no good runs, make sure that the "charge" column is in the table!
+            # This ensure that when you write to DB the charge column exsists.
+            self.All_Runs.loc[:,"charge"]=np.NaN
+
 
     def select_good_runs(self):
         '''Select the runs that have the selection criteria of Production_run_type
-        and good_triggers.'''
+        and good_triggers.
+        self.Production_run_type and self.Good_triggers can be either a list of strings to match
+        or a regular expression to match. Use '.*' to match everything. '''
 
         good_runs=[]
         for rnum in self.All_Runs.index:
-            test1 = self.All_Runs.loc[rnum,"run_type"] in self.Production_run_type
+            test1 = False
+            if self.Production_run_type is None:
+                test1=True
+            elif type(self.Production_run_type) is list:
+                test1 = self.All_Runs.loc[rnum,"run_type"] in self.Production_run_type
+            elif type(self.Production_run_type) is str:
+                if re.match(self.Production_run_type,self.All_Runs.loc[rnum,"run_type"]):
+                    test1 = True
+            else:
+                print("Incorrect type for self.Production_run_type:",type(self.Production_run_type))
+                sys.exit(1)
+
+            test2 = False
             trigger = self.All_Runs.loc[rnum,"run_config"]     #  .split('/')[-1] ## The split is already done.
-            test2 =  trigger in self.good_triggers
+            if type(self.Good_triggers) is list:
+                test2 =  trigger in self.Good_triggers
+            elif type(self.Good_triggers) is str:
+                if re.match(self.Good_triggers,trigger):
+                    test2=True
+
             if not test2:
                 if trigger not in self.not_good_triggers:
                     self.not_good_triggers.append(trigger)
@@ -550,7 +682,7 @@ class RunData:
         If run_config is None, then only the pre-selected runs (set with All_Runs.selected True or 1) are used.
         If run_config is False, then all run_configs (triggers) are used.
         If run_config is a string, is will be matched case insensitive regex style.
-        If run_config is a list, then that list will be used instead of the data.good_triggers list.
+        If run_config is a list, then that list will be used instead of the data.Good_triggers list.
         '''
 
         if run_config is None:
@@ -570,6 +702,8 @@ class RunData:
             test_target = self.All_Runs["target"].str.contains(targets,case=False)
         elif type(targets) is list:
             test_target = self.All_Runs.target.isin(targets)
+        elif type(targets) is dict:
+            test_target = self.All_Runs.target.isin(targets.keys())
         else:
             print("I do not know what to do with target = ",type(targets))
 
@@ -578,23 +712,57 @@ class RunData:
 
     def compute_cumulative_charge(self,targets=None,run_config=None):
         '''Compute the cumulative charge and event count for the runs in the current All_Runs table.
-           The increasing numbers are put in the table in 'sum_charge' and 'sum_event_count'.
+           The increasing numbers are put in the table in 'sum_charge', 'sum_charge_norm' and 'sum_event_count'.
            The runs are selected with list_selected_runs with the same 'targets' and 'run_config' arguments.
-           Returns the end value of: (sum_charge,sum_event_count)'''
+           Returns the end value of: (sum_charge,sum_charge_norm,sum_event_count)'''
 
         # filter the runs with a target it.
         selected = self.list_selected_runs(targets,run_config)
-        # Sum_Runs = data.All_Runs[data.All_Runs["target"].isin(targets) & data.All_Runs["selected"]]
+
+        if self.debug>1:
+            print("Computing cumulative charge and event count for runs:",list(selected))
 
         self.All_Runs.loc[selected,"sum_event_count"] = np.cumsum(self.All_Runs.loc[selected,"event_count"])
         self.All_Runs.loc[selected,"sum_charge"] = np.cumsum(self.All_Runs.loc[selected,"charge"])
 
+        if 'norm' in self.target_dict:
+            cumsum_charge_norm=0.
+            for run in selected:
+                if self.All_Runs.loc[run,"target"] in self.target_dict:
+                    target_norm = self.target_dict[self.All_Runs.loc[run,"target"]]/self.target_dict['norm']
+                    cumsum_charge_norm += self.All_Runs.loc[run,"charge"]*target_norm
+                    self.All_Runs.loc[run,"sum_charge_norm"] = cumsum_charge_norm
+
         if len(self.All_Runs.loc[selected]):
-            return(self.All_Runs.loc[selected,"sum_charge"].iloc[-1],self.All_Runs.loc[selected,"sum_event_count"].iloc[-1])
+            return(self.All_Runs.loc[selected,"sum_charge"].iloc[-1],
+            self.All_Runs.loc[selected,"sum_charge_norm"].iloc[-1],
+            self.All_Runs.loc[selected,"sum_event_count"].iloc[-1])
         else:
-            return(0,0)
+            return(0,0,0)
+
+    def __str__(self):
+        '''Return a table with some of the information, to see what is in the All_Runs conveniently. '''
+        out=str(self.All_Runs.loc[:,["start_time","end_time","target","run_config","event_count"]])
+        return(out)
+
+def HPS_2019_Run_Target_Thickness():
+    ''' Returns the dictionary of target name to target thickness.
+        One extra entry, named 'norm' is used for filling the
+        Target thickness is in units of cm.'''
+    targets={
+    'norm':      8.e-4,
+    '4 um W ':   4.e-4,
+    '8 um W ':   8.e-4,
+    '15 um W ': 15.e-4,
+    '20 um W ': 20.e-4
+    }
+    return(targets)
+
 
 if __name__ == "__main__":
+
+    import logging
+    import argparse
 
     try:
         import plotly.graph_objects as go
@@ -617,17 +785,20 @@ if __name__ == "__main__":
     data = RunData()
     # data._cache_engine=None   # Turn OFF cache?
 
-    data.good_triggers=['hps_v7.cnf','hps_v8.cnf','hps_v9.cnf','hps_v9_1.cnf','hps_v9_2.cnf','hps_v10.cnf']
-    data.Production_run_type=["PROD66"]
+    data.Good_triggers=['hps_v7.cnf','hps_v8.cnf','hps_v9.cnf','hps_v9_1.cnf','hps_v9_2.cnf','hps_v10.cnf']
+    data.Production_run_type=["PROD66","PROD67"]
+    data.target_dict = HPS_2019_Run_Target_Thickness()
+
     min_event_count = 1000000              # Runs with at least 1M events.
     start_time = datetime(2019,7,25,0,0)  # SVT back in correct position
     end_time   = datetime.now()
     end_time = end_time+timedelta(0,0,-end_time.microsecond)      # Round down on end_time to a second
 
     data.get_runs(start_time,end_time,min_event_count)
+    data.select_good_runs()
 
-    targets=['8 um W ','4 um W ']
-    data.compute_cumulative_charge(targets)
+    targets='.*um W *'
+    data.compute_cumulative_charge(targets)   # Only the tungsten targets count.
 
     data.All_Runs.to_excel("hps_run_table.xlsx",columns=['start_time','end_time','target','run_config','selected','event_count','sum_event_count','charge','sum_charge','operators','user_comment'])
 
@@ -635,11 +806,12 @@ if __name__ == "__main__":
 #    data.All_Runs.to_latex("hps_run_table.latex",columns=['start_time','end_time','target','run_config','selected','event_count','charge','operators','user_comment'])
 
     Plot_Runs = data.All_Runs.loc[data.list_selected_runs(targets=targets)]
-    hover = ["Run: {} Start time: {}".format(r,Plot_Runs["start_time"][r]) for r in Plot_Runs.index ]
     starts = Plot_Runs["start_time"]
     ends = Plot_Runs["end_time"]
-    center=starts + (ends-starts)/2
-    runlen= [(run["end_time"]-run["start_time"]).total_seconds()*999 for num,run, in Plot_Runs.iterrows()]
+    Plot_Runs["center"]= starts + (ends-starts)/2
+    Plot_Runs["dt"] = [(run["end_time"]-run["start_time"]).total_seconds()*999 for num,run, in Plot_Runs.iterrows()]
+    Plot_Runs["hover"] = ["Run: {} Start time: {}".format(r,Plot_Runs["start_time"][r]) for r in Plot_Runs.index ]
+
     sumcharge = Plot_Runs.loc[:,"sum_charge"]
     plot_sumcharge_t=[starts.iloc[0],ends.iloc[0]]
     plot_sumcharge_v=[0,sumcharge.iloc[0]]
@@ -650,13 +822,44 @@ if __name__ == "__main__":
         plot_sumcharge_v.append(sumcharge.iloc[i-1])
         plot_sumcharge_v.append(sumcharge.iloc[i])
 
+    sumcharge_norm = Plot_Runs.loc[:,"sum_charge_norm"]
+    plot_sumcharge_norm_t=[starts.iloc[0],ends.iloc[0]]
+    plot_sumcharge_norm_v=[0,sumcharge_norm.iloc[0]]
+
+    for i in range(1,len(sumcharge_norm)):
+        plot_sumcharge_norm_t.append(starts.iloc[i])
+        plot_sumcharge_norm_t.append(ends.iloc[i])
+        plot_sumcharge_norm_v.append(sumcharge_norm.iloc[i-1])
+        plot_sumcharge_norm_v.append(sumcharge_norm.iloc[i])
+
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
+    targ_cols={
+    '4 um W ':   'rgba(255,100,255,0.8)',
+    '8 um W ':   'rgba(20,80,255,0.8)',
+    '15 um W ': 'rgba(0,255,255,0.8)',
+    '20 um W ': 'rgba(0,120,150,0.8)'
+    }
+
+    for targ in targ_cols:
+        runs=Plot_Runs.target.str.contains(targ)
+        fig.add_trace(
+            go.Bar(x=Plot_Runs.loc[runs,'center'],
+                y=Plot_Runs.loc[runs,'event_count'],
+                width=Plot_Runs.loc[runs,'dt'],
+                hovertext=Plot_Runs.loc[runs,'hover'],
+                name="#evt for "+targ,
+                marker=dict(color=targ_cols[targ])
+                ),
+            secondary_y=False,)
+
     fig.add_trace(
-        go.Bar(x=center, y=Plot_Runs['event_count'],width=runlen,hovertext=hover,name="Number of events"),
-                 secondary_y=False,)
+        go.Scatter(x=plot_sumcharge_t, y=plot_sumcharge_v,line=dict(color='#B09090', width=3),name="Total Charge Live"),
+        secondary_y=True,
+    )
+
     fig.add_trace(
-        go.Scatter(x=plot_sumcharge_t, y=plot_sumcharge_v,line=dict(color='red', width=3),name="Total Charge Live"),
+        go.Scatter(x=plot_sumcharge_norm_t, y=plot_sumcharge_norm_v,line=dict(color='red', width=3),name="Normalized Total Charge Live"),
         secondary_y=True,
     )
 
@@ -719,32 +922,46 @@ if __name__ == "__main__":
     a_ax.append(-30)
     a_ay.append(-240)
 
+    index=Plot_Runs.index[Plot_Runs.loc[:,"end_time"]>datetime(2019,8,13,4,7)][0]
+    a_index.append(index)
+    a_x.append(Plot_Runs.loc[index,"end_time"])
+    a_y.append(sumcharge.loc[index] )
+    a_text.append("Calibration run <br /> Targer replacement during beam studies<br />SVT motor issues.<br />CHL Event and Beam Tuning")
+    a_ax.append(90)
+    a_ay.append(-100)
 
+    # index=Plot_Runs.index[Plot_Runs.loc[:,"end_time"]>datetime(2019,8,14,1,35)][0]
+    # a_index.append(index)
+    # a_x.append(Plot_Runs.loc[index,"end_time"])
+    # a_y.append(sumcharge.loc[index] )
+    # a_text.append("SVT motor issues")
+    # a_ax.append(0)
+    # a_ay.append(-40)
 
 
     a_annot=[]
-for i in range(len(a_x)):
-    a_annot.append(
-        go.layout.Annotation(
-            x=a_x[i],
-            y=a_y[i],
-            xref="x",
-            yref="y2",
-            text=a_text[i],
-            showarrow=True,
-            arrowhead=2,
-            arrowsize=1,
-            arrowwidth=2,
-            arrowcolor="#505050",
-            ax=a_ax[i],
-            ay=a_ay[i],
-            font = {
-                "family": "Times",
-                "size": 8,
-                "color": "#0040C0"
-            }
+    for i in range(len(a_x)):
+        a_annot.append(
+            go.layout.Annotation(
+                x=a_x[i],
+                y=a_y[i],
+                xref="x",
+                yref="y2",
+                text=a_text[i],
+                showarrow=True,
+                arrowhead=2,
+                arrowsize=1,
+                arrowwidth=2,
+                arrowcolor="#505050",
+                ax=a_ax[i],
+                ay=a_ay[i],
+                font = {
+                    "family": "Times",
+                    "size": 8,
+                    "color": "#0040C0"
+                }
+                )
             )
-        )
 
     fig.update_layout(
         annotations=a_annot+[]
