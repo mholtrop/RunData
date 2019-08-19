@@ -1,2 +1,2 @@
 # RunData
-Python Library to make is easier to query the Run Database (RCDB) and Mya for information. 
+Python Library to make it easier to query the Run Database (RCDB) and Mya for information. 
