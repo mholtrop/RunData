@@ -214,6 +214,11 @@ class RunData:
         self.Mya = MyaData(I_am_at_jlab)
         self.start_cache(sqlcache)
 
+    def __str__(self):
+        '''Return a table with some of the information, to see what is in the All_Runs conveniently. '''
+        out=str(self.All_Runs.loc[:,["start_time","end_time","target","run_config","event_count"]])
+        return(out)
+
     def start_rcdb(self):
         '''Setup a connection to the RCDB
         return: an RCDB handle'''
@@ -725,13 +730,20 @@ class RunData:
         self.All_Runs.loc[selected,"sum_event_count"] = np.cumsum(self.All_Runs.loc[selected,"event_count"])
         self.All_Runs.loc[selected,"sum_charge"] = np.cumsum(self.All_Runs.loc[selected,"charge"])
 
+        sum_charge_per_target=self.target_dict.copy()
+        for k in sum_charge_per_target:
+            sum_charge_per_target[k]=0.
+
         if 'norm' in self.target_dict:
             cumsum_charge_norm=0.
             for run in selected:
                 if self.All_Runs.loc[run,"target"] in self.target_dict:
                     target_norm = self.target_dict[self.All_Runs.loc[run,"target"]]/self.target_dict['norm']
-                    cumsum_charge_norm += self.All_Runs.loc[run,"charge"]*target_norm
-                    self.All_Runs.loc[run,"sum_charge_norm"] = cumsum_charge_norm
+                    if not np.isnan(self.All_Runs.loc[run,"charge"]):
+                        sum_charge_per_target[self.All_Runs.loc[run,"target"]]+= self.All_Runs.loc[run,"charge"]
+                        self.All_Runs.loc[run,"sum_charge_targ"]=sum_charge_per_target[self.All_Runs.loc[run,"target"]]
+                        cumsum_charge_norm += self.All_Runs.loc[run,"charge"]*target_norm
+                        self.All_Runs.loc[run,"sum_charge_norm"] = cumsum_charge_norm
 
         if len(self.All_Runs.loc[selected]):
             return(self.All_Runs.loc[selected,"sum_charge"].iloc[-1],
@@ -739,11 +751,6 @@ class RunData:
             self.All_Runs.loc[selected,"sum_event_count"].iloc[-1])
         else:
             return(0,0,0)
-
-    def __str__(self):
-        '''Return a table with some of the information, to see what is in the All_Runs conveniently. '''
-        out=str(self.All_Runs.loc[:,["start_time","end_time","target","run_config","event_count"]])
-        return(out)
 
 def HPS_2019_Run_Target_Thickness():
     ''' Returns the dictionary of target name to target thickness.
@@ -785,7 +792,10 @@ if __name__ == "__main__":
     data = RunData()
     # data._cache_engine=None   # Turn OFF cache?
 
-    data.Good_triggers=['hps_v7.cnf','hps_v8.cnf','hps_v9.cnf','hps_v9_1.cnf','hps_v9_2.cnf','hps_v10.cnf']
+    data.Good_triggers=['hps_v7.cnf','hps_v8.cnf','hps_v9.cnf','hps_v9_1.cnf',
+                        'hps_v9_2.cnf','hps_v10.cnf',
+                        'hps_v11_1.cnf','hps_v11_2.cnf','hps_v11_3.cnf','hps_v11_4.cnf',
+                        'hps_v11_5.cnf','hps_v11_6.cnf']
     data.Production_run_type=["PROD66","PROD67"]
     data.target_dict = HPS_2019_Run_Target_Thickness()
 
@@ -796,7 +806,7 @@ if __name__ == "__main__":
 
     data.get_runs(start_time,end_time,min_event_count)
     data.select_good_runs()
-
+    data.add_current_data_to_runs()
     targets='.*um W *'
     data.compute_cumulative_charge(targets)   # Only the tungsten targets count.
 
@@ -832,6 +842,26 @@ if __name__ == "__main__":
         plot_sumcharge_norm_v.append(sumcharge_norm.iloc[i-1])
         plot_sumcharge_norm_v.append(sumcharge_norm.iloc[i])
 
+    plot_sumcharge_target_t={}
+    plot_sumcharge_target_v={}
+
+    for t in data.target_dict:
+            sumch=Plot_Runs.loc[Plot_Runs["target"]==t,"sum_charge_targ"]
+            st = Plot_Runs.loc[Plot_Runs["target"]==t,"start_time"]
+            en = Plot_Runs.loc[Plot_Runs["target"]==t,"end_time"]
+
+            if len(sumch>3):
+                print(t)
+                plot_sumcharge_target_t[t]=[starts.iloc[0],st.iloc[0],en.iloc[0]]
+                plot_sumcharge_target_v[t]=[0,0,sumch.iloc[0]]
+                for i in range(1,len(sumch)):
+                    plot_sumcharge_target_t[t].append(st.iloc[i])
+                    plot_sumcharge_target_t[t].append(en.iloc[i])
+                    plot_sumcharge_target_v[t].append(sumch.iloc[i-1])
+                    plot_sumcharge_target_v[t].append(sumch.iloc[i])
+                plot_sumcharge_target_t[t].append(ends.iloc[-1])
+                plot_sumcharge_target_v[t].append(sumch.iloc[-1])
+
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
     targ_cols={
@@ -859,9 +889,22 @@ if __name__ == "__main__":
     )
 
     fig.add_trace(
-        go.Scatter(x=plot_sumcharge_norm_t, y=plot_sumcharge_norm_v,line=dict(color='red', width=3),name="Normalized Total Charge Live"),
+        go.Scatter(x=plot_sumcharge_norm_t, y=plot_sumcharge_norm_v,line=dict(color='red', width=3),name="Tot Charge * targ thick/8 µm"),
         secondary_y=True,
     )
+
+    t = '8 um W '
+    fig.add_trace(
+        go.Scatter(x=plot_sumcharge_target_t[t], y=plot_sumcharge_target_v[t],line=dict(color='#990000', width=2),name="Charge on 8 µm W"),
+        secondary_y=True,
+    )
+
+    t = '20 um W '
+    fig.add_trace(
+        go.Scatter(x=plot_sumcharge_target_t[t], y=plot_sumcharge_target_v[t],line=dict(color='#009940', width=3),name="Charge on 20 µm W"),
+        secondary_y=True,
+    )
+
 
     proposed_charge = (ends.iloc[-1]-starts.iloc[0]).total_seconds()*150.e-6
     fig.add_trace(
@@ -878,7 +921,7 @@ if __name__ == "__main__":
         title=go.layout.Title(
             text="HPS Run 2019 Progress",
             yanchor="top",
-            y=0.86,
+            y=0.95,
             xanchor="center",
             x=0.5),
     )
@@ -895,8 +938,8 @@ if __name__ == "__main__":
     a_x.append(Plot_Runs.loc[index,"end_time"])
     a_y.append(sumcharge.loc[index] )
     a_text.append("Hall-A Wien Flip,<br />difficulty restoring beam.")
-    a_ax.append(80)
-    a_ay.append(-100)
+    a_ax.append(30)
+    a_ay.append(-240)
 
     index=Plot_Runs.index[Plot_Runs.loc[:,"end_time"]>datetime(2019,8,4,12,11)][0]
     a_index.append(index)
@@ -904,7 +947,7 @@ if __name__ == "__main__":
     a_y.append(sumcharge.loc[index] )
     a_text.append("DAQ problem,<br />followed by<br />beam restore issues.")
     a_ax.append(30)
-    a_ay.append(-140)
+    a_ay.append(-180)
 
     index=Plot_Runs.index[Plot_Runs.loc[:,"end_time"]>datetime(2019,8,6,14,52)][0]
     a_index.append(index)
@@ -912,31 +955,39 @@ if __name__ == "__main__":
     a_y.append(sumcharge.loc[index] )
     a_text.append("Beam Halo,<br />retuning beam.")
     a_ax.append(0)
-    a_ay.append(-160)
+    a_ay.append(-240)
 
     index=Plot_Runs.index[Plot_Runs.loc[:,"end_time"]>datetime(2019,8,7,14,22)][0]
     a_index.append(index)
     a_x.append(Plot_Runs.loc[index,"end_time"])
     a_y.append(sumcharge.loc[index] )
     a_text.append("Thunder storm,<br />followed by retune<br />followed by DAQ issues.")
-    a_ax.append(-30)
-    a_ay.append(-240)
+    a_ax.append(-20)
+    a_ay.append(-280)
 
     index=Plot_Runs.index[Plot_Runs.loc[:,"end_time"]>datetime(2019,8,13,4,7)][0]
     a_index.append(index)
     a_x.append(Plot_Runs.loc[index,"end_time"])
     a_y.append(sumcharge.loc[index] )
     a_text.append("Calibration run <br /> Targer replacement during beam studies<br />SVT motor issues.<br />CHL Event and Beam Tuning")
-    a_ax.append(90)
-    a_ay.append(-100)
+    a_ax.append(60)
+    a_ay.append(-140)
 
-    # index=Plot_Runs.index[Plot_Runs.loc[:,"end_time"]>datetime(2019,8,14,1,35)][0]
-    # a_index.append(index)
-    # a_x.append(Plot_Runs.loc[index,"end_time"])
-    # a_y.append(sumcharge.loc[index] )
-    # a_text.append("SVT motor issues")
-    # a_ax.append(0)
-    # a_ay.append(-40)
+    index=Plot_Runs.index[Plot_Runs.loc[:,"end_time"]>datetime(2019,8,14,1,35)][0]
+    a_index.append(index)
+    a_x.append(Plot_Runs.loc[index,"end_time"])
+    a_y.append(sumcharge.loc[index] )
+    a_text.append("SVT motor issues")
+    a_ax.append(0)
+    a_ay.append(-40)
+
+    index=Plot_Runs.index[Plot_Runs.loc[:,"end_time"]>datetime(2019,8,22,4,53)][0]
+    a_index.append(index)
+    a_x.append(Plot_Runs.loc[index,"end_time"])
+    a_y.append(sumcharge_norm.loc[index] )
+    a_text.append("Scheduled down<br />then beam tuning")
+    a_ax.append(30)
+    a_ay.append(-60)
 
 
     a_annot=[]
@@ -973,7 +1024,7 @@ if __name__ == "__main__":
     # Set y-axes titles
     fig.update_yaxes(title_text="<b>Number of events</b>", secondary_y=False)
     fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>", range=[0,proposed_charge],secondary_y=True)
-#    fig.write_image("HPSRun2019_progress.pdf")
+    fig.write_image("HPSRun2019_progress.pdf",width=2000,height=1200)
 #    fig.write_image("HPSRun2019_progress.png")
-    charts.plot(fig, filename = 'HPSRun2019', auto_open=True)
-#    fig.show()
+#    charts.plot(fig, filename = 'HPSRun2019', auto_open=True)
+    fig.show() # width=1024,height=768
