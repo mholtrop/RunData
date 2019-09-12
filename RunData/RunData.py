@@ -20,11 +20,10 @@ except:
     sys.exit(1)
 
 
-
-import requests
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
-requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
-
+# import requests
+# from requests.packages.urllib3.exceptions import InsecureRequestWarning
+# requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+#
 from datetime import datetime,timedelta
 
 try:
@@ -37,146 +36,7 @@ except:
 import json
 import numpy as np
 
-
-class MyaData:
-    '''A class to help retrieve and store the Mya data from myQuery requests to the JLab EPICS server.'''
-
-    def __init__(self,I_am_at_jlab=False,user_name=None,password=None):
-        '''Connect to the Mya database using MyQuery.
-        At JLab, no password is needed, but offsite we need a password to connect to the server.
-        If needed and not provided, ask for the CUE username and password to setup the connection.
-        Sets up the session handle for the requests'''
-
-        self.at_jlab=I_am_at_jlab
-        self.debug=0
-        self._session = requests.session()
-
-    #
-    # When onsite, no password is needed so don't bother the user.
-    # Setup the connection to the Mya Database through the MyQuery web interface.
-    #
-        if self.at_jlab:
-            self._url_head = "https://myaweb.acc.jlab.org/myquery/interval"
-        else:
-            self._url_head = "https://epicsweb.jlab.org/myquery/interval"
-            import getpass
-            if user_name is None:
-                print("Please enter your CUE login credentials.")
-                print("Username: ",file=sys.stderr,end="") # so stdout can be piped.
-                if sys.version_info.major == 2:
-                    user_name = raw_input("")
-                else:
-                    user_name = input("")
-            if password is None:
-                password = getpass.getpass("Password: ")
-
-            url="https://epicsweb.jlab.org/"
-            page = self._session.get(url)
-            payload = {'httpd_username':user_name,'httpd_password':password,"login": "Login"}
-            page= self._session.post(url,data=payload)
-            # print(page.cookies.items())
-
-    def get(self,channel,start,end):
-        '''Get a series of Mya data with a myQuery call for channel, from start to end time.
-        Returns two numpy arrays, one of time stamps, and one of values.
-        '''
-        #
-        # Get the value from Mya over the run period
-        #
-        params={
-            'c':channel,
-            'b':start,
-            'e':end,
-            't':'event',
-            'u':'on'  }
-
-        if self.debug: print("Fetching channel '{}'".format(channel))
-
-        try:
-            my_dat=self._session.get(self._url_head,verify=False,params=params)
-        except ConnectionError:
-            print("Could not connect to the Mya myQuery website. Was the password correctly entered? ")
-            sys.exit(1)
-
-        if my_dat.ok == False:
-            print("Error, could not get the data for run {}".format(channel))
-            print("Webserver responded with status: ",my_dat.status_code)
-            return( pd.DataFrame({'ms':[start.timestamp()*1000,end.timestamp()*1000],'value':[0.,0.],'time':[start,end]}))
-
-        dat_len = len(my_dat.json()['data'])
-        if dat_len == 0:                                           # EPICS sparsified the zeros.
-            return( pd.DataFrame({'ms':[start.timestamp()*1000,end.timestamp()*1000],'value':[0.,0.],'time':[start,end]}))
-
-        pd_frame = pd.DataFrame(my_dat.json()['data'])
-
-        if len(pd_frame.columns)>2:          # If there are issues with time stamps, 2 extra columns are added: 't' and 'x'
-            if self.debug>3:
-                print("There is trouble with the Mya data for channel {} in the time period {} - {}".format(channel,start,end))
-                print(pd_frame.columns)
-            try:
-                for i in range(len(pd_frame)): # We need to clean it up
-                     if type(pd_frame.loc[i,"t"]) is not float:
-                         if self.debug>3: print("Clean up frame: ",pd_frame.loc[i])
-                         pd_frame.drop(i,inplace=True)
-                pd_frame.drop(['t','x'],inplace=True,axis=1)
-            except Exception as e:
-                print("Could not fix the issue.")
-                print(e)
-                sys.exit(1)
-
-        pd_frame.columns = ["ms","value"]                         # Rename the columns
-        #
-        # Convert the ms timestamp to a datetime in the correct time zone.
-        #
-        pd_frame.loc[:,'time']=pd.Series([ datetime.fromtimestamp(x/1000) for x in pd_frame.ms])
-
-        # If you want with encoded timezone, you can do:
-        #pd.Series(pd.to_datetime([ datetime.fromtimestamp(x/1000) for x in pd_frame.ms]).tz_localize("US/Eastern"),dtype=object)
-        # or
-        #pd.Series(pd.to_datetime(pd_frame.loc[:,'ms'],unit='ms',utc=True).dt.tz_convert("US/Eastern"),dtype=object)
-        #
-        # But these are quite a bit slower.
-        #
-        return(pd_frame)
-
-    def get_multi(self,channels,start,end):
-        '''Get multiple channels in the list 'channels' into a single dataframe and return.
-        To do so, the first channel's time stamps are used as master. All the other channels are fetched,
-        and their time stamps are re-aligned with the first channel timestamps by interpolation.
-        arguments:
-            channels  - a list of channels to fetch, or a dictionary. If dict, then translate channel names.
-            start     - start time.
-            end       - end time'''
-
-        translate=False
-        if type(channels) is str:
-            return(self.get(channels,start,end))
-        if type(channels) is dict:
-            channels_dict = channels
-            channels = list(channels_dict.keys())
-            translate=True
-
-
-        pd_frame = self.get(channels[0],start,end)
-        columns = list(pd_frame.columns)
-
-        if translate:
-            columns[1]=channels_dict[channels[0]]
-        else:
-            columns[1]=channels[0]
-
-        pd_frame.columns=columns                     # Rename the "value" column to the channel name.
-
-        for i in range(1,len(channels)):
-            pd_tmp = self.get(channels[i],start,end)
-            tmp_corr = np.interp(pd_frame.ms,pd_tmp.ms,pd_tmp.value)
-            if translate:
-                pd_frame[channels_dict[channels[i]]] = tmp_corr
-            else:
-                pd_frame[channels[i]] = tmp_corr       # Add the interpolated data into the data frame.
-
-        return(pd_frame)
-
+from MyaData import MyaData
 #
 # Some global configuration settings.
 # These will need to go to input values on a web form.
@@ -311,15 +171,83 @@ class RunData:
             print("cache_fill_runs: {} - {}".format(start,end))
         num_runs = self.get_runs_from_rcdb(start,end,1)           # Get the new data from the RCDB.
         if num_runs == 0:
-            return num_runs
-        good_runs=self.select_good_runs()
-        self.add_current_data_to_runs()                                 # Fill in the missing current info
+            # We still need to adjust the "end" time, so we don't end up in a endless loop.
+            # Now data.All_Runs is likely empty, so use RCDB to get end of last run.
+            rcdb_runs=self._db.session.query(Run).order_by(Run.start_time.desc()).limit(2)
+            use_index=0
+            if not rcdb_runs[0].get_condition_value("is_valid_run_end"): use_index=1
+            end = rcdb_runs[use_index].end_time
+            if self.debug>2: print("Adjusted end for empty rcdb fetch to: ",end)
+            return num_runs,end
 
-        self.All_Runs.to_sql("Runs_Table",self._cache_engine,if_exists="append") # Add the new runs to the cache table
-        # We only want to keep the runs with the min_event criteria
+        good_runs=self.select_good_runs()
+        self.add_current_data_to_runs()                           # Fill in the missing current info
+
+        # Two scenarios now:
+        # 1: The run period we just added is somewhere in the middle of all possible runs. It is thus extremely unlikely
+        #    that a new run is added in between the 'end' and the last run we just fetched. It is thus OK to set the end
+        #    of this cache period to the end requested. We want to do this, because it improves the chances we get overlaps
+        #    of the run sections.
+        #
+        # 2: The run period we just added stretches beyond the last possible run (e.g. now() or later). It is thus likely
+        #    that runs are added later, which may be added before the 'end' time selected. To avoid missing such runs, we
+        #    need to set the 'end' if the cache period to the end of the last run.
+        #    This is further complicated by the possibility that the last run is still ongoing, and thus has an incorrect
+        #    number of events, files etc.
+        #
+        # To detect between 1 and 2, get the very last run from the database.
+        last=self._db.session.query(Run).order_by(Run.start_time.desc()).limit(1).first()
+        if end > last.start_time : # This is scenario 2, adjust the end time
+            # The 'end' for the cache period must be the 'end' of the last run, or if that is not valid (run end not recorded)
+            # then 'end' should be the end of the run one before.
+            end_of_last_run_valid = self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< end )].iloc[-1].is_valid_run_end
+
+            if end_of_last_run_valid is None or not end_of_last_run_valid:
+                if self.debug: print("WARNING: Last run does not have is_valid_run_end set.")
+                # If the last run does not have a valid end, could it be that it is still ongoing? Expect a run to not be more than 8 hours.
+                if self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< end )].iloc[-1].end_time > (datetime.now() - timedelta(hours=8)):
+                    if self.debug: print("WARNING: Run with is_valid_run_end not set is withing last 8 hours, not adding to cache.")
+                    # We drop the run from the table, so it will not go into the cache.
+                    self.All_Runs.drop(self.All_Runs.index[-1],inplace=True)
+                    num_runs -= 1
+                    if len(self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< end )])<=1:  # there is no run left.
+                        if self.debug: print("No runs left to add.")
+                        last_2_runs=self._db.session.query(Run).order_by(Run.start_time.desc()).limit(2)
+                        if last_2_runs.count()!=2:
+                            print("Problem I do not understand. The DB did not return 2 runs.")
+                            sys.exit(1)
+                        end=last_2_runs[1].end_time
+                        if self.debug: print("Set the end to:",end)
+                        return 0,end
+
+            end_of_last_run = self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< end )].iloc[-1].end_time  # Get the end of the last run.
+
+            if end_of_last_run is None or type(end_of_last_run) is not pd.Timestamp:   # This seems to be really, really rare.
+                print("WARNING: Last run added to cache does not have a proper end time!!!")
+                end_of_last_run = self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< extend_to )].iloc[-1].start_time
+                end_of_last_run -= timedelta(0,1) # One second before last start, so the next time this run will get updated.
+
+            if self.debug>2: print("Change the end time from {} to {}".format(end,end_of_last_run))
+            end = end_of_last_run
+
+        # Now update the chache times table with the new entry from "start" to "end"
+        self._cache_known_data=self._cache_known_data.append({"start_time":start,
+                        "end_time":end,"min_event_count":1},ignore_index=True,sort=False)
+        self._cache_known_data=self._cache_known_data.sort_values("start_time")
+
+        if self.debug>2:
+            print("cache_known_data:")
+            print(self._cache_known_data)
+
+
+        self.All_Runs.to_sql("Runs_Table",self._cache_engine,if_exists="append") # Add the new runs to the run cache table in SQL
+        self._cache_known_data.to_sql("Known_Data_Ranges",self._cache_engine,if_exists='replace') # And the new chuck to the data ranges table.
+
+        # We only want to keep those runs with the min_event criteria in the All_Runs table
         test_num_too_small  = self.All_Runs["event_count"]< min_event
         self.All_Runs= self.All_Runs.drop(self.All_Runs[test_num_too_small].index)   # Drop the ones with too few counts.
-        return num_runs
+
+        return num_runs,end     # Return number of runs and possibly modified end time.
 
     def _cache_get_runs(self,start,end,min_event):
         '''Get runs directly from the cache and only from the cache.
@@ -390,6 +318,9 @@ class RunData:
                        print()
         # Make sure the cache is still sorted (it should be.)
         self._cache_known_data=self._cache_known_data.sort_values("start_time")
+        # Write out the new table to SQL.
+        self._cache_known_data.to_sql("Known_Data_Ranges",self._cache_engine,if_exists='replace') # TODO: update sql instead
+
 
 
     def get_runs(self,start,end,min_event):
@@ -404,54 +335,26 @@ class RunData:
         if end.microsecond != 0: end   = end  +timedelta(0,0,1000000-end.microsecond) # Round up on end.
         if self.debug: print("get_runs from {} - {} ".format(start,end))
 
-        if self._cache_engine is None or self._cache_engine is False:
+        if self._cache_engine is None or self._cache_engine is False:  # No cache, so just get the runs.
             if self.debug>2: print("Getting runs bypassing cache, for start={}, end={}, min_event={}".format(start,end,min_event))
             num_runs = self.get_runs_from_rcdb(start,end,min_event)
             self.select_good_runs()
             self.add_current_data_to_runs()                                 # Fill in the missing current info
             return num_runs
 
-        num_runs_cache = self._cache_get_runs(start,end,min_event)  # Get whatever we have in the cache.
+        num_runs_cache = self._cache_get_runs(start,end,min_event)  # Get whatever we have in the cache already.
 
-        cache_overlaps,cache_extend_before,cache_extend_after = self._check_for_cache_hits(start,end)
+        cache_overlaps,cache_extend_before,cache_extend_after = self._check_for_cache_hits(start,end) # Check for overlaps of request with cache.
 
         if(len(cache_overlaps)+len(cache_extend_before)+len(cache_extend_after) == 0): # No overlaps at all.
-            num_runs = self._cache_fill_runs(start,end,min_event)
-            if num_runs == 0:
-                 return num_runs_cache # No runs found, so don't update the cache.
-
-            # Update a new cache record with the new run period.
-            # The 'end' for the cache period must be the 'end' of the last run, or if that is None (run end not recorded)
-            # then 'end' is the start of the last run + 0.1 second.
-            #
-            # See comment below why we adjuct end time.
-            last=self._db.session.query(Run).order_by(Run.start_time.desc()).limit(1).first()
-            if end > last.start_time : # This is scenario 2, adjust the end time
-                end_of_last_run = self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< end )].iloc[-1].end_time
-                if end_of_last_run is None or type(end_of_last_run) is not pd.Timestamp:
-                    print("WARNING: Last run added to cache does not have a proper end time!!!")
-                    end_of_last_run = self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< end )].iloc[-1].start_time
-                    end_of_last_run -= timedelta(0,1) # One second before last start, so the next time this run will get updated.
-            else:
-                end_of_last_run = end
-
-            self._cache_known_data=self._cache_known_data.append({"start_time":start,
-                            "end_time":end_of_last_run,"min_event_count":1},ignore_index=True,sort=False)
-
-            self._cache_known_data=self._cache_known_data.sort_values("start_time")
-
-            if self.debug>2:
-                print("cache_known_data:")
-                print(self._cache_known_data)
-
-            self._cache_known_data.to_sql("Known_Data_Ranges",self._cache_engine,if_exists='replace') # TODO: update sql instead
+            num_runs,tmp = self._cache_fill_runs(start,end,min_event)                      # so get the date for the entire stretch.
             return num_runs + num_runs_cache
 
         if(len(cache_overlaps)>1):
             print("Cache is dirty: multiple full overlaps.")
 
         while(len(cache_overlaps)==0):
-            if self.debug > 2: print("check_cache_hits: ",cache_overlaps,cache_extend_before,cache_extend_after )
+            if self.debug > 2: print("check_cache_hits: ",cache_overlaps,cache_extend_before,cache_extend_after,start,end )
             #
             # Iteratively extend the cache with time periods, starting from below.
             #
@@ -472,9 +375,8 @@ class RunData:
                 Save_Runs, self.All_Runs = self.All_Runs, Save_Runs     # Save what is in All_Runs.
                 min_before_start = self._cache_known_data.loc[self._cache_known_data.index[min_before],"start_time"]
                 if self.debug>2: print("Extending {} before from {}  to {}".format(min_before,min_before_start,start))
-                self._cache_fill_runs(start,min_before_start,min_event) # Add the new data to cache and All_Runs up to min_before_start
+                num_runs,new_end = self._cache_fill_runs(start,min_before_start,min_event) # Add the new data to cache and All_Runs up to min_before_start
                 self.All_Runs = self.All_Runs.append(Save_Runs,sort=True)         # Append the saved runs.
-                self._cache_known_data.loc[self._cache_known_data.index[min_before],"start_time"]=start # Update the cache record.
             else:
                 # The earliest overlap is in extend_after, so "start" is inside this overlap period.
                 # We need to extend out to the earliest of "end" or the "start" of the next period.
@@ -489,7 +391,8 @@ class RunData:
                 if self.debug>2: print("Extending {} after from {}  to {}".format(min_after,min_after_end,extend_to))
                 Save_Runs=None
                 Save_Runs, self.All_Runs = self.All_Runs, Save_Runs     # Save what is in All_Runs.
-                num_runs = self._cache_fill_runs(min_after_end,extend_to,min_event) # Add the new data to cache and All_Runs.
+                num_runs,end = self._cache_fill_runs(min_after_end,extend_to,min_event) # Add the new data to cache and All_Runs.
+                # Note we re-set the end to the possibly corrected end. This is needed because otherwise we keep checking!
                 if num_runs != 0:
                     if self.debug>2: print("Appending runs. ")
                     self.All_Runs = Save_Runs.append(self.All_Runs,sort=True)
@@ -500,30 +403,6 @@ class RunData:
                 if self.All_Runs is None or len(self.All_Runs) == 0:  # There are no runs at all. Just quit.
                     return 0
 
-                # Two scenarios now:
-                # 1: The run period we just added is somewhere in the middle of all possible runs. It is thus extremely unlikely
-                #    that a new run is added in between the 'end' and the last run we just fetched. It is thus OK to set the end
-                #    of this cache period to the end requested
-                #
-                # 2: The run period we just added stretches beyond the last possible run (e.g. now() or later). It is thus likely
-                #    that runs are added later, which may be added before the 'end' time selected. To avoid missing such runs, we
-                #    need to set the 'end' if the cache period to the end of the last run.
-                #
-                # To detect between 1 and 2, get the last run.
-                last=self._db.session.query(Run).order_by(Run.start_time.desc()).limit(1).first()
-                if end > last.start_time : # This is scenario 2, adjust the end time
-                    # The 'end' for the cache period must be the 'end' of the last run, or if that is None (run end not recorded)
-                    # then 'end' is the start of the last run + 0.1 second.
-                    end_of_last_run = self.All_Runs[(self.All_Runs["start_time"]>=start) & ( self.All_Runs["end_time"]<= extend_to )].iloc[-1].end_time
-                    if end_of_last_run is None or type(end_of_last_run) is not pd.Timestamp:
-                        print("WARNING: Last run added to cache does not have a proper end time!!!")
-                        end_of_last_run = self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< extend_to )].iloc[-1].start_time
-                        end_of_last_run -= timedelta(0,1) # One second before last start, so the next time this run will get updated.
-                    if self.debug>2: print("Change the end time from {} to {}".format(end,end_of_last_run))
-                    end = end_of_last_run # If you do not do this, we keep checking forever!
-
-                # Now update the table with the new extended time.
-                self._cache_known_data.loc[self._cache_known_data.index[min_after],"end_time"]=end
 
             if self.debug>2:
                 print("New cache config:")
@@ -535,8 +414,8 @@ class RunData:
             self._cache_consolidate()  # If regions are now bordering, combine them.
             cache_overlaps,cache_extend_before,cache_extend_after = self._check_for_cache_hits(start,end)
 
-        # We are done, write the new cache index to DB.
-        self._cache_known_data.to_sql("Known_Data_Ranges",self._cache_engine,if_exists='replace') # TODO: update sql instead
+        # We are done
+        return len(self.All_Runs)
 
     def get_runs_from_rcdb(self,start_time,end_time,min_event_count):
         '''Return a dictionary with a list of runs for each target in the run period.
@@ -791,11 +670,13 @@ if __name__ == "__main__":
 
     data = RunData()
     # data._cache_engine=None   # Turn OFF cache?
+    data.debug=4
 
-    data.Good_triggers=['hps_v7.cnf','hps_v8.cnf','hps_v9.cnf','hps_v9_1.cnf',
-                        'hps_v9_2.cnf','hps_v10.cnf',
-                        'hps_v11_1.cnf','hps_v11_2.cnf','hps_v11_3.cnf','hps_v11_4.cnf',
-                        'hps_v11_5.cnf','hps_v11_6.cnf']
+    # data.Good_triggers=['hps_v7.cnf','hps_v8.cnf','hps_v9.cnf','hps_v9_1.cnf',
+    #                     'hps_v9_2.cnf','hps_v10.cnf',
+    #                     'hps_v11_1.cnf','hps_v11_2.cnf','hps_v11_3.cnf','hps_v11_4.cnf',
+    #                     'hps_v11_5.cnf','hps_v11_6.cnf','hps_v12_1.cnf']
+    data.Good_triggers='hps_v..?_?.?\.cnf'
     data.Production_run_type=["PROD66","PROD67"]
     data.target_dict = HPS_2019_Run_Target_Thickness()
 
@@ -804,23 +685,28 @@ if __name__ == "__main__":
     end_time   = datetime.now()
     end_time = end_time+timedelta(0,0,-end_time.microsecond)      # Round down on end_time to a second
 
+    print("Fetching the data from {} to {}".format(start_time,end_time))
     data.get_runs(start_time,end_time,min_event_count)
     data.select_good_runs()
     data.add_current_data_to_runs()
     targets='.*um W *'
+    print("Compute cumulative charge.")
     data.compute_cumulative_charge(targets)   # Only the tungsten targets count.
-
+    print("Write new Excel table.")
     data.All_Runs.to_excel("hps_run_table.xlsx",columns=['start_time','end_time','target','run_config','selected','event_count','sum_event_count','charge','sum_charge','operators','user_comment'])
 
 #    print(data.All_Runs.to_string(columns=['start_time','end_time','target','run_config','selected','event_count','charge','user_comment']))
 #    data.All_Runs.to_latex("hps_run_table.latex",columns=['start_time','end_time','target','run_config','selected','event_count','charge','operators','user_comment'])
 
+    print("Compute data for plots.")
     Plot_Runs = data.All_Runs.loc[data.list_selected_runs(targets=targets)]
     starts = Plot_Runs["start_time"]
     ends = Plot_Runs["end_time"]
     Plot_Runs["center"]= starts + (ends-starts)/2
     Plot_Runs["dt"] = [(run["end_time"]-run["start_time"]).total_seconds()*999 for num,run, in Plot_Runs.iterrows()]
-    Plot_Runs["hover"] = ["Run: {} Start time: {}".format(r,Plot_Runs["start_time"][r]) for r in Plot_Runs.index ]
+    Plot_Runs["hover"] = ["Run: {}<br />Start: {}<br />End: {}<br /><Rate>:{:6.2f}kHz<br />Trigger:{}".format(
+                r,Plot_Runs.loc[r,"start_time"],Plot_Runs.loc[r,"end_time"],
+                999*Plot_Runs.loc[r,"event_count"]/1e3/Plot_Runs.loc[r,"dt"],Plot_Runs.loc[r,"run_config"]) for r in Plot_Runs.index ]
 
     sumcharge = Plot_Runs.loc[:,"sum_charge"]
     plot_sumcharge_t=[starts.iloc[0],ends.iloc[0]]
@@ -851,7 +737,6 @@ if __name__ == "__main__":
             en = Plot_Runs.loc[Plot_Runs["target"]==t,"end_time"]
 
             if len(sumch>3):
-                print(t)
                 plot_sumcharge_target_t[t]=[starts.iloc[0],st.iloc[0],en.iloc[0]]
                 plot_sumcharge_target_v[t]=[0,0,sumch.iloc[0]]
                 for i in range(1,len(sumch)):
@@ -862,6 +747,7 @@ if __name__ == "__main__":
                 plot_sumcharge_target_t[t].append(ends.iloc[-1])
                 plot_sumcharge_target_v[t].append(sumch.iloc[-1])
 
+    print("Build Plots.")
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
     targ_cols={
@@ -907,10 +793,10 @@ if __name__ == "__main__":
 
 
     proposed_charge = (ends.iloc[-1]-starts.iloc[0]).total_seconds()*150.e-6
-    fig.add_trace(
-        go.Scatter(x=[starts.iloc[0],ends.iloc[-1]], y=[0,proposed_charge],line=dict(color='yellow', width=2),name="Proposal Charge"),
-        secondary_y=True,
-    )
+    # fig.add_trace(
+    #     go.Scatter(x=[starts.iloc[0],ends.iloc[-1]], y=[0,proposed_charge],line=dict(color='yellow', width=2),name="300nA in 8µm W 50% up"),
+    #     secondary_y=True,
+    # )
     fig.add_trace(
         go.Scatter(x=[starts.iloc[0],ends.iloc[-1]], y=[0,proposed_charge/2],line=dict(color='#88FF99', width=2),name="150nA on 8µm W 50% up"),
         secondary_y=True,
@@ -938,40 +824,40 @@ if __name__ == "__main__":
     a_x.append(Plot_Runs.loc[index,"end_time"])
     a_y.append(sumcharge.loc[index] )
     a_text.append("Hall-A Wien Flip,<br />difficulty restoring beam.")
-    a_ax.append(30)
-    a_ay.append(-240)
+    a_ax.append(10)
+    a_ay.append(-540)
 
     index=Plot_Runs.index[Plot_Runs.loc[:,"end_time"]>datetime(2019,8,4,12,11)][0]
     a_index.append(index)
     a_x.append(Plot_Runs.loc[index,"end_time"])
     a_y.append(sumcharge.loc[index] )
     a_text.append("DAQ problem,<br />followed by<br />beam restore issues.")
-    a_ax.append(30)
-    a_ay.append(-180)
+    a_ax.append(10)
+    a_ay.append(-480)
 
     index=Plot_Runs.index[Plot_Runs.loc[:,"end_time"]>datetime(2019,8,6,14,52)][0]
     a_index.append(index)
     a_x.append(Plot_Runs.loc[index,"end_time"])
     a_y.append(sumcharge.loc[index] )
     a_text.append("Beam Halo,<br />retuning beam.")
-    a_ax.append(0)
-    a_ay.append(-240)
+    a_ax.append(10)
+    a_ay.append(-590)
 
     index=Plot_Runs.index[Plot_Runs.loc[:,"end_time"]>datetime(2019,8,7,14,22)][0]
     a_index.append(index)
     a_x.append(Plot_Runs.loc[index,"end_time"])
     a_y.append(sumcharge.loc[index] )
     a_text.append("Thunder storm,<br />followed by retune<br />followed by DAQ issues.")
-    a_ax.append(-20)
-    a_ay.append(-280)
+    a_ax.append(-10)
+    a_ay.append(-630)
 
     index=Plot_Runs.index[Plot_Runs.loc[:,"end_time"]>datetime(2019,8,13,4,7)][0]
     a_index.append(index)
     a_x.append(Plot_Runs.loc[index,"end_time"])
     a_y.append(sumcharge.loc[index] )
-    a_text.append("Calibration run <br /> Targer replacement during beam studies<br />SVT motor issues.<br />CHL Event and Beam Tuning")
-    a_ax.append(60)
-    a_ay.append(-140)
+    a_text.append("Calibration run <br /> Target replacement during beam studies<br />SVT motor issues.<br />CHL Event and Beam Tuning")
+    a_ax.append(40)
+    a_ay.append(-440)
 
     index=Plot_Runs.index[Plot_Runs.loc[:,"end_time"]>datetime(2019,8,14,1,35)][0]
     a_index.append(index)
@@ -979,7 +865,7 @@ if __name__ == "__main__":
     a_y.append(sumcharge.loc[index] )
     a_text.append("SVT motor issues")
     a_ax.append(0)
-    a_ay.append(-40)
+    a_ay.append(-390)
 
     index=Plot_Runs.index[Plot_Runs.loc[:,"end_time"]>datetime(2019,8,22,4,53)][0]
     a_index.append(index)
@@ -987,7 +873,7 @@ if __name__ == "__main__":
     a_y.append(sumcharge_norm.loc[index] )
     a_text.append("Scheduled down<br />then beam tuning")
     a_ax.append(30)
-    a_ay.append(-60)
+    a_ay.append(-260)
 
 
     a_annot=[]
@@ -1008,7 +894,7 @@ if __name__ == "__main__":
                 ay=a_ay[i],
                 font = {
                     "family": "Times",
-                    "size": 8,
+                    "size": 10,
                     "color": "#0040C0"
                 }
                 )
@@ -1024,7 +910,9 @@ if __name__ == "__main__":
     # Set y-axes titles
     fig.update_yaxes(title_text="<b>Number of events</b>", secondary_y=False)
     fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>", range=[0,proposed_charge],secondary_y=True)
+
+    print("Show plots.")
     fig.write_image("HPSRun2019_progress.pdf",width=2000,height=1200)
-#    fig.write_image("HPSRun2019_progress.png")
-#    charts.plot(fig, filename = 'HPSRun2019', auto_open=True)
-    fig.show() # width=1024,height=768
+    fig.write_image("HPSRun2019_progress.png")
+#    charts.plot(fig, filename = 'Run2019_edit', auto_open=True)
+    fig.show(width=2048,height=900) # width=1024,height=768
