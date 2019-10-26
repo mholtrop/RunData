@@ -193,7 +193,7 @@ class RunData:
         self.Useful_conditions=['is_valid_run_end', 'user_comment', 'run_type',
         'target', 'beam_current_request', 'operators','event_count',
         'events_rate','run_config', 'status',
-         'evio_files_count', 'megabyte_count']
+         'evio_files_count', 'megabyte_count', 'run_start_time', 'run_end_time']
         self.Good_triggers=[]
         self.not_good_triggers=[]
         self.min_event_count = 1000000
@@ -562,6 +562,9 @@ class RunData:
             run_dict = {"number":R.number,"start_time":R.start_time,"end_time":R.end_time}
             for c in self.Useful_conditions:
                 run_dict[c]=R.get_condition_value(c)
+
+            run_dict["start_time"] = run_dict["run_start_time"];
+            run_dict["end_time"] = run_dict["run_end_time"];
             runs.append(run_dict)
 
         self.All_Runs = pd.DataFrame(runs)
