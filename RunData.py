@@ -912,13 +912,13 @@ if __name__ == "__main__":
 
     proposed_charge = (ends.iloc[-1]-starts.iloc[0]).total_seconds()*150.e-6
     fig.add_trace(
-        go.Scatter(x=[starts.iloc[0],ends.iloc[-1]], y=[0,proposed_charge],line=dict(color='yellow', width=2),name="Proposal Charge"),
+        go.Scatter(x=[starts.iloc[0],ends.iloc[-1]], y=[0,proposed_charge],line=dict(color='black', width=2),name="Proposal Charge"),
         secondary_y=True,
     )
-    fig.add_trace(
-        go.Scatter(x=[starts.iloc[0],ends.iloc[-1]], y=[0,proposed_charge/2],line=dict(color='#88FF99', width=2),name="150nA on 8µm W 50% up"),
-        secondary_y=True,
-    )
+#    fig.add_trace(
+#        go.Scatter(x=[starts.iloc[0],ends.iloc[-1]], y=[0,proposed_charge/2],line=dict(color='#88FF99', width=2),name="150nA on 8µm W 50% up"),
+#        secondary_y=True,
+#    )
 
 
     fig.update_layout(
