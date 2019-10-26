@@ -582,7 +582,7 @@ class RunData:
         if not override and ("charge" in self.All_Runs.keys()) and not np.isnan(self.All_Runs.loc[runnumber,"charge"]):
             return
 
-        current =  self.Mya.get('IPM2C21A',
+        current =  self.Mya.get('scaler_calc1b',
             self.All_Runs.loc[runnumber,"start_time"],
             self.All_Runs.loc[runnumber,"end_time"]   )
         live_time = self.Mya.get('B_DAQ_HPS:TS:livetime',
