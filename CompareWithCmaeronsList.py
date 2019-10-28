@@ -65,3 +65,6 @@ print (compareResult["missinginA"])
 
 print ("=============================== Missing in Cameron's list ====================================")
 print (compareResult["missinginB"])
+
+for curRun in compareResult["missinginB"]:
+    print (curRun)
