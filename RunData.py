@@ -196,6 +196,7 @@ class RunData:
          'evio_files_count', 'megabyte_count', 'run_start_time', 'run_end_time']
         self.Good_triggers=[]
         self.not_good_triggers=[]
+        self.ExcludeRuns = [];  # This runs are not present in Cameron's list which he obtained parsing the google spreadsheet, and maybe other sources too
         self.min_event_count = 1000000
         self.target_dict={}
         self.at_jlab=I_am_at_jlab
@@ -538,6 +539,18 @@ class RunData:
         # We are done, write the new cache index to DB.
         self._cache_known_data.to_sql("Known_Data_Ranges",self._cache_engine,if_exists='replace') # TODO: update sql instead
 
+    def get_ExcludedRuns(self, fileName):
+
+        if (os.path.exists(fileName)):
+            with open(fileName) as ff:
+                for line in ff:
+                    line = line.replace('\n', '')
+
+                    if line not in self.ExcludeRuns:
+                        self.ExcludeRuns.append(line)
+
+
+
     def get_runs_from_rcdb(self,start_time,end_time,min_event_count):
         '''Return a dictionary with a list of runs for each target in the run period.
         This will get the list directly from the rcdb database, not looking at the local cache.'''
@@ -552,6 +565,8 @@ class RunData:
         .filter(Run.start_time > start_time).filter(Run.start_time < end_time)\
         .filter( (ConditionType.name == "event_count") & (Condition.int_value > min_event_count))
 
+
+
         if self.debug: print("Found {} runs.\n".format(q.count()))
         num_runs = q.count()
         if num_runs == 0:
@@ -560,6 +575,11 @@ class RunData:
         runs=[]
         for R in all_runs:
             run_dict = {"number":R.number,"start_time":R.start_time,"end_time":R.end_time}
+
+            if str(R.number) in self.ExcludeRuns:
+                print ("Excluding" + str(R.number))
+                continue
+
             for c in self.Useful_conditions:
                 run_dict[c]=R.get_condition_value(c)
 
@@ -807,6 +827,8 @@ if __name__ == "__main__":
     end_time = datetime(2019,9,9,9,0)  # SVT back in correct position
     #end_time   = datetime.now()
     end_time = end_time+timedelta(0,0,-end_time.microsecond)      # Round down on end_time to a second
+
+    data.get_ExcludedRuns("MissinginCameronsList.dat") #  These runs are missing in Cameron's list, so we will exclude these runs too
 
     data.get_runs(start_time,end_time,min_event_count)
     data.select_good_runs()
