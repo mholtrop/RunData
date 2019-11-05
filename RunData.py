@@ -199,6 +199,7 @@ class RunData:
         self.ExcludeRuns = [];  # This runs are not present in Cameron's list which he obtained parsing the google spreadsheet, and maybe other sources too
         self.min_event_count = 1000000
         self.target_dict={}
+        self.atten_dict={}
         self.at_jlab=I_am_at_jlab
         self.All_Runs=None
         self.debug=0
@@ -550,6 +551,19 @@ class RunData:
                         self.ExcludeRuns.append(line)
 
 
+    def BeamAtenCorr(self, run):
+
+        corr = 1.
+
+        if( run < 10448 ):
+            #print( self.All_Runs.loc[run, 'target'] )
+            targnameNoSpaces = (self.All_Runs.loc[run, 'target']).rstrip()
+            corr = self.atten_dict[targnameNoSpaces]/self.atten_dict['Empty']
+            #print ('Corr is ' + str(corr))
+
+        return corr
+
+
 
     def get_runs_from_rcdb(self,start_time,end_time,min_event_count):
         '''Return a dictionary with a list of runs for each target in the run period.
@@ -577,7 +591,7 @@ class RunData:
             run_dict = {"number":R.number,"start_time":R.start_time,"end_time":R.end_time}
 
             if str(R.number) in self.ExcludeRuns:
-                print ("Excluding" + str(R.number))
+                #print ("Excluding" + str(R.number) + "Since it it in Cameron's list")
                 continue
 
             for c in self.Useful_conditions:
@@ -610,7 +624,14 @@ class RunData:
             self.All_Runs.loc[runnumber,"end_time"]   )
         live_time = self.Mya.get('B_DAQ_HPS:TS:livetime',
             self.All_Runs.loc[runnumber,"start_time"],
-            self.All_Runs.loc[runnumber,"end_time"]       )
+            self.All_Runs.loc[runnumber,"end_time"] )
+
+        # Getting the target thickness dependend FCup charge correction
+        currCorrection = self.BeamAtenCorr( runnumber)
+        # Applying the correction
+        current['value'] *= currCorrection
+
+
         #
         # The sampling of the current and live_time are NOT guaranteed to be the same.
         # We interpolate the live_time at the current time stamps to compensate.
@@ -789,6 +810,22 @@ def HPS_2019_Run_Target_Thickness():
     return(targets)
 
 
+def AttennuationsWithTargThickness():
+    ''' During the run we have observed that the beam attenuation depends on the target thickness too.
+    So this dictionary provides target<->attenuation dictionary '''
+
+    Attenuations = {
+    'Empty':    29.24555,
+    'empty':    29.24555,
+    'Unknown':  29.24555,
+    '4 um W':   28.40418,
+    '8 um W':   27.56255,
+    '15 um W':  26.16205,
+    '20 um W':  25.38535
+    }
+
+    return Attenuations
+
 if __name__ == "__main__":
 
     import logging
@@ -821,6 +858,7 @@ if __name__ == "__main__":
                         'hps_v11_5.cnf','hps_v11_6.cnf','hps_v12_1.cnf' ]
     data.Production_run_type=["PROD66","PROD67"]
     data.target_dict = HPS_2019_Run_Target_Thickness()
+    data.atten_dict = AttennuationsWithTargThickness()
 
     min_event_count = 1000000              # Runs with at least 1M events.
     start_time = datetime(2019,7,25,0,0)  # SVT back in correct position
