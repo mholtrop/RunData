@@ -49,15 +49,19 @@ with open("CameronsList.dat") as ff:
 compareResult = CompareLists(MauriksList, CameronsList)
 
 print (" =============================== Maurik's List ===================================== ")
+print ("# of runs in Maurik's list is " + str(len(MauriksList) ) )
 print (MauriksList)
 
 print (" =============================== Cameron's List ===================================== ")
+print ("# of runs in Cameron's list is " + str(len(CameronsList) ) )
 print (CameronsList)
 
 
 print ("=============================== Runs in both list ====================================")
+print ("# of common runs in Bith list is " + str(len(compareResult["PresentinBoth"]) ) )
 print (compareResult["PresentinBoth"])
-
+for curRun in compareResult["PresentinBoth"]:
+    print (curRun)
 
 print ("=============================== Missing in Maurik's list ====================================")
 print (compareResult["missinginA"])
