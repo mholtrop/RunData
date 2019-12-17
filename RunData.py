@@ -193,11 +193,13 @@ class RunData:
         self.Useful_conditions=['is_valid_run_end', 'user_comment', 'run_type',
         'target', 'beam_current_request', 'operators','event_count',
         'events_rate','run_config', 'status',
-         'evio_files_count', 'megabyte_count']
+         'evio_files_count', 'megabyte_count', 'run_start_time', 'run_end_time']
         self.Good_triggers=[]
         self.not_good_triggers=[]
+        self.ExcludeRuns = [];  # This runs are not present in Cameron's list which he obtained parsing the google spreadsheet, and maybe other sources too
         self.min_event_count = 1000000
         self.target_dict={}
+        self.atten_dict={}
         self.at_jlab=I_am_at_jlab
         self.All_Runs=None
         self.debug=0
@@ -538,6 +540,31 @@ class RunData:
         # We are done, write the new cache index to DB.
         self._cache_known_data.to_sql("Known_Data_Ranges",self._cache_engine,if_exists='replace') # TODO: update sql instead
 
+    def get_ExcludedRuns(self, fileName):
+
+        if (os.path.exists(fileName)):
+            with open(fileName) as ff:
+                for line in ff:
+                    line = line.replace('\n', '')
+
+                    if line not in self.ExcludeRuns:
+                        self.ExcludeRuns.append(line)
+
+
+    def BeamAtenCorr(self, run):
+
+        corr = 1.
+
+        if( run < 10448 ):
+            #print( self.All_Runs.loc[run, 'target'] )
+            targnameNoSpaces = (self.All_Runs.loc[run, 'target']).rstrip()
+            corr = self.atten_dict[targnameNoSpaces]/self.atten_dict['Empty']
+            #print ('Corr is ' + str(corr))
+
+        return corr
+
+
+
     def get_runs_from_rcdb(self,start_time,end_time,min_event_count):
         '''Return a dictionary with a list of runs for each target in the run period.
         This will get the list directly from the rcdb database, not looking at the local cache.'''
@@ -552,6 +579,8 @@ class RunData:
         .filter(Run.start_time > start_time).filter(Run.start_time < end_time)\
         .filter( (ConditionType.name == "event_count") & (Condition.int_value > min_event_count))
 
+
+
         if self.debug: print("Found {} runs.\n".format(q.count()))
         num_runs = q.count()
         if num_runs == 0:
@@ -560,8 +589,16 @@ class RunData:
         runs=[]
         for R in all_runs:
             run_dict = {"number":R.number,"start_time":R.start_time,"end_time":R.end_time}
+
+            if str(R.number) in self.ExcludeRuns:
+                #print ("Excluding" + str(R.number) + "Since it it in Cameron's list")
+                continue
+
             for c in self.Useful_conditions:
                 run_dict[c]=R.get_condition_value(c)
+
+            run_dict["start_time"] = run_dict["run_start_time"];
+            run_dict["end_time"] = run_dict["run_end_time"];
             runs.append(run_dict)
 
         self.All_Runs = pd.DataFrame(runs)
@@ -582,12 +619,19 @@ class RunData:
         if not override and ("charge" in self.All_Runs.keys()) and not np.isnan(self.All_Runs.loc[runnumber,"charge"]):
             return
 
-        current =  self.Mya.get('IPM2C21A',
+        current =  self.Mya.get('scaler_calc1b',
             self.All_Runs.loc[runnumber,"start_time"],
             self.All_Runs.loc[runnumber,"end_time"]   )
         live_time = self.Mya.get('B_DAQ_HPS:TS:livetime',
             self.All_Runs.loc[runnumber,"start_time"],
-            self.All_Runs.loc[runnumber,"end_time"]       )
+            self.All_Runs.loc[runnumber,"end_time"] )
+
+        # Getting the target thickness dependend FCup charge correction
+        currCorrection = self.BeamAtenCorr( runnumber)
+        # Applying the correction
+        current['value'] *= currCorrection
+
+
         #
         # The sampling of the current and live_time are NOT guaranteed to be the same.
         # We interpolate the live_time at the current time stamps to compensate.
@@ -766,6 +810,22 @@ def HPS_2019_Run_Target_Thickness():
     return(targets)
 
 
+def AttennuationsWithTargThickness():
+    ''' During the run we have observed that the beam attenuation depends on the target thickness too.
+    So this dictionary provides target<->attenuation dictionary '''
+
+    Attenuations = {
+    'Empty':    29.24555,
+    'empty':    29.24555,
+    'Unknown':  29.24555,
+    '4 um W':   28.40418,
+    '8 um W':   27.56255,
+    '15 um W':  26.16205,
+    '20 um W':  25.38535
+    }
+
+    return Attenuations
+
 if __name__ == "__main__":
 
     import logging
@@ -795,14 +855,18 @@ if __name__ == "__main__":
     data.Good_triggers=['hps_v7.cnf','hps_v8.cnf','hps_v9.cnf','hps_v9_1.cnf',
                         'hps_v9_2.cnf','hps_v10.cnf',
                         'hps_v11_1.cnf','hps_v11_2.cnf','hps_v11_3.cnf','hps_v11_4.cnf',
-                        'hps_v11_5.cnf','hps_v11_6.cnf']
+                        'hps_v11_5.cnf','hps_v11_6.cnf','hps_v12_1.cnf' ]
     data.Production_run_type=["PROD66","PROD67"]
     data.target_dict = HPS_2019_Run_Target_Thickness()
+    data.atten_dict = AttennuationsWithTargThickness()
 
     min_event_count = 1000000              # Runs with at least 1M events.
     start_time = datetime(2019,7,25,0,0)  # SVT back in correct position
-    end_time   = datetime.now()
+    end_time = datetime(2019,9,9,9,0)  # SVT back in correct position
+    #end_time   = datetime.now()
     end_time = end_time+timedelta(0,0,-end_time.microsecond)      # Round down on end_time to a second
+
+    data.get_ExcludedRuns("MissinginCameronsList.dat") #  These runs are missing in Cameron's list, so we will exclude these runs too
 
     data.get_runs(start_time,end_time,min_event_count)
     data.select_good_runs()
@@ -908,13 +972,13 @@ if __name__ == "__main__":
 
     proposed_charge = (ends.iloc[-1]-starts.iloc[0]).total_seconds()*150.e-6
     fig.add_trace(
-        go.Scatter(x=[starts.iloc[0],ends.iloc[-1]], y=[0,proposed_charge],line=dict(color='yellow', width=2),name="Proposal Charge"),
+        go.Scatter(x=[starts.iloc[0],ends.iloc[-1]], y=[0,proposed_charge],line=dict(color='black', width=2),name="Proposal Charge"),
         secondary_y=True,
     )
-    fig.add_trace(
-        go.Scatter(x=[starts.iloc[0],ends.iloc[-1]], y=[0,proposed_charge/2],line=dict(color='#88FF99', width=2),name="150nA on 8µm W 50% up"),
-        secondary_y=True,
-    )
+#    fig.add_trace(
+#        go.Scatter(x=[starts.iloc[0],ends.iloc[-1]], y=[0,proposed_charge/2],line=dict(color='#88FF99', width=2),name="150nA on 8µm W 50% up"),
+#        secondary_y=True,
+#    )
 
 
     fig.update_layout(
