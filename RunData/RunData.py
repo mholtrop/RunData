@@ -443,6 +443,31 @@ class RunData:
 
         return corr
 
+    def get_ExcludedRuns(self, fileName):
+
+        if (os.path.exists(fileName)):
+            with open(fileName) as ff:
+                for line in ff:
+                    line = line.replace('\n', '')
+
+                    if line not in self.ExcludeRuns:
+                        self.ExcludeRuns.append(line)
+
+
+    def BeamAtenCorr(self, run):
+
+        corr = 1.
+
+        if( run < 10448 ):
+            #print( self.All_Runs.loc[run, 'target'] )
+            targnameNoSpaces = (self.All_Runs.loc[run, 'target']).rstrip()
+            corr = self.atten_dict[targnameNoSpaces]/self.atten_dict['Empty']
+            #print ('Corr is ' + str(corr))
+
+        return corr
+
+
+
     def get_runs_from_rcdb(self,start_time,end_time,min_event_count):
         '''Return a dictionary with a list of runs for each target in the run period.
         This will get the list directly from the rcdb database, not looking at the local cache.'''
@@ -456,6 +481,8 @@ class RunData:
         q=self._db.session.query(Run).join(Run.conditions).join(Condition.type)\
         .filter(Run.start_time > start_time).filter(Run.start_time < end_time)\
         .filter( (ConditionType.name == "event_count") & (Condition.int_value > min_event_count))
+
+
 
         if self.debug: print("Found {} runs.\n".format(q.count()))
         num_runs = q.count()
@@ -673,6 +700,22 @@ class RunData:
         else:
             return(0,0,0)
 
+
+def AttennuationsWithTargThickness():
+    ''' During the run we have observed that the beam attenuation depends on the target thickness too.
+    So this dictionary provides target<->attenuation dictionary '''
+
+    Attenuations = {
+    'Empty':    29.24555,
+    'empty':    29.24555,
+    'Unknown':  29.24555,
+    '4 um W':   28.40418,
+    '8 um W':   27.56255,
+    '15 um W':  26.16205,
+    '20 um W':  25.38535
+    }
+
+    return Attenuations
 
 if __name__ == "__main__":
 

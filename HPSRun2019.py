@@ -72,7 +72,7 @@ if __name__ == "__main__":
     data.atten_dict  = AttennuationsWithTargThickness()
 
     min_event_count = 1000000  # Runs with at least 1M events.
-    start_time = datetime(2019, 7, 25, 0, 0)  # SVT back in correct position
+    start_time = datetime(2019, 8, 25, 0, 0)  # SVT back in correct position
     end_time =   datetime(2019, 9, 10, 0, 0)
     end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
 
