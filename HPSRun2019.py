@@ -4,9 +4,7 @@ import sys
 import os
 from datetime import datetime, timedelta
 
-import argparse
-
-from RunData import RunData
+from RunData.RunData import RunData
 
 try:
     import plotly.graph_objects as go
@@ -31,7 +29,24 @@ def HPS_2019_Run_Target_Thickness():
         '15 um W ': 15.e-4,
         '20 um W ': 20.e-4
     }
-    return (targets)
+    return targets
+
+
+def AttennuationsWithTargThickness():
+    ''' During the run we have observed that the beam attenuation depends on the target thickness too.
+    So this dictionary provides target<->attenuation dictionary '''
+
+    Attenuations = {
+        'Empty': 29.24555,
+        'empty': 29.24555,
+        'Unknown': 29.24555,
+        '4 um W': 28.40418,
+        '8 um W': 27.56255,
+        '15 um W': 26.16205,
+        '20 um W': 25.38535
+    }
+
+    return Attenuations
 
 
 if __name__ == "__main__":
@@ -54,10 +69,11 @@ if __name__ == "__main__":
     data.Good_triggers = 'hps_v..?_?.?\.cnf'
     data.Production_run_type = ["PROD66", "PROD67"]
     data.target_dict = HPS_2019_Run_Target_Thickness()
+    data.atten_dict  = AttennuationsWithTargThickness()
 
     min_event_count = 1000000  # Runs with at least 1M events.
-    start_time = datetime(2019, 12, 2, 0, 0)  # SVT back in correct position
-    end_time = datetime.now()
+    start_time = datetime(2019, 7, 25, 0, 0)  # SVT back in correct position
+    end_time =   datetime(2019, 9, 10, 0, 0)
     end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
 
     print("Fetching the data from {} to {}".format(start_time, end_time))

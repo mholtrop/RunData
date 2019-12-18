@@ -53,16 +53,18 @@ class RunData:
         self.Useful_conditions=['is_valid_run_end', 'user_comment', 'run_type',
         'target', 'beam_current_request', 'operators','event_count',
         'events_rate','run_config', 'status',
-         'evio_files_count', 'megabyte_count']   # List of conditions to put in tables.
+         'evio_files_count', 'megabyte_count', 'run_start_time', 'run_end_time']   # List of conditions to put in tables.
         self.Good_triggers='hps_v..?_?.?\.cnf'   # Regex string or list of trigger conditions to use for run selection.
         self.not_good_triggers=[]
-        self.min_event_count = 1000000           # Minimum events in run for good runs.
+        self.ExcludeRuns = []  # This runs are not present in Cameron's list which he obtained parsing the google spreadsheet, and maybe other sources too
+        self.min_event_count = 1000000
         self.target_dict={}
+        self.atten_dict={}     # This is a dictionary of target dependent correction factors for correcting the FCup current.
         self.at_jlab=I_am_at_jlab
         self.All_Runs=None
         self.debug=0
 
-        self.Current_Channel="IPM2C21A"    # Mya Channel for the current
+        self.Current_Channel="scaler_calc1b"    # Mya Channel for the current from FCUP.
         self.LiveTime_Channel="B_DAQ_HPS:TS:livetime"   # Mya Channel for the livetime.
         self._db=None
         self._session=None
@@ -419,6 +421,28 @@ class RunData:
         # We are done
         return len(self.All_Runs)
 
+    def get_ExcludedRuns(self, fileName):
+
+        if (os.path.exists(fileName)):
+            with open(fileName) as ff:
+                for line in ff:
+                    line = line.replace('\n', '')
+
+                    if line not in self.ExcludeRuns:
+                        self.ExcludeRuns.append(line)
+
+    def BeamAtenCorr(self, run):
+
+        corr = 1.
+
+        if (run < 10448):
+            # print( self.All_Runs.loc[run, 'target'] )
+            targnameNoSpaces = (self.All_Runs.loc[run, 'target']).rstrip()
+            corr = self.atten_dict[targnameNoSpaces] / self.atten_dict['Empty']
+            # print ('Corr is ' + str(corr))
+
+        return corr
+
     def get_runs_from_rcdb(self,start_time,end_time,min_event_count):
         '''Return a dictionary with a list of runs for each target in the run period.
         This will get the list directly from the rcdb database, not looking at the local cache.'''
@@ -441,8 +465,16 @@ class RunData:
         runs=[]
         for R in all_runs:
             run_dict = {"number":R.number,"start_time":R.start_time,"end_time":R.end_time}
+
+            if str(R.number) in self.ExcludeRuns:
+                #print ("Excluding" + str(R.number) + "Since it it in Cameron's list")
+                continue
+
             for c in self.Useful_conditions:
                 run_dict[c]=R.get_condition_value(c)
+
+            run_dict["start_time"] = run_dict["run_start_time"]; # Use the run_start_time and run_end_time
+            run_dict["end_time"] = run_dict["run_end_time"];     # from the RCDB records. This allows for start/end corrections.
             runs.append(run_dict)
 
         self.All_Runs = pd.DataFrame(runs)
@@ -469,6 +501,14 @@ class RunData:
         live_time = self.Mya.get(self.LiveTime_Channel,
             self.All_Runs.loc[runnumber,"start_time"],
             self.All_Runs.loc[runnumber,"end_time"]       )
+
+
+        if self.Current_Channel == "scaler_calc1b":
+            # Getting the target thickness dependend FCup charge correction
+            currCorrection = self.BeamAtenCorr( runnumber)
+            # Applying the correction
+            current['value'] *= currCorrection
+
         #
         # The sampling of the current and live_time are NOT guaranteed to be the same.
         # We interpolate the live_time at the current time stamps to compensate.
