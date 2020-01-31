@@ -73,15 +73,16 @@ class RunData:
         self._cache_known_data=None
         self._cache_file_name="run_data_cache.sqlite3"
 
-
         self.start_rcdb()
         self.Mya = MyaData(I_am_at_jlab)
         self.start_cache(sqlcache)
+
 
     def __str__(self):
         '''Return a table with some of the information, to see what is in the All_Runs conveniently. '''
         out=str(self.All_Runs.loc[:,["start_time","end_time","target","run_config","event_count"]])
         return(out)
+
 
     def start_rcdb(self):
         '''Setup a connection to the RCDB
@@ -92,7 +93,11 @@ class RunData:
             connection_string = "mysql://rcdb@clasdb.jlab.org/rcdb"
             # print("Using standard connection string from HallB")
 
-        self._db = RCDBProvider(connection_string)
+        try:
+            self._db = RCDBProvider(connection_string)
+        except:
+            print("WARNING: Cannot connect to the RCDB. Will try with data from Cache only.")
+
 
     def start_cache(self,connector_string=True):
         '''Start up the cache backend according to connector_string.
@@ -103,9 +108,10 @@ class RunData:
         if connector_string is False:
             self._cache_engine=None
             return
-
-        if connector_string is True:
+        elif connector_string is True:
             connector_string = "sqlite:///"+self._cache_file_name
+        elif "///" not in connector_string:
+            connector_string = "sqlite:///"+connector_string
 
         self._cache_engine = sqlalchemy.create_engine(connector_string)
         #
@@ -133,6 +139,7 @@ class RunData:
             meta.create_all(self._cache_engine)
 
         self._cache_known_data = pd.read_sql("Known_Data_Ranges",self._cache_engine,index_col="index")
+
 
     def _check_for_cache_hits(self,start,end):
         # Cache Hit logic: We need to determine if we have a cache hit.
@@ -163,6 +170,7 @@ class RunData:
                 cache_extend_before.append(index)
 
         return(cache_overlaps,cache_extend_before,cache_extend_after)
+
 
     def _cache_fill_runs(self,start,end,min_event):
         '''Fill the cache with runs from start to end.
@@ -253,6 +261,7 @@ class RunData:
 
         return num_runs,end     # Return number of runs and possibly modified end time.
 
+
     def _cache_get_runs(self,start,end,min_event):
         '''Get runs directly from the cache and only from the cache.
         Result is stored in All_Runs if it was empty, or appended to All_Runs if not already there, and then sorted.
@@ -300,6 +309,7 @@ class RunData:
 
         return(len(New_Runs))
 
+
     def _cache_consolidate(self):
         '''Goes through cached regions and checks if any have 'grown' to touch or overlap.
         If so, combine those regions.'''
@@ -324,7 +334,6 @@ class RunData:
         self._cache_known_data=self._cache_known_data.sort_values("start_time")
         # Write out the new table to SQL.
         self._cache_known_data.to_sql("Known_Data_Ranges",self._cache_engine,if_exists='replace') # TODO: update sql instead
-
 
 
     def get_runs(self,start,end,min_event):
@@ -380,7 +389,10 @@ class RunData:
                 min_before_start = self._cache_known_data.loc[self._cache_known_data.index[min_before],"start_time"]
                 if self.debug>2: print("Extending {} before from {}  to {}".format(min_before,min_before_start,start))
                 num_runs,new_end = self._cache_fill_runs(start,min_before_start,min_event) # Add the new data to cache and All_Runs up to min_before_start
-                self.All_Runs = self.All_Runs.append(Save_Runs,sort=True)         # Append the saved runs.
+                if num_runs ==0:
+                    self.All_Runs = Save_Runs
+                else:
+                    self.All_Runs = self.All_Runs.append(Save_Runs,sort=True)         # Append the saved runs.
             else:
                 # The earliest overlap is in extend_after, so "start" is inside this overlap period.
                 # We need to extend out to the earliest of "end" or the "start" of the next period.
@@ -421,6 +433,7 @@ class RunData:
         # We are done
         return len(self.All_Runs)
 
+
     def get_ExcludedRuns(self, fileName):
 
         if (os.path.exists(fileName)):
@@ -430,6 +443,7 @@ class RunData:
 
                     if line not in self.ExcludeRuns:
                         self.ExcludeRuns.append(line)
+
 
     def BeamAtenCorr(self, run):
 
@@ -442,6 +456,7 @@ class RunData:
             # print ('Corr is ' + str(corr))
 
         return corr
+
 
     def get_ExcludedRuns(self, fileName):
 
@@ -465,7 +480,6 @@ class RunData:
             #print ('Corr is ' + str(corr))
 
         return corr
-
 
 
     def get_runs_from_rcdb(self,start_time,end_time,min_event_count):
@@ -510,6 +524,7 @@ class RunData:
         self.All_Runs.loc[:,"run_config"]=[self.All_Runs.loc[r,"run_config"].split('/')[-1]   for r in self.All_Runs.index]
         self.All_Runs.set_index('number',inplace=True)
         return(num_runs)
+
 
     def add_current_cor(self,runnumber,override=False):
         '''Add the livetime corrected charge for a run to the pandas DataFrame.
@@ -562,6 +577,8 @@ class RunData:
         # Scale conversion:  I is in nA, dt is in ms, so I*dt is in nA*ms = 1e-9 A*1e-3 s = 1e-12 C
         # If we want mC instead of Coulombs, the factor is 1e-12*1e3 = 1e-9
         #
+        self.All_Runs.loc[runnumber,self.Current_Channel]=np.trapz(current.value,current.ms)
+        self.All_Runs.loc[runnumber,"live_time"]=np.trapz(live_time.value,live_time.ms)
         self.All_Runs.loc[runnumber,"charge"]=np.trapz(current_corr,current.ms)*1e-9 # mC
         # self._Mya_cache[runnumber] = pd.DataFrame({"time":current.time,"current":current.value,
         #          "live_time":live_time_corr,"current_cor":current_corr})
@@ -590,6 +607,8 @@ class RunData:
         self.Production_run_type and self.Good_triggers can be either a list of strings to match
         or a regular expression to match. Use '.*' to match everything. '''
 
+        if (self.debug > 10):
+            print("select_good_runs: Production_run_type = ",self.Production_run_type)
         good_runs=[]
         for rnum in self.All_Runs.index:
             test1 = False
@@ -598,7 +617,9 @@ class RunData:
             elif type(self.Production_run_type) is list:
                 test1 = self.All_Runs.loc[rnum,"run_type"] in self.Production_run_type
             elif type(self.Production_run_type) is str:
-                if re.match(self.Production_run_type,self.All_Runs.loc[rnum,"run_type"]):
+                if(self.debug>10):
+                    print("select_good_runs: rnum={:6d} run_type: '{}' ".format(rnum,self.All_Runs.loc[rnum,"run_type"]))
+                if self.All_Runs.loc[rnum,"run_type"] is not None and re.match(self.Production_run_type,self.All_Runs.loc[rnum,"run_type"]):
                     test1 = True
             else:
                 print("Incorrect type for self.Production_run_type:",type(self.Production_run_type))
@@ -693,12 +714,19 @@ class RunData:
                         cumsum_charge_norm += self.All_Runs.loc[run,"charge"]*target_norm
                         self.All_Runs.loc[run,"sum_charge_norm"] = cumsum_charge_norm
 
-        if len(self.All_Runs.loc[selected]):
-            return(self.All_Runs.loc[selected,"sum_charge"].iloc[-1],
-            self.All_Runs.loc[selected,"sum_charge_norm"].iloc[-1],
-            self.All_Runs.loc[selected,"sum_event_count"].iloc[-1])
+            if len(self.All_Runs.loc[selected]):
+                return(self.All_Runs.loc[selected,"sum_charge"].iloc[-1],
+                self.All_Runs.loc[selected,"sum_charge_norm"].iloc[-1],
+                self.All_Runs.loc[selected,"sum_event_count"].iloc[-1])
+            else:
+                return(0,0,0)
         else:
-            return(0,0,0)
+            if len(self.All_Runs.loc[selected]):
+                return (self.All_Runs.loc[selected, "sum_charge"].iloc[-1],
+                        self.All_Runs.loc[selected, "sum_charge"].iloc[-1],
+                        self.All_Runs.loc[selected, "sum_event_count"].iloc[-1])
+            else:
+                return (0, 0, 0)
 
 
 def AttennuationsWithTargThickness():

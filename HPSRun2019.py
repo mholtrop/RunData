@@ -70,6 +70,7 @@ if __name__ == "__main__":
     data.Production_run_type = ["PROD66", "PROD67"]
     data.target_dict = HPS_2019_Run_Target_Thickness()
     data.atten_dict  = AttennuationsWithTargThickness()
+    data.Current_Channel = "scaler_calc1b"
 
     min_event_count = 1000000  # Runs with at least 1M events.
     start_time = datetime(2019, 8, 25, 0, 0)  # SVT back in correct position
