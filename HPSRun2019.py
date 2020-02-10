@@ -1,4 +1,9 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+# Specify encoding so strings can have special characters.
+#
+
 from __future__ import print_function
 import sys
 import os
@@ -58,7 +63,7 @@ if __name__ == "__main__":
         #
         at_jlab = True
 
-    data = RunData()
+    data = RunData(cache_file="HPS_run_cache.sqlite3")
     # data._cache_engine=None   # Turn OFF cache?
     data.debug = 4
 
@@ -73,7 +78,8 @@ if __name__ == "__main__":
     data.Current_Channel = "scaler_calc1b"
 
     min_event_count = 1000000  # Runs with at least 1M events.
-    start_time = datetime(2019, 8, 25, 0, 0)  # SVT back in correct position
+#    start_time = datatime(2019, 7, 17, 0, 0)  # Very start of run
+    start_time = datetime(2019, 7, 25, 0, 0)  # SVT back in correct position
     end_time =   datetime(2019, 9, 10, 0, 0)
     end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
 
@@ -173,8 +179,8 @@ if __name__ == "__main__":
 
     fig.add_trace(
         go.Scatter(x=plot_sumcharge_norm_t, y=plot_sumcharge_norm_v, line=dict(color='red', width=3),
-                   name="Tot Charge * targ thick/8 µm"),
-        secondary_y=True,
+                name="Tot Charge * targ thick/8 µm"),
+                secondary_y=True,
     )
 
     t = '8 um W '

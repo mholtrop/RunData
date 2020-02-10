@@ -1,19 +1,28 @@
 import sys
 import requests
-from requests.packages.urllib3.exceptions import InsecureRequestWarning
-requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+#from requests.packages.urllib3.exceptions import InsecureRequestWarning
+requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
 
+import numpy as np
 import pandas as pd
 from datetime import datetime,timedelta
 
-class MyaData:
-    '''A class to help retrieve and store the Mya data from myQuery requests to the JLab EPICS server.'''
+from builtins import input
 
-    def __init__(self,I_am_at_jlab=False,user_name=None,password=None):
-        '''Connect to the Mya database using MyQuery.
+class MyaData:
+    """A class to help retrieve and store the Mya data from myQuery requests to the JLab EPICS server.
+
+    Typical use is to retrieve the time sequence of a single channel with .get("channel",start_time,end_time),
+    which can then be used for processing or plotting.
+    The function .get_multi() can be used to retrieve multiple channels, where the second (third, etc) channel
+    will be interpolated to have the same time intervals as the first channel.
+    """
+
+    def __init__(self,I_am_at_jlab=False,username=None,password=None):
+        """Connect to the Mya database using MyQuery.
         At JLab, no password is needed, but offsite we need a password to connect to the server.
         If needed and not provided, ask for the CUE username and password to setup the connection.
-        Sets up the session handle for the requests'''
+        Sets up the session handle for the requests"""
 
         self.at_jlab=I_am_at_jlab
         self.debug=0
@@ -28,25 +37,23 @@ class MyaData:
         else:
             self._url_head = "https://epicsweb.jlab.org/myquery/interval"
             import getpass
-            if user_name is None:
+            if username is None:
                 print("Please enter your CUE login credentials.")
                 print("Username: ",file=sys.stderr,end="") # so stdout can be piped.
-                if sys.version_info.major == 2:
-                    user_name = raw_input("")
-                else:
-                    user_name = input("")
+                user_name = input("")
             if password is None:
                 password = getpass.getpass("Password: ")
 
             url="https://epicsweb.jlab.org/"
             page = self._session.get(url)
-            payload = {'httpd_username':user_name,'httpd_password':password,"login": "Login"}
+            payload = {'httpd_username':username,'httpd_password':password,"login": "Login"}
             page= self._session.post(url,data=payload)
             # print(page.cookies.items())
 
-    def get(self,channel,start,end):
+    def get(self,channel,start,end,do_not_clean=False):
         '''Get a series of Mya data with a myQuery call for channel, from start to end time.
-        Returns two numpy arrays, one of time stamps, and one of values.
+        Returns a Pandas data frame with index, and keys: "ms", "value" and "time". Where "ms" is the
+        MYA millisecond time stamp, "value" is the requested channel value, and "time" is a Pandas timestamp.
         '''
         #
         # Get the value from Mya over the run period
@@ -56,7 +63,8 @@ class MyaData:
             'b':start,
             'e':end,
             't':'event',
-            'u':'on'  }
+            'u':'on',  ### u = on - Return the values in "ms" timestamp format.
+            'a':'on'}  ### a = on - Adjust the ms timestamp to the server timezone.
 
         if self.debug: print("Fetching channel '{}'".format(channel))
 
@@ -67,36 +75,64 @@ class MyaData:
             sys.exit(1)
 
         if my_dat.ok == False:
-            print("Error, could not get the data for run {}".format(channel))
+            print("Error, could not get the data for channel: {}".format(channel))
             print("Webserver responded with status: ",my_dat.status_code)
-            return( pd.DataFrame({'ms':[start.timestamp()*1000,end.timestamp()*1000],'value':[0.,0.],'time':[start,end]}))
+            return( pd.DataFrame({'ms':[start.timestamp()*1000,end.timestamp()*1000],'value':[None,None],'time':[start,end]}))
 
         dat_len = len(my_dat.json()['data'])
-        if dat_len == 0:                                           # EPICS sparsified the zeros.
-            return( pd.DataFrame({'ms':[start.timestamp()*1000,end.timestamp()*1000],'value':[0.,0.],'time':[start,end]}))
+        if dat_len == 0:                                           # EPICS sparsified the data?
+            return( pd.DataFrame({'ms':[start.timestamp()*1000,end.timestamp()*1000],'value':[None,None],'time':[start,end]}))
 
         pd_frame = pd.DataFrame(my_dat.json()['data'])
 
-        if len(pd_frame.columns)>2:          # If there are issues with time stamps, 2 extra columns are added: 't' and 'x'
+        if len(pd_frame.columns)>2 and not do_not_clean:          # If there are issues with time stamps, 2 extra columns are added: 't' and 'x'
             if self.debug>3:
                 print("There is trouble with the Mya data for channel {} in the time period {} - {}".format(channel,start,end))
                 print(pd_frame.columns)
             try:
-                for i in range(len(pd_frame)): # We need to clean it up
-                     if type(pd_frame.loc[i,"t"]) is not float:
-                         if self.debug>3: print("Clean up frame: ",pd_frame.loc[i])
-                         pd_frame.drop(i,inplace=True)
-                pd_frame.drop(['t','x'],inplace=True,axis=1)
+#
+# TODO: See if these two cases can be consolidated into one, which just looks for nan in 'v'
+#
+# Test this:
+# Set to zero:
+#               pd_frame.loc[ pd.isna(pd_frame['v'] ),'v'] = 0
+# Drop them:
+#               pd_frame.drop(pd_frame.loc[ pd_frame['x'] == True].index,inplace=True)
+# or
+                pd_frame.drop(pd_frame.loc[ pd.isna(pd_frame['v']) ].index,inplace=True)
+
+                # if 't' in pd_frame.keys():
+                #     pd_frame.drop(['t'], inplace=True, axis=1) # Finally, remove entire 't' column.
+                #
+                # if 'x' in pd_frame.keys():
+                #     pd_frame.drop(['x'], inplace=True, axis=1)  # Finally, remove entire 't' column.
+
+            # # The case with 't' and 'x' seems to occur with current data (BPM and/or FCup)
+                # if 't' in pd_frame.keys() and 'x' in pd_frame.keys():
+                #     for i in range(len(pd_frame)): # We need to clean it up
+                #          if type(pd_frame.loc[i,"t"]) is not float:
+                #              if self.debug>3: print("Clean up frame: ",pd_frame.loc[i])
+                #              pd_frame.drop(i,inplace=True)
+                #     pd_frame.drop(['t','x'],inplace=True,axis=1)
+                #
+                # # Case with a 't' column:
+                # elif 't' in pd_frame.keys():
+                #     for i in range(len(pd_frame)):         # We need to clean it up. Look for 'nan' values in 'v'
+                #         if pd.isna(pd_frame.loc[i,'v']):   # Found one.
+                #             if self.debug > 3: print("Clean up frame: ", pd_frame.loc[i])
+                #             pd_frame.drop(i, inplace=True) # So drop that data.
+                #     pd_frame.drop(['t'], inplace=True, axis=1) # Finally, remove entire 't' column.
+
             except Exception as e:
                 print("Could not fix the issue.")
                 print(e)
                 sys.exit(1)
 
-        pd_frame.columns = ["ms","value"]                         # Rename the columns
+        pd_frame.rename(columns={"d":"ms","v":"value"},inplace=True)                         # Rename the columns
         #
         # Convert the ms timestamp to a datetime in the correct time zone.
         #
-        pd_frame.loc[:,'time']=pd.Series([ datetime.fromtimestamp(x/1000) for x in pd_frame.ms])
+        pd_frame.loc[:,'time']= [ np.datetime64(x,'ms') for x in pd_frame.ms]
 
         # If you want with encoded timezone, you can do:
         #pd.Series(pd.to_datetime([ datetime.fromtimestamp(x/1000) for x in pd_frame.ms]).tz_localize("US/Eastern"),dtype=object)

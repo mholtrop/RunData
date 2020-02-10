@@ -43,7 +43,7 @@ from RunData.MyaData import MyaData
 #
 class RunData:
 
-    def __init__(self,I_am_at_jlab=False,sqlcache=True):
+    def __init__(self,I_am_at_jlab=False,cache_file="run_data_cache.sqlite3",sqlcache=True,username=None,password=None):
         ''' Set things up. If not at JLab you will be asked for CUE username and password.
         sqlcache=False will prevent caching querries in a local sqlite3 database.
         sqlcache='mysql://user.pwd@host/db' will use that DB as the cache. String is a sqlalchemy style DB string.
@@ -71,10 +71,10 @@ class RunData:
 
         self._cache_engine=None
         self._cache_known_data=None
-        self._cache_file_name="run_data_cache.sqlite3"
+        self._cache_file_name=cache_file
 
         self.start_rcdb()
-        self.Mya = MyaData(I_am_at_jlab)
+        self.Mya = MyaData(I_am_at_jlab,username=username,password=password)
         self.start_cache(sqlcache)
 
 
@@ -157,16 +157,17 @@ class RunData:
         for index in range(len(self._cache_known_data)):   # Loop by iloc so index order is early to late
             # Check if "start_time" < [start,end] < "end_time"
             cache_data = self._cache_known_data.iloc[index]
-            if (cache_data["start_time"] <= start < cache_data["end_time"]) and (cache_data["start_time"] < end <= cache_data["end_time"]):
+            if (cache_data["start_time"] <= np.datetime64(start) < cache_data["end_time"]) and \
+                    (cache_data["start_time"] < np.datetime64(end) <= cache_data["end_time"]):
                 cache_overlaps.append(index)
                 continue                       # No need to check extending, it's not needed.
 
             # Check if start is before "end_time", and end is after "end_time", we can extend after.
             # I.e.  end_time is in [start,end]
-            if ( start <= cache_data["end_time"] < end):
+            if ( np.datetime64(start) <= cache_data["end_time"] < np.datetime64(end) ):
                 cache_extend_after.append(index)
             # Check if "start_time" is inside [start,end], if so we can extend before.
-            if  start  < cache_data["start_time"] <= end:
+            if  np.datetime64(start)  < cache_data["start_time"] <= np.datetime64(end):
                 cache_extend_before.append(index)
 
         return(cache_overlaps,cache_extend_before,cache_extend_after)
