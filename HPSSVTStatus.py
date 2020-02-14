@@ -105,24 +105,29 @@ def plot_channel(channel,transform=None,runs=None,name=None, stride = 1):
 
     xl = []
     yl = []
-
+    ht = [] # Hover text to add to line. Nice for adding run numbers to points.
     for r in data.All_Runs.index:
 
         xl += [data.All_Runs.loc[r].start_time]  # Append the start time of run and channel value at start.
         yl += [transform(mya_channels_per_run[r][channel].iloc[0].value)]
+        ht += ["run:{:5d} start".format(r)]
 
         if len(mya_channels_per_run[r][channel]) > 1:  # Check if the value changes during this run.
             # Add the data changes during the run period to the plot.
             xl += [np.datetime64(x) for x in mya_channels_per_run[r][channel].iloc[1::stride].time]
             yl += list(transform(mya_channels_per_run[r][channel].iloc[1::stride].value))
+            ht += [ "run:{:5d}".format(r) for x in mya_channels_per_run[r][channel].iloc[1::stride].time]
 
         xl += [data.All_Runs.loc[r].end_time]  # Append the end time of run and SVT channel value at end.
         yl += [transform(mya_channels_per_run[r][channel].iloc[-1:].value.iloc[0])]  # Last value in the data.
+        ht += ["run:{:5d} end".format(r)]
         xl += [data.All_Runs.loc[r].end_time + np.timedelta64(1, 's')]    # Add one more point, +1 s after run.
         yl += [None]                                                      # This is a 'None' point, forcing a line segment.
+        ht += ["None"]
 
     xl = [q.astype('M8[ms]').astype('O') for q in xl]   # Change the np.datetime64 to a datetime.datetime.
-    line = go.Scatter(x=xl, y=yl, name=name)        # Construct a line and return.
+    name_short = name.replace("SVT:bias:",'').replace("v_sens",'')
+    line = go.Scatter(x=xl, y=yl, hovertext=ht, name=name_short, line=dict(shape="hv"))        # Construct a line and return.
     return(line)
 
 def plot_bias(fig=None):
@@ -141,7 +146,7 @@ def plot_bias(fig=None):
     fig.update_layout(
         title=go.layout.Title(
             text="HPS 2019 RUN, SVT Bias Voltage",
-            yanchor="top", y=0.05,
+            yanchor="top", y=0.95,
             xanchor="center",
             x=0.5))
     fig.update_xaxes(title_text="<b>Date/time<b>")
