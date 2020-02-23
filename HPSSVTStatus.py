@@ -30,8 +30,9 @@
 
 
 from __future__ import print_function
+from builtins import input
 import sys
-import os
+
 from datetime import datetime, timedelta
 
 from RunData.RunData import RunData
@@ -41,28 +42,30 @@ import numpy as np
 import MySQLdb
 import sqlalchemy
 
+Plotting_enabled = True
+
 try:
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
-    import plotly.io as pio
-    import chart_studio.plotly as charts
+    import plotly.io
+    plotly.io.renderers.default = "browser"
 
-    pio.renderers.default = "browser"
-except:
+except ImportError:
     print("Sorry, but to make the nice plots, you really need a computer with 'plotly' installed.")
-    sys.exit(1)
+    print("Plotting functionality will be disabled.")
+    Plotting_enabled = False
 
 
 class HPSSVTStatus:
 
-    def __init__(self,user='hps',passwd=None):
+    def __init__(self, db_host=None, db_user=None, db_passwd=None):
 
         self.data = None
         self.mya_data = None
         self.mya_channels_per_run = None
 
         self.mya_channels_pos = ["hps:svt_top:motor.RBV", "hps:svt_bot:motor.RBV"]
-        self.SVT_motor_to_angle = [self.SVT_motor_to_angle_top,self.SVT_motor_to_angle_bot]
+        self.SVT_motor_to_angle = [self.svt_motor_to_angle_top, self.svt_motor_to_angle_bot]
 
         self.mya_channels_bias = []
         for i in range(0, 18):
@@ -79,10 +82,13 @@ class HPSSVTStatus:
         self.end_time = datetime(2019, 9, 10, 0, 0)
         self.end_time = self.end_time - timedelta(0, 0, self.end_time.microsecond)  # Round down on end_time to a second
 
-        self.debug=0
+        self.debug = 0
+        self.no_exec = False
 
-        self.user = user
-        self.passwd = passwd
+        self.db_host = db_host
+        self.user = db_user
+        self.passwd = db_passwd
+        self.db = None
 
     # Deduced from MYA data:
     #
@@ -92,21 +98,29 @@ class HPSSVTStatus:
     # SVT BOT position = -8.215 + 0.4227* hps:svt_bos:motor.RBV
     #
 
-    def SVT_pos_top(self, motor_top):
-        return (8.6242 - 0.4509 * motor_top)
+    @staticmethod
+    def svt_pos_top(motor_top):
+        return 8.6242 - 0.4509 * motor_top
 
-    def SVT_pos_bot(self, motor_bot):
-        return (-8.215 + 0.4227 * motor_bot)
+    @staticmethod
+    def svt_pos_bot(motor_bot):
+        return -8.215 + 0.4227 * motor_bot
 
-    def SVT_motor_to_angle_top(self, motor_top):
+    @staticmethod
+    def svt_motor_to_angle_top(motor_top):
         # Sho's 2015:     return( (17.821 - motor_top) / 832.714 )
         # Matt Solt's 2020: top-angle = (18.017 - y(stage))/833.247
-        return ((18.017 - motor_top) / 833.247)
+        return (18.017 - motor_top) / 833.247
 
-    def SVT_motor_to_angle_bot(self, motor_bot):
+    @staticmethod
+    def svt_motor_to_angle_bot(motor_bot):
         # Sho's 2015:    return(  (17.397 - motor_bot) / 832.714)
         # Matt Solt's 2019: bot-angle = (18.250 - y(stage))/833.247
-        return ((18.250 - motor_bot) / 833.247)
+        return (18.250 - motor_bot) / 833.247
+
+    @staticmethod
+    def identity(x):  # Identity, do nothing, function.
+        return x
 
     def plot_channel(self, channel, transform=None, runs=None, name=None, stride=1):
         """Add a single channel stored in mya_channels_per_run to the figure's store of lines.
@@ -117,95 +131,114 @@ class HPSSVTStatus:
 
         # These are not really needed be because none of them are modified. Here to indicate we need them.
 
-        if transform == None:
-            transform = lambda x: x  # Identity transform.
+        if Plotting_enabled:
+            if transform is None:
+                transform = self.identity
 
-        if name == None:
-            name = channel
+            if name is None:
+                name = channel
 
-        if runs == None:
-            runs = self.data.All_Runs.index
+            if runs is None:
+                runs = self.data.All_Runs.index
 
-        xl = []
-        yl = []
-        ht = []  # Hover text to add to line. Nice for adding run numbers to points.
-        for run in self.data.All_Runs.index:
-            run_channel = self.mya_channels_per_run.loc[(channel, run),]  # Slice of the data for run, channel
-            xl += list(run_channel.time.iloc[0::stride])  # Append the start time of run and channel value at start.
-            yl += transform(list(run_channel.value.iloc[0::stride]))
-            ht += ["run:{:5d} start".format(run) for i in range(len(run_channel.iloc[0::stride]))]
+            xl = []
+            yl = []
+            ht = []  # Hover text to add to line. Nice for adding run numbers to points.
+            for run in runs:
+                run_channel = self.mya_channels_per_run.loc[(channel, run), ]  # Slice of the data for run, channel
+                xl += list(run_channel.time.iloc[0::stride])  # Append the start time of run and channel value at start.
+                yl += transform(list(run_channel.value.iloc[0::stride]))
+                ht += ["run:{:5d} start".format(run)]*len(run_channel.iloc[0::stride])
 
-            # .astype('M8[ms]').astype('O') changes the np.datetime64 to a datetime.datetime.
-            xl += [self.data.All_Runs.loc[run].end_time.astype('M8[ms]').astype(
-                'O')]  # Append the end time of run and SVT channel value at end.
-            yl += transform(list(run_channel.iloc[-1:].value))  # Last value in the data.
-            ht += ["run:{:5d} end".format(run)]
-            xl += [(self.data.All_Runs.loc[run].end_time + np.timedelta64(1, 's')).astype('M8[ms]').astype(
-                'O')]  # Add one more point, +1 s after run.
-            yl += [None]  # This is a 'None' point, forcing a line segment.
-            ht += ["None"]
+                # .astype('M8[ms]').astype('O') changes the np.datetime64 to a datetime.datetime.
+                xl += [self.data.All_Runs.loc[run].end_time.astype('M8[ms]').astype(
+                    'O')]  # Append the end time of run and SVT channel value at end.
+                yl += transform(list(run_channel.iloc[-1:].value))  # Last value in the data.
+                ht += ["run:{:5d} end".format(run)]
+                xl += [(self.data.All_Runs.loc[run].end_time + np.timedelta64(1, 's')).astype('M8[ms]').astype(
+                    'O')]  # Add one more point, +1 s after run.
+                yl += [None]  # This is a 'None' point, forcing a line segment.
+                ht += ["None"]
 
-        name_short = name.replace("SVT:bias:", '').replace("v_sens", '')
-        line = go.Scatter(x=xl, y=yl, hovertext=ht, name=name_short,
-                          line=dict(shape="hv"))  # Construct a line and return.
-        return (line)
+            name_short = name.replace("SVT:bias:", '').replace("v_sens", '')
+            # Construct a line and return.
+            return go.Scatter(x=xl, y=yl, hovertext=ht, name=name_short, line=dict(shape="hv"))
 
     def plot_bias(self, fig=None):
 
-        if fig == None:
-            fig = go.Figure()
+        if Plotting_enabled:
+            if fig is None:
+                fig = go.Figure()
 
-        for channel in self.mya_channels_bias:
-            line = self.plot_channel(channel)
-            fig.add_trace(line)
+            for channel in self.mya_channels_bias:
+                line = self.plot_channel(channel)
+                fig.add_trace(line)
 
-        fig.update_layout(
-            title=go.layout.Title(
-                text="HPS 2019 RUN, SVT Bias Voltage",
-                yanchor="top", y=0.95,
-                xanchor="center",
-                x=0.5))
-        fig.update_xaxes(title_text="<b>Date/time<b>")
-        fig.update_yaxes(title_text="<b>V_sens [V]<b>")
+            fig.update_layout(
+                title=go.layout.Title(
+                    text="HPS 2019 RUN, SVT Bias Voltage",
+                    yanchor="top", y=0.95,
+                    xanchor="center",
+                    x=0.5))
+            fig.update_xaxes(title_text="<b>Date/time<b>")
+            fig.update_yaxes(title_text="<b>V_sens [V]<b>")
 
-        return (fig)
+            return fig
 
     def plot_svt_angles(self, fig=None):
 
-        top = self.plot_channel('hps:svt_top:motor.RBV', transform=self.SVT_motor_to_angle_top, name="SVT angle top")
-        bot = self.plot_channel('hps:svt_bot:motor.RBV', transform=self.SVT_motor_to_angle_bot, name="SVT angle bot")
+        if Plotting_enabled:
+            top = self.plot_channel('hps:svt_top:motor.RBV',
+                                    transform=self.svt_motor_to_angle_top, name="SVT angle top")
+            bot = self.plot_channel('hps:svt_bot:motor.RBV',
+                                    transform=self.svt_motor_to_angle_bot, name="SVT angle bot")
 
-        top.update(line=dict(color="blue", width=2))
-        bot.update(line=dict(color="green", width=2))
+            top.update(line=dict(color="blue", width=2))
+            bot.update(line=dict(color="green", width=2))
 
-        if fig == None:
-            fig = go.Figure()
+            if fig is None:
+                fig = go.Figure()
 
-        fig.add_trace(top)
-        fig.add_trace(bot)
+            fig.add_trace(top)
+            fig.add_trace(bot)
 
-        fig.update_layout(
-            title=go.layout.Title(
-                text="HPS 2019 RUN, SVT angles from nominal",
-                yanchor="top", y=0.95,
-                xanchor="center",
-                x=0.5))
-        fig.update_xaxes(title_text="<b>Date/time<b>")
-        fig.update_yaxes(title_text="<b>Delta Angle [rad]<b>", range=[-1e-3, 1e-3])
+            fig.update_layout(
+                title=go.layout.Title(
+                    text="HPS 2019 RUN, SVT angles from nominal",
+                    yanchor="top", y=0.95,
+                    xanchor="center",
+                    x=0.5))
+            fig.update_xaxes(title_text="<b>Date/time<b>")
+            fig.update_yaxes(title_text="<b>Delta Angle [rad]<b>", range=[-1e-3, 1e-3])
 
-        return (fig)
+            return fig
 
-    # charts.plot(fig, filename = 'Run2019_svt_angle', auto_open=True)
-
-    def open_conditopns_database(self,user=None,passwd=None):
+    def open_conditopns_database(self, host=None, user=None, passwd=None):
         """Open the database connection for user with password"""
+        if host is not None:
+            self.db_host = host
         if user is not None:
             self.user = user
         if passwd is not None:
-            self.passwd=passwd
-        self.db = MySQLdb.connect(host="localhost", user=self.user, passwd=self.passwd, db="hps_conditions")
+            self.passwd = passwd
 
-    def write_entry_to_conditions_db(self,table_name,run_start,run_end,start_time,end_time,names,values,comment="no comment"):
+        if self.db_host is None:
+            print("Please enter the database host and login credentials.")
+            print("DB hostname: ", file=sys.stderr, end="")
+            self.db_host = input("")
+
+        if self.user is None:
+            print("DB Username: ", file=sys.stderr, end="")  # so stdout can be piped.
+            self.user = input("")
+
+        if self.passwd is None:
+            import getpass
+            self.passwd = getpass.getpass("DB Password: ")
+
+        self.db = MySQLdb.connect(host=self.db_host, user=self.user, passwd=self.passwd, db="hps_conditions")
+
+    def write_entry_to_conditions_db(self, table_name, run_start, run_end, start_time, end_time, names, values,
+                                     comment="no comment"):
         """Write a new entry into the conditions database for a condition table.
         Arguments:
         table_name -- Name of the table to write, i.e. 'svt_motor_positions'
@@ -222,18 +255,24 @@ class HPSSVTStatus:
 
         # Examples for the tables.
         # Collections table:
-        # +------+---------------------+------------------------------------------------+------------------------------+---------------------+
-        # | id   | table_name          | log                                            | description                  | created             |
-        # +------+---------------------+------------------------------------------------+------------------------------+---------------------+
-        # | 2343 | svt_motor_positions | created by spaul using SvtBiasConditionsLoader | run ranges for SVT positions | 2016-08-08 20:45:42 |
-        # | 2344 | svt_motor_positions | created by spaul using SvtBiasConditionsLoader | run ranges for SVT positions | 2016-08-08 20:45:42 |
+        # +------+---------------------+---------- ----+------------------------------+---------------------+
+        # | id   | table_name          | log           | description                  | created             |
+        # +------+---------------------+---------------+------------------------------+---------------------+
+        # | 2343 | svt_motor_positions | created by me | run ranges for SVT positions | 2016-08-08 20:45:42 |
+        # | 2344 | svt_motor_positions | created by me | run ranges for SVT positions | 2016-08-08 20:45:42 |
         #
         # Conditions table:
-        # +------+-----------+---------+---------------------+---------------------+------+------------+--------------------+---------------------+---------------------+---------------+
-        # | id   | run_start | run_end | updated             | created             | tag  | created_by |     notes          | name                | table_name          | collection_id |
-        # +------+-----------+---------+---------------------+---------------------+------+------------+--------------------+---------------------+---------------------+---------------+
-        # | 1755 |      7567 |    7567 | 2016-08-09 00:45:42 | 2016-08-08 20:45:42 | NULL |      spaul | constants from mya | svt_motor_positions | svt_motor_positions |          2343 |
-        # | 1756 |      7579 |    7579 | 2016-08-09 00:45:42 | 2016-08-08 20:45:42 | NULL |      spaul | constants from mya | svt_motor_positions | svt_motor_positions |          2344 |
+        #
+        # +------+-----------+---------+---------------------+---------------------+------+------------+
+        # --------------------+---------------------+---------------------+---------------+
+        # | id   | run_start | run_end | updated             | created             | tag  | created_by |
+        # notes          | name                | table_name          | collection_id |
+        # +------+-----------+---------+---------------------+---------------------+------+------------+
+        # --------------------+---------------------+---------------------+---------------+
+        # | 1755 |      7567 |    7567 | 2016-08-09 00:45:42 | 2016-08-08 20:45:42 | NULL |      spaul |
+        # constants from mya | svt_motor_positions | svt_motor_positions |          2343 |
+        # | 1756 |      7579 |    7579 | 2016-08-09 00:45:42 | 2016-08-08 20:45:42 | NULL |      spaul |
+        # constants from mya | svt_motor_positions | svt_motor_positions |          2344 |
         #
 
         # svt_motor_positions table:
@@ -246,14 +285,16 @@ class HPSSVTStatus:
         # | 1174 |          2344 | 0.021401105301460045 | 0.020891926880057254 | 1456136619532 | 1456564765520 |
         # +------+---------------+----------------------+----------------------+---------------+---------------+
         #
-        # If the motor moved during the run, there are multiple entries with the same collection_id but different time stamps.
+        # If the motor moved during the run, there are multiple entries with the same collection_id but
+        # different time stamps.
 
         # Step one - Store a row in collections table:
-        sql = "insert into collections (table_name,log,description,created) " \
-              "values ('{}','Entered by {} using HPSSVTStatus.py'," \
-              "'{}',curdate());".format(table_name,self.user, comment)
+        sql = "insert into collections (table_name,log, description, created) " \
+              "values ('{}', 'Entered by {} using HPSSVTStatus.py', " \
+              "'{}', curdate());".format(table_name, self.user, comment)
 
-        if self.debug>0:
+        cur = None
+        if self.no_exec:
             print(sql)
         else:
             cur = self.db.cursor()
@@ -263,19 +304,20 @@ class HPSSVTStatus:
         # Now retreive the id which was set by auto increment:
         sql = "select id from collections where table_name='{}' order by id desc limit 1;".format(table_name)
 
-        if self.debug>0:
+        if self.no_exec > 2:
             print(sql)
-            collection_id=12345
+            collection_id = 12345
         else:
             cur.execute(sql)
             collection_id = cur.fetchone()[0]
 
         # Create an entry in the Conditions table.
-        sql =  "insert into conditions (run_start,run_end,updated,created,tag,created_by," \
-               "notes,name,table_name,collection_id) " \
-               "values ({},{},curdate(),curdate(),NULL,'{}','{}'," \
-               "'{}','svt_motor_positions',{})".format(run_start,run_end,self.user,comment,table_name,collection_id)
-        if self.debug>0:
+        sql = "insert into conditions (run_start, run_end, updated, created, tag, created_by, " \
+              "notes, name,table_name, collection_id) values ({}, {}, curdate(), curdate(), NULL, '{}',' {}', " \
+              "'{}', 'svt_motor_positions', {})".format(run_start, run_end, self.user, comment, table_name,
+                                                        collection_id)
+
+        if self.no_exec:
             print(sql)
         else:
             cur.execute(sql)
@@ -285,10 +327,10 @@ class HPSSVTStatus:
                 print("write_entry_to_conditions db - error - names is list, but values is not.")
                 raise ValueError("values needs to be a list.")
             else:
-                if (type(values[0]) is not list ) and (type(values[0]) is not np.ndarray):
-                    values = [ [x] for x in values ] # Wrap it in a list
+                if (type(values[0]) is not list) and (type(values[0]) is not np.ndarray):
+                    values = [[x] for x in values]  # Wrap it in a list
                     start_time = [start_time]
-                    end_time   = [end_time]
+                    end_time = [end_time]
         else:
             names = [names]
             # Names is not a list, so we enter a single list of values, or a single value.
@@ -299,27 +341,25 @@ class HPSSVTStatus:
             else:
                 values = [values]     # From list to list of list
 
-        if self.debug>0:
+        if self.debug > 2:
             print("Write collection id = {} run_start= {}  run_end = {} N={}".
-              format(collection_id,run_start,run_end,len(values[0])))
+                  format(collection_id, run_start, run_end, len(values[0])))
 
         for i in range(len(values[0])):
-            sql = "insert into {} (collection_id,start,end,".format(table_name)
+            sql = "insert into {} (collection_id, start, end, ".format(table_name)
             for n in names:
-                sql+="{},".format(n)
+                sql += "{},".format(n)
             sql = sql[0:-1]  # Erase the last ,
-            sql += ") values ({},{},{},".format(collection_id,start_time[i],end_time[i])
+            sql += ") values ({},{},{},".format(collection_id, start_time[i], end_time[i])
             for vl in values:
-                sql+="{},".format(vl[i])
-            sql=sql[0:-1]    # Again erase last ,
+                sql += "{},".format(vl[i])
+            sql = sql[0:-1]    # Again erase last ,
             sql += ")"
-            if self.debug>0:
+            if self.no_exec:
                 print(sql)
             else:
                 cur.execute(sql)
-
-        self.db.commit()
-
+                self.db.commit()
 
     def motor_positions_to_conditions_db(self):
         """Store the positions of the SVT motor in the HPS conditions database.
@@ -330,10 +370,10 @@ class HPSSVTStatus:
 
         svt_angle_tolerance = 1e-7
 
-        start_irun    = 0
+        start_irun = 0
         start_run = self.data.All_Runs.index[start_irun]
-        start_values = np.array( [self.SVT_motor_to_angle[i](
-            self.mya_channels_per_run.loc[ (self.mya_channels_pos[i], start_run, 0),'value']) for i in (0, 1)])
+        start_values = np.array([self.SVT_motor_to_angle[i](
+            self.mya_channels_per_run.loc[(self.mya_channels_pos[i], start_run, 0), 'value']) for i in (0, 1)])
         start_time = self.data.All_Runs.iloc[start_irun].start_time
 
         for irun in range(len(self.data.All_Runs.index)):
@@ -341,28 +381,28 @@ class HPSSVTStatus:
             run = self.data.All_Runs.index[irun]
             lengths = [len(self.mya_channels_per_run.loc[(self.mya_channels_pos[i], run,), 'value']) for i in (0, 1)]
 
-            if self.debug>0:
-                print("Motor positions for run {:5d} lengths:".format(run),lengths)
+            if self.debug > 0:
+                print("Motor positions for run {:5d} lengths:".format(run), lengths)
 
-            if lengths[0]>1 or lengths[1] > 1:
+            if lengths[0] > 1 or lengths[1] > 1:
                 # Motors moved during the run. We need a separate entry for it.
                 # First write the previous run range out to the DB.
-                if irun>0:
+                if irun > 0:
                     last_run = self.data.All_Runs.index[irun-1]
-                    last_lengths = [len(self.mya_channels_per_run.loc[(self.mya_channels_pos[i], last_run,),'value'])
+                    last_lengths = [len(self.mya_channels_per_run.loc[(self.mya_channels_pos[i], last_run, ), 'value'])
                                     for i in (0, 1)]
                     if last_lengths[0] > 1 or last_lengths[1] > 1:
-                        if self.debug:
+                        if self.debug > 1:
                             print("No need to write, last run written already.")
                         # Last run the motor also moved, so that run was already completely written out.
                         pass
                     else:
                         last_time = self.data.All_Runs.iloc[irun-1].end_time
-                        self.write_entry_to_conditions_db(table_name,start_run,last_run,
+                        self.write_entry_to_conditions_db(table_name, start_run, last_run,
                                                           start_time.astype(int) // 1000000,
                                                           last_time.astype(int) // 1000000,
                                                           ['top', 'bottom'],
-                                                          [start_values[0],start_values[1]],
+                                                          [start_values[0], start_values[1]],
                                                           comment)
                 # Now collect a list of positions and times.
 
@@ -370,8 +410,8 @@ class HPSSVTStatus:
                 # and the times are not synchronized, but the database table pretends that they are.
                 # For merging tables see: https://pandas.pydata.org/pandas-docs/stable/user_guide/merging.html
 
-                merged = pd.merge_ordered(self.mya_channels_per_run.loc[self.mya_channels_pos[0],run,],
-                                          self.mya_channels_per_run.loc[self.mya_channels_pos[1],run,],
+                merged = pd.merge_ordered(self.mya_channels_per_run.loc[self.mya_channels_pos[0], run, ],
+                                          self.mya_channels_per_run.loc[self.mya_channels_pos[1], run, ],
                                           on='ms', suffixes=("_top", "_bot"), how='outer')
 
                 # The merge procedure will leave lots of nan values for the missing data.
@@ -392,33 +432,33 @@ class HPSSVTStatus:
                 keep_list = [merged.index[0]]  # Always keep the first entry, which corresponds to start of run.
                 last_top = merged.iloc[0].value_top
                 last_bot = merged.iloc[0].value_bot
-                last_ms  = merged.iloc[0].ms
+                last_ms = merged.iloc[0].ms
                 for i in merged.index[1:]:
                     if (merged.loc[i].ms - last_ms > delta_t_max) or \
                             np.abs(merged.loc[i].value_top - last_top) > motor_shaft_tolerance or \
-                            np.abs(merged.loc[i].value_bot - last_bot) > motor_shaft_tolerance :
+                            np.abs(merged.loc[i].value_bot - last_bot) > motor_shaft_tolerance:
                         keep_list.append(i)
                         last_top = merged.loc[i].value_top
                         last_bot = merged.loc[i].value_bot
                         last_ms = merged.loc[i].ms
 
-                keep_list.append(merged.index[-1]) # Always keep the last value
+                keep_list.append(merged.index[-1])  # Always keep the last value
 
-                top_vals = list(self.SVT_motor_to_angle_top(merged.loc[keep_list,'value_top'])) # Make the lists.
-                bot_vals = list(self.SVT_motor_to_angle_bot(merged.loc[keep_list,'value_bot']))
-                start_time = list(merged.loc[keep_list,'ms'])
+                top_vals = list(self.svt_motor_to_angle_top(merged.loc[keep_list, 'value_top']))  # Make the lists.
+                bot_vals = list(self.svt_motor_to_angle_bot(merged.loc[keep_list, 'value_bot']))
+                start_time = list(merged.loc[keep_list, 'ms'])
                 # End times are offset by one, with the last value the end of the run.
                 end_time = start_time[1:]
                 end_time.append(self.data.All_Runs.loc[run].end_time.astype(int) // 1000000)
 
                 # Write the whole list to the DB:
-                self.write_entry_to_conditions_db(table_name,run,run,start_time,end_time,
-                                                  ['top','bottom'],
-                                                  [top_vals,bot_vals],
+                self.write_entry_to_conditions_db(table_name, run, run, start_time, end_time,
+                                                  ['top', 'bottom'],
+                                                  [top_vals, bot_vals],
                                                   comment)
 
                 # Now reset the triggers.
-                start_values = np.array([10000,10000]) # Really big, because we must trigger a write for the next run.
+                start_values = np.array([10000, 10000])  # Really big, because we must trigger a write for the next run.
                 # Next start_run will need to be the next run.
                 if irun < len(self.data.All_Runs.index):  # We are not at the end yet.
                     start_irun = irun+1
@@ -430,24 +470,24 @@ class HPSSVTStatus:
                 # Get the motor values for the run.
 
                 this_values = np.array(
-                    [self.SVT_motor_to_angle[i]( self.mya_channels_per_run.loc[
-                                (self.mya_channels_pos[i], run, 0),'value']) for i in (0,1)] )
+                    [self.SVT_motor_to_angle[i](self.mya_channels_per_run.loc[
+                                (self.mya_channels_pos[i], run, 0), 'value']) for i in (0, 1)])
 
-                if self.debug>1:
-                    print("run: {:5d} values: ".format(run),this_values)
+                if self.debug > 1:
+                    print("run: {:5d} values: ".format(run), this_values)
 
-                if np.any( np.abs( this_values - start_values )> svt_angle_tolerance ):
+                if np.any(np.abs(this_values - start_values) > svt_angle_tolerance):
                     #
                     # Different from before, so need to add a new entry for the LAST run,
                     # unless it was done already.
-                    if self.debug > 0:
-                        print("Values changed for run: {:5d}".format(run),this_values,start_values)
+                    if self.debug > 1:
+                        print("Values changed for run: {:5d}".format(run), this_values, start_values)
                     last_run = self.data.All_Runs.index[irun-1]
-                    last_lengths = [len(self.mya_channels_per_run.loc[(self.mya_channels_pos[i], last_run,),'value'])
+                    last_lengths = [len(self.mya_channels_per_run.loc[(self.mya_channels_pos[i], last_run, ), 'value'])
                                     for i in (0, 1)]
 
                     if last_lengths[0] > 1 or last_lengths[1] > 1:
-                        if self.debug>0:
+                        if self.debug > 1:
                             print("No need to write out, was written already.")
                         # Last run the motor moved, so that run was already completely written out.
                         # There is nothing to do until the motor changes again.
@@ -456,16 +496,15 @@ class HPSSVTStatus:
                         last_time = self.data.All_Runs.iloc[irun-1].end_time
 
                         # Write a single entry to the DB for the range on runs.
-                        self.write_entry_to_conditions_db(table_name,start_run,last_run,
+                        self.write_entry_to_conditions_db(table_name, start_run, last_run,
                                                           start_time.astype(int) // 1000000,
                                                           last_time.astype(int) // 1000000,
-                                                          ['top','bottom'],
-                                                          [start_values[0],start_values[1]],
+                                                          ['top', 'bottom'],
+                                                          [start_values[0], start_values[1]],
                                                           comment)
 
                     # Done, reset the values
                     start_irun = irun
-                    start_run = run
                     start_run = self.data.All_Runs.index[start_irun]
                     start_values = this_values
                     start_time = self.data.All_Runs.iloc[start_irun].start_time
@@ -473,11 +512,11 @@ class HPSSVTStatus:
         # The loop is done, but we still need to write the data for the last run set out.
         last_run = self.data.All_Runs.index[-1]
         last_time = self.data.All_Runs.loc[last_run].end_time
-        self.write_entry_to_conditions_db(table_name,start_run, last_run,
+        self.write_entry_to_conditions_db(table_name, start_run, last_run,
                                           start_time.astype(int) // 1000000,
                                           last_time.astype(int) // 1000000,
-                                          ['top','bottom'],
-                                         [start_values[0],start_values[1]],
+                                          ['top', 'bottom'],
+                                          [start_values[0], start_values[1]],
                                           comment)
 
         # All done.
@@ -491,15 +530,17 @@ class HPSSVTStatus:
         # we write an "off" (0 V) to the database, otherwise we write "on" ( 180 V).
 
         table_name = "svt_bias_constants"
-        comment="Combined bias for all channels."
+        comment = "Combined bias for all channels."
 
         # Collect the average and stdev value for each channel for N=0
 
         for channel in self.mya_channels_bias:
             # This adds a new column to the data with the average value of the N=0 readings.
             # Since *most of the time* N=0 has a good bias, the average is close to the correct value for the channel.
-            self.mya_channels_per_run.loc[ (channel,),'average']=np.average(self.mya_channels_per_run.loc[channel, slice(None), 0].value)
-            # self.mya_channels_per_run.loc[ (channel,),'stdev']=np.std(self.mya_channels_per_run.loc[channel, slice(None), 0].value)
+            self.mya_channels_per_run.loc[(channel, ), 'average'] = np.average(
+                self.mya_channels_per_run.loc[channel, slice(None), 0].value)
+            # self.mya_channels_per_run.loc[ (channel,),'stdev'] =
+            #      np.std(self.mya_channels_per_run.loc[channel, slice(None), 0].value)
 
         self.mya_channels_per_run['okay'] = self.mya_channels_per_run.value > 0.9*self.mya_channels_per_run.average
 
@@ -512,13 +553,17 @@ class HPSSVTStatus:
 
             # Setup a select list of all data for this particular run.
             run = self.data.All_Runs.index[i_run]
-            print("Processing run {:5d}".format(run))
-            if not np.all(self.mya_channels_per_run.loc[(self.mya_channels_bias,run),:].okay):  # Not all bias channels are OK all run.
+
+            if self.debug > 0:
+                print("Processing run {:5d}".format(run))
+
+            if not np.all(self.mya_channels_per_run.loc[(self.mya_channels_bias, run), :].okay):
+                # Not all bias channels are OK all run.
                 # Store the last group of runs as a set of ALL ok, unless i_run == 0.
                 if i_run > 0:
                     last_run = self.data.All_Runs.index[i_run - 1]
                     # check that the last run was all okay otherwise it is written out already.
-                    if np.all(self.mya_channels_per_run.loc[(self.mya_channels_bias,last_run),:].okay):
+                    if np.all(self.mya_channels_per_run.loc[(self.mya_channels_bias, last_run), :].okay):
                         # Write out a set of runs with bias = 180V
                         last_time = self.data.All_Runs.iloc[i_run - 1].end_time
                         self.write_entry_to_conditions_db(table_name, start_run, last_run,
@@ -533,9 +578,8 @@ class HPSSVTStatus:
                 dat_sel = dat_sel.sort_values('ms')  # Sort the list.
                 dat_sel.reset_index(inplace=True)    # Make the index a simple list from 0 to N
 
-                start_time = [dat_sel.iloc[0].ms  ]       # We start with the very first value
-                status     = [dat_sel.iloc[0].okay]       # And we store the status at the start.
-                status_chan= dat_sel.iloc[0].channel      # store the channel.
+                start_time = [dat_sel.iloc[0].ms]       # We start with the very first value
+                status = [dat_sel.iloc[0].okay]       # And we store the status at the start.
                 #
                 # The complication here is that when you transition from okay = True to okay = False,
                 # you need to take the *first* occurrence of False (any channel). If you go from False
@@ -554,13 +598,13 @@ class HPSSVTStatus:
 
                     # If the channel_not_ok list is empty, then the current timestamp is all good.
                     if status[-1]:  # Last status was all OK.
-                        if len(channel_not_ok) > 0: # Now there is a channel not OK.
-                            status.append(False)    # So switch to False = not all good.
-                            start_time.append(dat_sel.iloc[idx].ms) # Save timestamp.
+                        if len(channel_not_ok) > 0:  # Now there is a channel not OK.
+                            status.append(False)     # So switch to False = not all good.
+                            start_time.append(dat_sel.iloc[idx].ms)  # Save timestamp.
                     else:           # Last status was not OK.
-                        if len(channel_not_ok)==0:  # Now all channels are OK
-                            status.append(True)     # So switch to True = all good.
-                            start_time.append(dat_sel.iloc[idx].ms) # Save timestamp.
+                        if len(channel_not_ok) == 0:  # Now all channels are OK
+                            status.append(True)       # So switch to True = all good.
+                            start_time.append(dat_sel.iloc[idx].ms)  # Save timestamp.
 
                 end_time = start_time[1:]
                 end_time.append(self.data.All_Runs.loc[run].end_time.astype(int) // 1000000)
@@ -601,18 +645,18 @@ class HPSSVTStatus:
     def get_run_data(self, start_time, end_time, username=None, password=None):
         """Get the run data information from RunData. """
 
-        hostname = os.uname()[1]
-        if hostname.find('clon') >= 0 or hostname.find('ifarm') >= 0 or hostname.find('jlab.org') >= 0:
-            #
-            # For JLAB setup the place we can find the RCDB
-            #
-            at_jlab = True
+        # hostname = os.uname()[1]
+        # if hostname.find('clon') >= 0 or hostname.find('ifarm') >= 0 or hostname.find('jlab.org') >= 0:
+        #     #
+        #     # For JLAB setup the place we can find the RCDB
+        #     #
+        #     at_jlab = True
 
         self.data = RunData(cache_file="HPS_run_cache.sqlite3", username=username, password=password)
         # data._cache_engine=None   # Turn OFF cache?
         self.data.debug = 0
 
-        self.data.Good_triggers = 'hps_v..?_?.?\.cnf'
+        self.data.Good_triggers = r"hps_v..?_?.?\.cnf"
         self.data.Production_run_type = ["PROD66", "PROD67"]
 
         min_event_count = 10000000  # Runs with at least 10M events.
@@ -634,7 +678,8 @@ class HPSSVTStatus:
 
         self.mya_data = {}
         for channel in self.mya_channels:
-            print("Fetching MYA channel: {}".format(channel))
+            if self.debug > 0:
+                print("Fetching MYA channel: {}".format(channel))
             mdat = self.data.Mya.get(channel, start_time, end_time)
             self.mya_data[channel] = mdat
 
@@ -651,7 +696,9 @@ class HPSSVTStatus:
                                                                                  names=["channel", "run", "N"]))
 
         for channel in self.mya_channels:  # For each channel.
-            print("Processing channel: {}".format(channel))
+            if self.debug > 0:
+                print("Processing channel: {}".format(channel))
+
             for run in self.data.All_Runs.index:  # For each selected run number.
                 # print("Processing for run {}".format(run))
                 run_start_time = self.data.All_Runs.loc[run].start_time
@@ -678,37 +725,6 @@ class HPSSVTStatus:
                     self.mya_channels_per_run = self.mya_channels_per_run.append(mya_data_row2[['ms', 'value', 'time']])
 
         self.mya_channels_per_run.sort_index(inplace=True)  # Speed up further access by sorting the index.
-
-        #
-        # This commented section was a dictionary way instead of the Pandas DataFrame method above.
-        # It turns out is was a little faster, actually, but the format is less convenient.
-        #
-        # mya_channels_per_run = {}          # Data store for each run.
-        #
-        # print("Itteratively going through all the MYA data for each time period of a run. ")
-        # for run in data.All_Runs.index:   # For each selected run number.
-        #     print("Processing for run {}".format(run))
-        #     mya_channel_data = {}         # Data store for the channels.
-        #     for channel in mya_channels:  # For each channel.
-        #         run_start_time = data.All_Runs.loc[run].start_time
-        #         run_end_time   = data.All_Runs.loc[run].end_time
-        #         #
-        #         # Get the first data point, from *before* the run_start_time
-        #         #
-        #         mya_data_row = mya_data[channel].loc[mya_data[channel].time <= run_start_time].tail(1)
-        #         #
-        #         # Get the data points *during* the run, if any. This could be empty if all was stable during the run.
-        #         #
-        #         mya_data_row2 = mya_data[channel].loc[ (mya_data[channel].time>run_start_time) & (mya_data[channel].time<run_end_time)]
-        #         row = mya_data_row.append(mya_data_row2)
-        #         #
-        #         # Add the entries to the data store for this channel.
-        #         #
-        #         mya_channel_data[channel]=row
-        #     #
-        #     #  All the channels are stored in mya_channel_data.
-        #     #  Store them for this run in the mya_channels_per run
-        #     mya_channels_per_run[run]=mya_channel_data
 
         #
         # A big store of all the data is now available!!!
@@ -745,9 +761,60 @@ class HPSSVTStatus:
         if self.data is None:
             self.data = RunData(I_am_at_jlab=True)  # Do not ask for username / password
 
-        self.data.All_Runs = pd.read_sql(sql, dbs,parse_dates=["start_time","end_time"])
-        self.data.All_Runs.set_index(['number'],inplace=True)
+        self.data.All_Runs = pd.read_sql(sql, dbs, parse_dates=["start_time", "end_time"])
+        self.data.All_Runs.set_index(['number'], inplace=True)
+
+
+def main(argv=None):
+
+    import argparse
+
+    if argv is None:
+        argv = sys.argv
+    else:
+        argv = argv.split()
+        argv.insert(0, sys.argv[0])  # add the program name.
+
+    parser = argparse.ArgumentParser(
+        description="""Submit SVT bias and motor positions to the conditions database.""",
+        epilog="""For more info, read the script ^_^, or email maurik@physics.unh.edu""")
+
+    parser.add_argument('-d', '--debug', action="count", help="Be more verbose if possible. ", default=0)
+    parser.add_argument('-x', '--noexec', action="store_true", help="Do not execute sql, print instead.")
+
+    parser.add_argument('-H', '--host', type=str, help="Host name for Conditions DB.", default=None)
+    parser.add_argument('-u', '--user', type=str, help="User name for Conditions DB.", default=None)
+    parser.add_argument('-p', '--passwd', type=str, help="Password for Conditions DB.", default=None)
+
+    parser.add_argument('-m', '--motorplot', action="store_true", help="Create plot of motor position.")
+    parser.add_argument('-b', '--biasplot', action="store_true", help="Create plot of bias values.")
+
+    parser.add_argument('-l', '--local', action="store_true", help="Use local version of Mya database.")
+    parser.add_argument('-s', '--store', action="store_true", help="Store data in local database for re-user with -l")
+
+    args = parser.parse_args(argv[1:])
+
+    hps = HPSSVTStatus(db_host=args.host, db_user=args.user, db_passwd=args.passwd)
+    hps.debug = args.debug
+    hps.no_exec = args.noexec
+
+    print("Reading tables from DB")
+
+    if args.local:
+        hps.read_tables_from_db()
+    else:
+        hps.get_channel_data()
+        if args.store:
+            hps.store_tables_in_db()
+
+    print("Open conditions database.")
+    if not hps.no_exec:
+        hps.open_conditopns_database()
+    print("Process motor positions.")
+    hps.motor_positions_to_conditions_db()
+    print("Now processing bias conditions.")
+    hps.bias_conditions_to_db()
 
 
 if __name__ == "__main__":
-    print("For now, use this as a library.")
+    sys.exit(main())

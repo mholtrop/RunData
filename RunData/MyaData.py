@@ -72,12 +72,13 @@ class MyaData:
             my_dat=self._session.get(self._url_head,verify=False,params=params)
         except ConnectionError:
             print("Could not connect to the Mya myQuery website. Was the password correctly entered? ")
-            sys.exit(1)
+            raise ConnectionError("Could not connect to ",self._url_head)
 
         if my_dat.ok == False:
             print("Error, could not get the data for channel: {}".format(channel))
             print("Webserver responded with status: ",my_dat.status_code)
-            return( pd.DataFrame({'ms':[start.timestamp()*1000,end.timestamp()*1000],'value':[None,None],'time':[start,end]}))
+            print("Where your CUE login credential typed correctly? ")
+            raise ConnectionError("Could not connect to ",self._url_head)
 
         dat_len = len(my_dat.json()['data'])
         if dat_len == 0:                                           # EPICS sparsified the data?
