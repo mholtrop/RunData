@@ -58,7 +58,7 @@ except ImportError:
 
 class HPSSVTStatus:
 
-    def __init__(self, db_host=None, db_user=None, db_passwd=None):
+    def __init__(self, db_host=None, db_user=None, db_passwd=None, db_name=None):
 
         self.data = None
         self.mya_data = None
@@ -88,6 +88,7 @@ class HPSSVTStatus:
         self.db_host = db_host
         self.user = db_user
         self.passwd = db_passwd
+        self.db_name = db_name
         self.db = None
 
     # Deduced from MYA data:
@@ -213,14 +214,20 @@ class HPSSVTStatus:
 
             return fig
 
-    def open_conditopns_database(self, host=None, user=None, passwd=None):
-        """Open the database connection for user with password"""
+    def open_conditopns_database(self, host=None, user=None, passwd=None, name=None):
+        """Open the database connection for on host, for user with password to database with name"""
+
         if host is not None:
             self.db_host = host
+
         if user is not None:
             self.user = user
+
         if passwd is not None:
             self.passwd = passwd
+
+        if name is not None:
+            self.db_name = name
 
         if self.db_host is None:
             print("Please enter the database host and login credentials.")
@@ -235,7 +242,10 @@ class HPSSVTStatus:
             import getpass
             self.passwd = getpass.getpass("DB Password: ")
 
-        self.db = MySQLdb.connect(host=self.db_host, user=self.user, passwd=self.passwd, db="hps_conditions")
+        if self.db_name is None:
+            self.db_name = "hps_conditions"
+
+        self.db = MySQLdb.connect(host=self.db_host, user=self.user, passwd=self.passwd, db=self.db_name)
 
     def write_entry_to_conditions_db(self, table_name, run_start, run_end, start_time, end_time, names, values,
                                      comment="no comment"):
@@ -785,6 +795,7 @@ def main(argv=None):
     parser.add_argument('-H', '--host', type=str, help="Host name for Conditions DB.", default=None)
     parser.add_argument('-u', '--user', type=str, help="User name for Conditions DB.", default=None)
     parser.add_argument('-p', '--passwd', type=str, help="Password for Conditions DB.", default=None)
+    parser.add_argument('-n', '--dbname', type=str, help="Name of Conditions DB.", default="hps_conditions")
 
     parser.add_argument('-m', '--motorplot', action="store_true", help="Create plot of motor position.")
     parser.add_argument('-b', '--biasplot', action="store_true", help="Create plot of bias values.")
@@ -794,7 +805,7 @@ def main(argv=None):
 
     args = parser.parse_args(argv[1:])
 
-    hps = HPSSVTStatus(db_host=args.host, db_user=args.user, db_passwd=args.passwd)
+    hps = HPSSVTStatus(db_host=args.host, db_user=args.user, db_passwd=args.passwd, db_name=args.dbname)
     hps.debug = args.debug
     hps.no_exec = args.noexec
 
