@@ -655,15 +655,13 @@ class HPSSVTStatus:
     def get_run_data(self, start_time, end_time, username=None, password=None):
         """Get the run data information from RunData. """
 
-        # hostname = os.uname()[1]
-        # if hostname.find('clon') >= 0 or hostname.find('ifarm') >= 0 or hostname.find('jlab.org') >= 0:
-        #     #
-        #     # For JLAB setup the place we can find the RCDB
-        #     #
-        #     at_jlab = True
+        hostname = os.uname()[1]
+        if hostname.find('clon') >= 0 or hostname.find('ifarm') >= 0 or hostname.find('jlab.org') >= 0:
+            at_jlab = True
 
-        self.data = RunData(cache_file="HPS_run_cache.sqlite3", username=username, password=password)
-        # data._cache_engine=None   # Turn OFF cache?
+        self.data = RunData(cache_file="HPS_run_cache.sqlite3", username=username, password=password,
+                            I_am_at_jlab=at_jlab)
+
         self.data.debug = 0
 
         self.data.Good_triggers = r"hps_v..?_?.?\.cnf"
