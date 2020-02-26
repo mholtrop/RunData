@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 from __future__ import print_function
 import sys
 import os
@@ -7,33 +9,31 @@ import re
 try:
     from rcdb.model import Run, ConditionType, Condition, all_value_types
     from rcdb.provider import RCDBProvider
-except:
+except ImportError:
     print("Please set your PYTHONPATH to a copy of the rcd Python libraries.\n")
-    print("sys.path: ",sys.path)
+    print("sys.path: ", sys.path)
     sys.exit(1)
 
 try:
     import sqlalchemy
-except:
+except ImportError:
     print("We need the sqlalchemy installed for the database, but I could not find it in:")
-    print("sys.path: ",sys.path)
+    print("sys.path: ", sys.path)
     sys.exit(1)
-
 
 # import requests
 # from requests.packages.urllib3.exceptions import InsecureRequestWarning
 # requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
 #
-from datetime import datetime,timedelta
+from datetime import datetime, timedelta
 
 try:
     import pandas as pd
-except:
+except ImportError:
     print("Sorry, but you really need a computer with 'pandas' installed.")
     print("Try 'anaconda' python, which should have both.")
     sys.exit(1)
 
-import json
 import numpy as np
 
 from RunData.MyaData import MyaData
@@ -41,31 +41,42 @@ from RunData.MyaData import MyaData
 # Some global configuration settings.
 # These will need to go to input values on a web form.
 #
+
+
 class RunData:
 
-    def __init__(self,I_am_at_jlab=False,cache_file="run_data_cache.sqlite3",sqlcache=True,username=None,password=None):
-        ''' Set things up. If not at JLab you will be asked for CUE username and password.
+    def __init__(self, i_am_at_jlab=False, cache_file="run_data_cache.sqlite3", sqlcache=True,
+                 username=None, password=None):
+        """ Set things up. If not at JLab you will be asked for CUE username and password.
         sqlcache=False will prevent caching querries in a local sqlite3 database.
         sqlcache='mysql://user.pwd@host/db' will use that DB as the cache. String is a sqlalchemy style DB string.
         sqlcache=True  will use a local sqlite3 file for caching.
-        '''
+        """
         self.Production_run_type = "PROD.*"     # Type of production runs to consider.
-        self.Useful_conditions=['is_valid_run_end', 'user_comment', 'run_type',
+        # List of conditions to put in tables.
+        self.Useful_conditions = ['is_valid_run_end', 'user_comment', 'run_type',
         'target', 'beam_current_request', 'operators','event_count',
         'events_rate','run_config', 'status',
-         'evio_files_count', 'megabyte_count', 'run_start_time', 'run_end_time']   # List of conditions to put in tables.
-        self.Good_triggers='hps_v..?_?.?\.cnf'   # Regex string or list of trigger conditions to use for run selection.
-        self.not_good_triggers=[]
-        self.ExcludeRuns = []  # This runs are not present in Cameron's list which he obtained parsing the google spreadsheet, and maybe other sources too
-        self.min_event_count = 1000000
-        self.target_dict={}
-        self.atten_dict={}     # This is a dictionary of target dependent correction factors for correcting the FCup current.
-        self.at_jlab=I_am_at_jlab
-        self.All_Runs=None
-        self.debug=0
+         'evio_files_count', 'megabyte_count', 'run_start_time', 'run_end_time']
 
-        self.Current_Channel="scaler_calc1b"    # Mya Channel for the current from FCUP.
-        self.LiveTime_Channel="B_DAQ_HPS:TS:livetime"   # Mya Channel for the livetime.
+        # Regex string or list of trigger conditions to use for run selection.
+        self.Good_triggers = r'hps_v..?_?.?\.cnf'
+
+        self.not_good_triggers = []
+
+        # This runs to be excluded for other reasons. (I.e. marked in online spreadsheet.
+        self.ExcludeRuns = []
+
+        self.min_event_count = 1000000
+        self.target_dict = {}
+        # This is a dictionary of target dependent correction factors for correcting the FCup current.
+        self.atten_dict = {}
+        self.at_jlab = i_am_at_jlab
+        self.All_Runs = None
+        self.debug = 0
+
+        self.Current_Channel = "scaler_calc1b"    # Mya Channel for the current from FCUP.
+        self.LiveTime_Channel = "B_DAQ_HPS:TS:livetime"   # Mya Channel for the livetime.
         self._db=None
         self._session=None
 
@@ -74,7 +85,7 @@ class RunData:
         self._cache_file_name=cache_file
 
         self.start_rcdb()
-        self.Mya = MyaData(I_am_at_jlab,username=username,password=password)
+        self.Mya = MyaData(i_am_at_jlab, username=username, password=password)
         self.start_cache(sqlcache)
 
 
@@ -141,7 +152,7 @@ class RunData:
         self._cache_known_data = pd.read_sql("Known_Data_Ranges",self._cache_engine,index_col="index")
 
 
-    def _check_for_cache_hits(self,start,end):
+    def _check_for_cache_hits(self, start, end):
         # Cache Hit logic: We need to determine if we have a cache hit.
         # There are multiple cases:
         #     1 - No Hit
@@ -149,11 +160,12 @@ class RunData:
         #     3 - One chunck in cache - extend cache before and/or after
         #     4 - Multiple chuncks in cache - Punt this! Just overwrite all but one
         #
-        start = start+timedelta(0,0,-start.microsecond)      # Round down on start
-        if end.microsecond != 0: end   = end  +timedelta(0,0,1000000-end.microsecond) # Round up on end.
-        cache_overlaps=[]
-        cache_extend_before=[]
-        cache_extend_after=[]
+        start = start+timedelta(0, 0, -start.microsecond)      # Round down on start
+        if end.microsecond != 0:
+            end = end + timedelta(0, 0, 1000000-end.microsecond) # Round up on end.
+        cache_overlaps = []
+        cache_extend_before = []
+        cache_extend_after = []
         for index in range(len(self._cache_known_data)):   # Loop by iloc so index order is early to late
             # Check if "start_time" < [start,end] < "end_time"
             cache_data = self._cache_known_data.iloc[index]
@@ -173,16 +185,19 @@ class RunData:
         return(cache_overlaps,cache_extend_before,cache_extend_after)
 
 
-    def _cache_fill_runs(self,start,end,min_event):
-        '''Fill the cache with runs from start to end.
-        Filter on min_event and leave the rest in All_Runs.'''
+    def _cache_fill_runs(self, start, end, min_event):
+        """Fill the cache with runs from start to end.
+        Filter on min_event and leave the rest in All_Runs."""
 
-        start = start+timedelta(0,0,-start.microsecond)      # Round down on start
-        if end.microsecond != 0: end   = end  +timedelta(0,0,1000000-end.microsecond) # Round up on end.
+        start = start+timedelta(0, 0, -start.microsecond)      # Round down on start
+        if end.microsecond != 0:
+            end = end + timedelta(0, 0, 1000000-end.microsecond)  # Round up on end.
 
         if self.debug>0:
-            print("cache_fill_runs: {} - {}".format(start,end))
-        num_runs = self.get_runs_from_rcdb(start,end,1)           # Get the new data from the RCDB.
+            print("cache_fill_runs: {} - {} minevt: {}".format(start, end, min_event))
+
+        num_runs = self.get_runs_from_rcdb(start, end, min_event)           # Get the new data from the RCDB.
+
         if num_runs == 0:
             # We still need to adjust the "end" time, so we don't end up in a endless loop.
             # Now data.All_Runs is likely empty, so use RCDB to get end of last run.
@@ -209,9 +224,12 @@ class RunData:
         #    number of events, files etc.
         #
         # To detect between 1 and 2, get the very last run from the database.
-        last=self._db.session.query(Run).order_by(Run.start_time.desc()).limit(1).first()
-        if end > last.start_time : # This is scenario 2, adjust the end time
-            # The 'end' for the cache period must be the 'end' of the last run, or if that is not valid (run end not recorded)
+
+        last = self._db.session.query(Run).order_by(Run.start_time.desc()).limit(1).first()
+
+        if end > last.start_time:  # This is scenario 2, adjust the end time
+            # The 'end' for the cache period must be the 'end' of the last run,
+            # or if that is not valid (run end not recorded)
             # then 'end' should be the end of the run one before.
             end_of_last_run_valid = self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< end )].iloc[-1].is_valid_run_end
 
@@ -221,7 +239,7 @@ class RunData:
                 if self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< end )].iloc[-1].end_time > (datetime.now() - timedelta(hours=8)):
                     if self.debug: print("WARNING: Run with is_valid_run_end not set is withing last 8 hours, not adding to cache.")
                     # We drop the run from the table, so it will not go into the cache.
-                    self.All_Runs.drop(self.All_Runs.index[-1],inplace=True)
+                    self.All_Runs.drop(self.All_Runs.index[-1], inplace=True)
                     num_runs -= 1
                     if len(self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< end )])<=1:  # there is no run left.
                         if self.debug: print("No runs left to add.")
@@ -230,15 +248,16 @@ class RunData:
                             print("Problem I do not understand. The DB did not return 2 runs.")
                             sys.exit(1)
                         end=last_2_runs[1].end_time
-                        if self.debug: print("Set the end to:",end)
-                        return 0,end
+                        if self.debug: print("Set the end to:", end)
+                        return 0, end
 
             end_of_last_run = self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< end )].iloc[-1].end_time  # Get the end of the last run.
 
             if end_of_last_run is None or type(end_of_last_run) is not pd.Timestamp:   # This seems to be really, really rare.
                 print("WARNING: Last run added to cache does not have a proper end time!!!")
-                end_of_last_run = self.All_Runs[(self.All_Runs["start_time"]>start) & ( self.All_Runs["end_time"]< extend_to )].iloc[-1].start_time
-                end_of_last_run -= timedelta(0,1) # One second before last start, so the next time this run will get updated.
+                # end_of_last_run = self.All_Runs[(self.All_Runs["start_time"] > start) &
+                #                                 (self.All_Runs["end_time"] < extend_to)].iloc[-1].start_time
+                # end_of_last_run -= timedelta(0,1) # One second before last start, so the next time this run will get updated.
 
             if self.debug>2: print("Change the end time from {} to {}".format(end,end_of_last_run))
             end = end_of_last_run
@@ -346,11 +365,14 @@ class RunData:
         self.min_event_count = min_event
 
         start = start+timedelta(0,0,-start.microsecond)      # Round down on start
-        if end.microsecond != 0: end   = end  +timedelta(0,0,1000000-end.microsecond) # Round up on end.
+        if end.microsecond != 0:
+            end = end +timedelta(0, 0, 1000000-end.microsecond)  # Round up on end.
+
         if self.debug: print("get_runs from {} - {} ".format(start,end))
 
         if self._cache_engine is None or self._cache_engine is False:  # No cache, so just get the runs.
-            if self.debug>2: print("Getting runs bypassing cache, for start={}, end={}, min_event={}".format(start,end,min_event))
+            if self.debug > 2:
+                print("Getting runs bypassing cache, for start={}, end={}, min_event={}".format(start, end, min_event))
             num_runs = self.get_runs_from_rcdb(start,end,min_event)
             self.select_good_runs()
             self.add_current_data_to_runs()                                 # Fill in the missing current info
@@ -358,10 +380,11 @@ class RunData:
 
         num_runs_cache = self._cache_get_runs(start,end,min_event)  # Get whatever we have in the cache already.
 
-        cache_overlaps,cache_extend_before,cache_extend_after = self._check_for_cache_hits(start,end) # Check for overlaps of request with cache.
+        # Check for overlaps of request with cache.
+        cache_overlaps, cache_extend_before, cache_extend_after = self._check_for_cache_hits(start, end)
 
-        if(len(cache_overlaps)+len(cache_extend_before)+len(cache_extend_after) == 0): # No overlaps at all.
-            num_runs,tmp = self._cache_fill_runs(start,end,min_event)                      # so get the date for the entire stretch.
+        if(len(cache_overlaps)+len(cache_extend_before)+len(cache_extend_after) == 0):  # No overlaps at all.
+            num_runs,tmp = self._cache_fill_runs(start,end,min_event)         # so get the date for the entire stretch.
             return num_runs + num_runs_cache
 
         if(len(cache_overlaps)>1):
@@ -492,12 +515,12 @@ class RunData:
         # better off just using MySQL directly. Such queries get really complicated, and this
         # isn't really needed here. Better to do one query and then filter using Python.
 
-        if self.debug: print("Getting runs from RCDB: {} - {}".format(start_time,end_time))
-        q=self._db.session.query(Run).join(Run.conditions).join(Condition.type)\
+        if self.debug:
+            print("Getting runs from RCDB: {} - {} minevt: {}".format(start_time, end_time, min_event_count))
+
+        q = self._db.session.query(Run).join(Run.conditions).join(Condition.type)\
         .filter(Run.start_time > start_time).filter(Run.start_time < end_time)\
-        .filter( (ConditionType.name == "event_count") & (Condition.int_value > min_event_count))
-
-
+        .filter((ConditionType.name == "event_count") & (Condition.int_value > min_event_count))
 
         if self.debug: print("Found {} runs.\n".format(q.count()))
         num_runs = q.count()
@@ -505,6 +528,7 @@ class RunData:
             return(0)
         all_runs = q.all()
         runs=[]
+
         for R in all_runs:
             run_dict = {"number":R.number,"start_time":R.start_time,"end_time":R.end_time}
 
@@ -522,8 +546,9 @@ class RunData:
         self.All_Runs = pd.DataFrame(runs)
         self.All_Runs.loc[:,"selected"]=True            # Default to selected
         # Rewrite the run_config to eliminate the long directory name, which is not useful.
-        self.All_Runs.loc[:,"run_config"]=[self.All_Runs.loc[r,"run_config"].split('/')[-1]   for r in self.All_Runs.index]
-        self.All_Runs.set_index('number',inplace=True)
+        self.All_Runs.loc[:,"run_config"] = [self.All_Runs.loc[r, "run_config"].split('/')[-1]
+                                             for r in self.All_Runs.index]
+        self.All_Runs.set_index('number', inplace=True)
         return(num_runs)
 
 
@@ -538,19 +563,25 @@ class RunData:
         if not override and ("charge" in self.All_Runs.keys()) and not np.isnan(self.All_Runs.loc[runnumber,"charge"]):
             return
 
-        current =  self.Mya.get(self.Current_Channel,
-            self.All_Runs.loc[runnumber,"start_time"],
-            self.All_Runs.loc[runnumber,"end_time"]   )
-        live_time = self.Mya.get(self.LiveTime_Channel,
-            self.All_Runs.loc[runnumber,"start_time"],
-            self.All_Runs.loc[runnumber,"end_time"]       )
+        if self.debug > 4:
+            print("add_current_cor, run= {:5d}".format(runnumber))
 
+        current = self.Mya.get(self.Current_Channel,
+            self.All_Runs.loc[runnumber, "start_time"],
+            self.All_Runs.loc[runnumber, "end_time"])
+        live_time = self.Mya.get(self.LiveTime_Channel,
+            self.All_Runs.loc[runnumber, "start_time"],
+            self.All_Runs.loc[runnumber, "end_time"])
+
+        # If there is bad data in the live_time, None or nan, then set those to zero.
+        live_time.loc[live_time.value.isna(), 'value'] = 0
 
         if self.Current_Channel == "scaler_calc1b":
             # Getting the target thickness dependend FCup charge correction
             currCorrection = self.BeamAtenCorr( runnumber)
             # Applying the correction
             current['value'] *= currCorrection
+
 
         #
         # The sampling of the current and live_time are NOT guaranteed to be the same.
@@ -593,6 +624,8 @@ class RunData:
         # such as pulser runs, FEE runs, etc.
         #
         good_runs = self.list_selected_runs(targets,run_config)
+        if self.debug>3:
+            print(good_runs)
         if len(good_runs)>0:
             for rnum in self.list_selected_runs(targets,run_config):
                 self.add_current_cor(rnum)

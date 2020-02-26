@@ -1,13 +1,21 @@
-import sys
-import requests
-#from requests.packages.urllib3.exceptions import InsecureRequestWarning
-requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 
 import numpy as np
 import pandas as pd
-from datetime import datetime,timedelta
+# from datetime import datetime, timedelta
 
-from builtins import input
+import sys
+
+import requests
+# from requests.packages.urllib3.exceptions import InsecureRequestWarning
+requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
+
+if hasattr(__builtins__, 'raw_input'):
+    input_str = raw_input
+else:
+    input_str = input
+
 
 class MyaData:
     """A class to help retrieve and store the Mya data from myQuery requests to the JLab EPICS server.
@@ -40,12 +48,13 @@ class MyaData:
             if username is None:
                 print("Please enter your CUE login credentials.")
                 print("Username: ",file=sys.stderr,end="") # so stdout can be piped.
-                user_name = input("")
+                username = input_str("")
             if password is None:
                 password = getpass.getpass("Password: ")
 
             url="https://epicsweb.jlab.org/"
             page = self._session.get(url)
+
             payload = {'httpd_username':username,'httpd_password':password,"login": "Login"}
             page= self._session.post(url,data=payload)
             # print(page.cookies.items())
@@ -69,12 +78,12 @@ class MyaData:
         if self.debug: print("Fetching channel '{}'".format(channel))
 
         try:
-            my_dat=self._session.get(self._url_head,verify=False,params=params)
+            my_dat = self._session.get(self._url_head,verify=False,params=params)
         except ConnectionError:
             print("Could not connect to the Mya myQuery website. Was the password correctly entered? ")
             raise ConnectionError("Could not connect to ",self._url_head)
 
-        if my_dat.ok == False:
+        if not my_dat.ok:
             print("Error, could not get the data for channel: {}".format(channel))
             print("Webserver responded with status: ",my_dat.status_code)
             print("Where your CUE login credential typed correctly? ")

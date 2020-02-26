@@ -30,8 +30,15 @@
 
 
 from __future__ import print_function
-from builtins import input
+
 import sys
+
+if hasattr(__builtins__, 'raw_input'):
+    input_str = raw_input
+else:
+    input_str = input
+
+import os
 
 from datetime import datetime, timedelta
 
@@ -54,7 +61,8 @@ except ImportError:
     print("Sorry, but to make the nice plots, you really need a computer with 'plotly' installed.")
     print("Plotting functionality will be disabled.")
     Plotting_enabled = False
-
+    go = None
+    plotly = None
 
 class HPSSVTStatus:
 
@@ -152,12 +160,12 @@ class HPSSVTStatus:
                 ht += ["run:{:5d} start".format(run)]*len(run_channel.iloc[0::stride])
 
                 # .astype('M8[ms]').astype('O') changes the np.datetime64 to a datetime.datetime.
-                xl += [self.data.All_Runs.loc[run].end_time.astype('M8[ms]').astype(
-                    'O')]  # Append the end time of run and SVT channel value at end.
+                xl += [self.data.All_Runs.loc[run].end_time.astype('M8[ms]').astype('O')]
+                # Append the end time of run and SVT channel value at end.
                 yl += transform(list(run_channel.iloc[-1:].value))  # Last value in the data.
                 ht += ["run:{:5d} end".format(run)]
-                xl += [(self.data.All_Runs.loc[run].end_time + np.timedelta64(1, 's')).astype('M8[ms]').astype(
-                    'O')]  # Add one more point, +1 s after run.
+                xl += [(self.data.All_Runs.loc[run].end_time + np.timedelta64(1, 's')).astype('M8[ms]').astype('O')]
+                # Add one more point, +1 s after run.
                 yl += [None]  # This is a 'None' point, forcing a line segment.
                 ht += ["None"]
 
@@ -214,7 +222,7 @@ class HPSSVTStatus:
 
             return fig
 
-    def open_conditopns_database(self, host=None, user=None, passwd=None, name=None):
+    def open_conditions_database(self, host=None, user=None, passwd=None, name=None):
         """Open the database connection for on host, for user with password to database with name"""
 
         if host is not None:
@@ -229,14 +237,18 @@ class HPSSVTStatus:
         if name is not None:
             self.db_name = name
 
+        if self.no_exec:
+            print("Not opening conditions database (-x)")
+            return
+
         if self.db_host is None:
             print("Please enter the database host and login credentials.")
             print("DB hostname: ", file=sys.stderr, end="")
-            self.db_host = input("")
+            self.db_host = input_str("")
 
         if self.user is None:
             print("DB Username: ", file=sys.stderr, end="")  # so stdout can be piped.
-            self.user = input("")
+            self.user = input_str("")
 
         if self.passwd is None:
             import getpass
@@ -305,7 +317,7 @@ class HPSSVTStatus:
 
         cur = None
         if self.no_exec:
-            print(sql)
+            print("SQL: ", sql)
         else:
             cur = self.db.cursor()
             cur.execute(sql)
@@ -314,8 +326,8 @@ class HPSSVTStatus:
         # Now retreive the id which was set by auto increment:
         sql = "select id from collections where table_name='{}' order by id desc limit 1;".format(table_name)
 
-        if self.no_exec > 2:
-            print(sql)
+        if self.no_exec:
+            print("SQL: ", sql)
             collection_id = 12345
         else:
             cur.execute(sql)
@@ -328,7 +340,7 @@ class HPSSVTStatus:
                                                         collection_id)
 
         if self.no_exec:
-            print(sql)
+            print("SQL: ", sql)
         else:
             cur.execute(sql)
 
@@ -366,7 +378,7 @@ class HPSSVTStatus:
             sql = sql[0:-1]    # Again erase last ,
             sql += ")"
             if self.no_exec:
-                print(sql)
+                print("SQL: ", sql)
             else:
                 cur.execute(sql)
                 self.db.commit()
@@ -376,7 +388,7 @@ class HPSSVTStatus:
         Argument: db = a handle to an openened database. """
 
         table_name = 'svt_motor_positions'
-        comment = 'Constants from Mya'
+        comment = 'Angle relative to nominal from Mya motor position.'
 
         svt_angle_tolerance = 1e-7
 
@@ -384,7 +396,9 @@ class HPSSVTStatus:
         start_run = self.data.All_Runs.index[start_irun]
         start_values = np.array([self.SVT_motor_to_angle[i](
             self.mya_channels_per_run.loc[(self.mya_channels_pos[i], start_run, 0), 'value']) for i in (0, 1)])
-        start_time = self.data.All_Runs.iloc[start_irun].start_time
+
+        # Make sure the times are converted to np.datetime64, if not already.
+        start_time = np.datetime64(self.data.All_Runs.iloc[start_irun].start_time, 'ms')
 
         for irun in range(len(self.data.All_Runs.index)):
 
@@ -407,10 +421,10 @@ class HPSSVTStatus:
                         # Last run the motor also moved, so that run was already completely written out.
                         pass
                     else:
-                        last_time = self.data.All_Runs.iloc[irun-1].end_time
+                        last_time = np.datetime64(self.data.All_Runs.iloc[irun-1].end_time, 'ms')
                         self.write_entry_to_conditions_db(table_name, start_run, last_run,
-                                                          start_time.astype(int) // 1000000,
-                                                          last_time.astype(int) // 1000000,
+                                                          start_time.astype(int),
+                                                          last_time.astype(int),
                                                           ['top', 'bottom'],
                                                           [start_values[0], start_values[1]],
                                                           comment)
@@ -459,7 +473,7 @@ class HPSSVTStatus:
                 start_time = list(merged.loc[keep_list, 'ms'])
                 # End times are offset by one, with the last value the end of the run.
                 end_time = start_time[1:]
-                end_time.append(self.data.All_Runs.loc[run].end_time.astype(int) // 1000000)
+                end_time.append(np.datetime64(self.data.All_Runs.loc[run].end_time, 'ms').astype(int))
 
                 # Write the whole list to the DB:
                 self.write_entry_to_conditions_db(table_name, run, run, start_time, end_time,
@@ -473,7 +487,7 @@ class HPSSVTStatus:
                 if irun < len(self.data.All_Runs.index):  # We are not at the end yet.
                     start_irun = irun+1
                     start_run = self.data.All_Runs.index[start_irun]
-                    start_time = self.data.All_Runs.iloc[start_irun].start_time
+                    start_time = np.datetime64(self.data.All_Runs.iloc[start_irun].start_time, 'ms')
 
             else:
                 # This is not a run with many values, there is only one.
@@ -503,12 +517,12 @@ class HPSSVTStatus:
                         # There is nothing to do until the motor changes again.
                         pass
                     else:
-                        last_time = self.data.All_Runs.iloc[irun-1].end_time
+                        last_time = np.datetime64(self.data.All_Runs.iloc[irun-1].end_time, 'ms')
 
                         # Write a single entry to the DB for the range on runs.
                         self.write_entry_to_conditions_db(table_name, start_run, last_run,
-                                                          start_time.astype(int) // 1000000,
-                                                          last_time.astype(int) // 1000000,
+                                                          start_time.astype(int),
+                                                          last_time.astype(int),
                                                           ['top', 'bottom'],
                                                           [start_values[0], start_values[1]],
                                                           comment)
@@ -517,14 +531,14 @@ class HPSSVTStatus:
                     start_irun = irun
                     start_run = self.data.All_Runs.index[start_irun]
                     start_values = this_values
-                    start_time = self.data.All_Runs.iloc[start_irun].start_time
+                    start_time = np.datetime64(self.data.All_Runs.iloc[start_irun].start_time, 'ms')
 
         # The loop is done, but we still need to write the data for the last run set out.
         last_run = self.data.All_Runs.index[-1]
-        last_time = self.data.All_Runs.loc[last_run].end_time
+        last_time = np.datetime64(self.data.All_Runs.loc[last_run].end_time, 'ms')
         self.write_entry_to_conditions_db(table_name, start_run, last_run,
-                                          start_time.astype(int) // 1000000,
-                                          last_time.astype(int) // 1000000,
+                                          start_time.astype(int),
+                                          last_time.astype(int),
                                           ['top', 'bottom'],
                                           [start_values[0], start_values[1]],
                                           comment)
@@ -540,7 +554,7 @@ class HPSSVTStatus:
         # we write an "off" (0 V) to the database, otherwise we write "on" ( 180 V).
 
         table_name = "svt_bias_constants"
-        comment = "Combined bias for all channels."
+        comment = "Combined bias for all Mya bias channels."
 
         # Collect the average and stdev value for each channel for N=0
 
@@ -555,7 +569,9 @@ class HPSSVTStatus:
         self.mya_channels_per_run['okay'] = self.mya_channels_per_run.value > 0.9*self.mya_channels_per_run.average
 
         start_run = self.data.All_Runs.index[0]
-        start_time = self.data.All_Runs.loc[start_run].start_time
+
+        # Make sure the times are all of type np.datetime64.
+        start_time = np.datetime64(self.data.All_Runs.loc[start_run].start_time, 'ms')
 
         for i_run in range(len(self.data.All_Runs.index)):
             # For each run,
@@ -575,10 +591,10 @@ class HPSSVTStatus:
                     # check that the last run was all okay otherwise it is written out already.
                     if np.all(self.mya_channels_per_run.loc[(self.mya_channels_bias, last_run), :].okay):
                         # Write out a set of runs with bias = 180V
-                        last_time = self.data.All_Runs.iloc[i_run - 1].end_time
+                        last_time = np.datetime64(self.data.All_Runs.iloc[i_run - 1].end_time, 'ms')
                         self.write_entry_to_conditions_db(table_name, start_run, last_run,
-                                                          start_time.astype(int) // 1000000,
-                                                          last_time.astype(int) // 1000000,
+                                                          start_time.astype(int),
+                                                          last_time.astype(int),
                                                           ['value'],
                                                           [180.],
                                                           comment)
@@ -617,7 +633,7 @@ class HPSSVTStatus:
                             start_time.append(dat_sel.iloc[idx].ms)  # Save timestamp.
 
                 end_time = start_time[1:]
-                end_time.append(self.data.All_Runs.loc[run].end_time.astype(int) // 1000000)
+                end_time.append(np.datetime64(self.data.All_Runs.loc[run].end_time, 'ms').astype(int))
 
                 values = []
                 for stat in status:  # Convert the status into values 180 or 0.
@@ -635,7 +651,7 @@ class HPSSVTStatus:
                 # RESET if not last run
                 if i_run < len(self.data.All_Runs.index)-1:
                     start_run = self.data.All_Runs.index[i_run+1]
-                    start_time = self.data.All_Runs.loc[start_run].start_time
+                    start_time = np.datetime64(self.data.All_Runs.loc[start_run].start_time, 'ms')
 
         # End of runs loop.
         # Write the last entry.
@@ -643,10 +659,10 @@ class HPSSVTStatus:
         # check that the last run was all okay otherwise it is written out already.
         if np.all(self.mya_channels_per_run.loc[(self.mya_channels_bias, last_run), :].okay):
             # Write out a set of runs with bias = 180V
-            last_time = self.data.All_Runs.iloc[- 1].end_time
+            last_time = np.datetime64(self.data.All_Runs.iloc[- 1].end_time, 'ms')
             self.write_entry_to_conditions_db(table_name, start_run, last_run,
-                                              start_time.astype(int) // 1000000,
-                                              last_time.astype(int) // 1000000,
+                                              start_time.astype(int),
+                                              last_time.astype(int),
                                               ['value'],
                                               [180.],
                                               comment)
@@ -658,9 +674,11 @@ class HPSSVTStatus:
         hostname = os.uname()[1]
         if hostname.find('clon') >= 0 or hostname.find('ifarm') >= 0 or hostname.find('jlab.org') >= 0:
             at_jlab = True
+        else:
+            at_jlab = False
 
         self.data = RunData(cache_file="HPS_run_cache.sqlite3", username=username, password=password,
-                            I_am_at_jlab=at_jlab)
+                            i_am_at_jlab=at_jlab)
 
         self.data.debug = 0
 
@@ -721,7 +739,7 @@ class HPSSVTStatus:
                     continue
 
                 mya_data_row.time = run_start_time
-                mya_data_row.ms = int(np.datetime64(run_start_time).astype(np.int64) // 1000000)
+                mya_data_row.ms = int(np.datetime64(run_start_time).astype(np.int64) // 1000)
                 self.mya_channels_per_run.loc[channel, run, 0] = mya_data_row.iloc[0]
 
                 mya_data_row2 = self.mya_data[channel].loc[
@@ -767,7 +785,7 @@ class HPSSVTStatus:
 
         sql = "select * from all_runs"
         if self.data is None:
-            self.data = RunData(I_am_at_jlab=True)  # Do not ask for username / password
+            self.data = RunData(i_am_at_jlab=True)  # Do not ask for username / password
 
         self.data.All_Runs = pd.read_sql(sql, dbs, parse_dates=["start_time", "end_time"])
         self.data.All_Runs.set_index(['number'], inplace=True)
@@ -785,7 +803,11 @@ def main(argv=None):
 
     parser = argparse.ArgumentParser(
         description="""Submit SVT bias and motor positions to the conditions database.""",
-        epilog="""For more info, read the script ^_^, or email maurik@physics.unh.edu""")
+        epilog="""
+        Hint: First time you run this, you may want to use 'HPSSVTStatus.py -x -s', which will not execute the
+        sql commands, but print them to the screen instead. The -s stores the MYA and RunData tables in a local
+        sqlite3 file so the next time you can run with '-l' to speed up data retrieval. 
+        For more info, read the script ^_^, or email maurik@physics.unh.edu.""")
 
     parser.add_argument('-d', '--debug', action="count", help="Be more verbose if possible. ", default=0)
     parser.add_argument('-x', '--noexec', action="store_true", help="Do not execute sql, print instead.")
@@ -807,18 +829,18 @@ def main(argv=None):
     hps.debug = args.debug
     hps.no_exec = args.noexec
 
-    print("Reading tables from DB")
-
     if args.local:
+        print("Reading MYA tables for SVT condition from local sqlite3 file.")
         hps.read_tables_from_db()
     else:
+        print("Reading MYA tables for SVT condition from web server.")
         hps.get_channel_data()
         if args.store:
+            print("Storing MYA tables for SVT conditions to local sqlite3 file.")
             hps.store_tables_in_db()
 
     print("Open conditions database.")
-    if not hps.no_exec:
-        hps.open_conditopns_database()
+    hps.open_conditions_database()
     print("Process motor positions.")
     hps.motor_positions_to_conditions_db()
     print("Now processing bias conditions.")
