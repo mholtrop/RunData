@@ -54,6 +54,51 @@ def AttennuationsWithTargThickness():
     return Attenuations
 
 
+def Get_HPS2019_Data(start_time=None,end_time=None, debug=0):
+    """Get the data set for all the runs relevant for the 2019 HPS physics run.
+    This get the data from start_time = 2019-07-25 until end_time=2019-09-10 unless
+    specified differently. start_time and end_time must be datetime objects.
+    It will attempt to get the information from the local cache: HPS_run_cache.sqlite3 """
+
+    hostname = os.uname()[1]
+    if hostname.find('clon') >= 0 or hostname.find('ifarm') >= 0 or hostname.find('jlab.org') >= 0:
+        #
+        # For JLAB setup the place we can find the RCDB
+        #
+        at_jlab = True
+    else:
+        at_jlab = False
+
+    data = RunData(cache_file="HPS_run_cache.sqlite3", i_am_at_jlab=at_jlab)
+    # data._cache_engine=None   # Turn OFF cache?
+    data.debug = debug
+
+    # data.Good_triggers=['hps_v7.cnf','hps_v8.cnf','hps_v9.cnf','hps_v9_1.cnf',
+    #                     'hps_v9_2.cnf','hps_v10.cnf',
+    #                     'hps_v11_1.cnf','hps_v11_2.cnf','hps_v11_3.cnf','hps_v11_4.cnf',
+    #                     'hps_v11_5.cnf','hps_v11_6.cnf','hps_v12_1.cnf']
+    data.Good_triggers = r'hps_v..?_?.?\.cnf'
+    data.Production_run_type = ["PROD66", "PROD67"]
+    data.target_dict = HPS_2019_Run_Target_Thickness()
+    data.atten_dict = AttennuationsWithTargThickness()
+    data.Current_Channel = "scaler_calc1b"
+
+    min_event_count = 10000000  # Runs with at least 10M events.
+    #    start_time = datatime(2019, 7, 17, 0, 0)  # Very start of run
+    if start_time is None:
+        start_time = datetime(2019, 7, 25, 0, 0)  # SVT back in correct position
+
+    if end_time is None:
+        end_time = datetime(2019, 9, 10, 0, 0)
+        end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
+
+    print("Fetching the data from {} to {}".format(start_time, end_time))
+    data.get_runs(start_time, end_time, min_event_count)
+    data.select_good_runs()
+
+    return data
+
+
 def main(argv=None):
 
     import argparse
@@ -75,40 +120,8 @@ def main(argv=None):
     parser.add_argument('-e', '--excel', action="store_true", help="Create the Excel table of the data")
     args = parser.parse_args(argv[1:])
 
-    hostname = os.uname()[1]
-    if hostname.find('clon') >= 0 or hostname.find('ifarm') >= 0 or hostname.find('jlab.org') >= 0:
-        #
-        # For JLAB setup the place we can find the RCDB
-        #
-        at_jlab = True
-    else:
-        at_jlab = False
-
-    data = RunData(cache_file="HPS_run_cache.sqlite3", i_am_at_jlab=at_jlab)
-
-    # data._cache_engine=None   # Turn OFF cache?
-    data.debug = args.debug
-
-    # data.Good_triggers=['hps_v7.cnf','hps_v8.cnf','hps_v9.cnf','hps_v9_1.cnf',
-    #                     'hps_v9_2.cnf','hps_v10.cnf',
-    #                     'hps_v11_1.cnf','hps_v11_2.cnf','hps_v11_3.cnf','hps_v11_4.cnf',
-    #                     'hps_v11_5.cnf','hps_v11_6.cnf','hps_v12_1.cnf']
-    data.Good_triggers = r'hps_v..?_?.?\.cnf'
-    data.Production_run_type = ["PROD66", "PROD67"]
-    data.target_dict = HPS_2019_Run_Target_Thickness()
-    data.atten_dict  = AttennuationsWithTargThickness()
-    data.Current_Channel = "scaler_calc1b"
-
-    min_event_count = 10000000  # Runs with at least 10M events.
-#    start_time = datatime(2019, 7, 17, 0, 0)  # Very start of run
-    start_time = datetime(2019, 7, 25, 0, 0)  # SVT back in correct position
-    end_time = datetime(2019, 9, 10, 0, 0)
-    end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
-
-    print("Fetching the data from {} to {}".format(start_time, end_time))
-    data.get_runs(start_time, end_time, min_event_count)
-    data.select_good_runs()
-#    data.add_current_data_to_runs()
+    data = Get_HPS2019_Data(debug=args.debug)
+    #    data.add_current_data_to_runs()
     targets = '.*um W *'
     print("Compute cumulative charge.")
     data.compute_cumulative_charge(targets)  # Only the tungsten targets count.
@@ -225,7 +238,7 @@ def main(argv=None):
             go.Scatter(x=[starts.iloc[0], ends.iloc[-1]], y=[0, proposed_charge / 2],
                        line=dict(color='#88FF99', width=2),
                        name="150nA on 8µm W 50% up"),
-                        secondary_y=True,
+                       secondary_y=True,
                     )
 
         fig.update_layout(
