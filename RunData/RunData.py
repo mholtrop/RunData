@@ -610,7 +610,7 @@ class RunData:
         # If we want mC instead of Coulombs, the factor is 1e-12*1e3 = 1e-9
         #
         self.All_Runs.loc[runnumber,self.Current_Channel]=np.trapz(current.value,current.ms)
-        self.All_Runs.loc[runnumber,"live_time"]=np.trapz(live_time.value,live_time.ms)
+        self.All_Runs.loc[runnumber,"live_time"]=np.trapz(live_time.value,live_time.ms)/100. # Sum live-time in ms.
         self.All_Runs.loc[runnumber,"charge"]=np.trapz(current_corr,current.ms)*1e-9 # mC
         # self._Mya_cache[runnumber] = pd.DataFrame({"time":current.time,"current":current.value,
         #          "live_time":live_time_corr,"current_cor":current_corr})
