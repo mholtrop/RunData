@@ -6,6 +6,7 @@ import pandas as pd
 # from datetime import datetime, timedelta
 
 import sys
+import os
 
 import requests
 # from requests.packages.urllib3.exceptions import InsecureRequestWarning
@@ -26,14 +27,14 @@ class MyaData:
     will be interpolated to have the same time intervals as the first channel.
     """
 
-    def __init__(self,I_am_at_jlab=False,username=None,password=None):
+    def __init__(self, i_am_at_jlab=False, username=None, password=None):
         """Connect to the Mya database using MyQuery.
         At JLab, no password is needed, but offsite we need a password to connect to the server.
         If needed and not provided, ask for the CUE username and password to setup the connection.
         Sets up the session handle for the requests"""
 
-        self.at_jlab=I_am_at_jlab
-        self.debug=0
+        self.at_jlab = i_am_at_jlab
+        self.debug = 0
         self._session = requests.session()
 
     #
@@ -44,38 +45,50 @@ class MyaData:
             self._url_head = "https://myaweb.acc.jlab.org/myquery/interval"
         else:
             self._url_head = "https://epicsweb.jlab.org/myquery/interval"
-            import getpass
-            if username is None:
-                print("Please enter your CUE login credentials.")
-                print("Username: ",file=sys.stderr,end="") # so stdout can be piped.
-                username = input_str("")
-            if password is None:
-                password = getpass.getpass("Password: ")
+            if os.path.exists(os.environ['HOME']+'/.password-store/JLAB/username.gpg'):
+                # We can use the 'pass' utility to get the password safely.
+                if self.debug:
+                    print("Using the pass utility to get the JLAB username and password.")
+                import subprocess
+                if username is None:
+                    sub_out = subprocess.run(['pass', 'show', 'JLAB/username'], capture_output=True, text=True)
+                    username = sub_out.stdout.strip()
+                sub_out = subprocess.run(['pass', 'show', 'JLAB/login'], capture_output=True, text=True)
+                if password is None:
+                    password = sub_out.stdout.strip()
+            else:
+                import getpass
+                if username is None:
+                    print("Please enter your CUE login credentials.")
+                    print("Username: ", file=sys.stderr, end="")  # so stdout can be piped.
+                    username = input_str("")
+                if password is None:
+                    password = getpass.getpass("Password: ")
 
-            url="https://epicsweb.jlab.org/"
+            url = "https://epicsweb.jlab.org/"
             page = self._session.get(url)
-
-            payload = {'httpd_username':username,'httpd_password':password,"login": "Login"}
-            page= self._session.post(url,data=payload)
+            payload = {'httpd_username': username, 'httpd_password': password, "login": "Login"}
+            page = self._session.post(url, data=payload)
             # print(page.cookies.items())
 
-    def get(self,channel,start,end,do_not_clean=False):
-        '''Get a series of Mya data with a myQuery call for channel, from start to end time.
+    def get(self, channel, start, end, do_not_clean=False):
+        """Get a series of Mya data with a myQuery call for channel, from start to end time.
         Returns a Pandas data frame with index, and keys: "ms", "value" and "time". Where "ms" is the
         MYA millisecond time stamp, "value" is the requested channel value, and "time" is a Pandas timestamp.
-        '''
+        """
         #
         # Get the value from Mya over the run period
         #
-        params={
-            'c':channel,
-            'b':start,
-            'e':end,
-            't':'event',
-            'u':'on',  ### u = on - Return the values in "ms" timestamp format.
-            'a':'on'}  ### a = on - Adjust the ms timestamp to the server timezone.
+        params = {
+            'c': channel,
+            'b': start,
+            'e': end,
+            't': 'event',
+            'u': 'on',  # u = on - Return the values in "ms" timestamp format.
+            'a': 'on'}  # a = on - Adjust the ms timestamp to the server timezone.
 
-        if self.debug: print("Fetching channel '{}'".format(channel))
+        if self.debug:
+            print("Fetching channel '{}'".format(channel))
 
         try:
             my_dat = self._session.get(self._url_head,verify=False,params=params)
