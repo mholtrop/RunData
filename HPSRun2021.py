@@ -78,6 +78,7 @@ def main(argv=None):
     parser.add_argument('-p', '--plot', action="store_true", help="Create the plotly plots.")
     parser.add_argument('-e', '--excel', action="store_true", help="Create the Excel table of the data")
     parser.add_argument('-c', '--charge', action="store_true", help="Make a plot of charge not luminosity.")
+    parser.add_argument('-C', '--chart', action="store_true", help="Put plot on plotly charts website.")
 
     args = parser.parse_args(argv[1:])
 
@@ -364,7 +365,9 @@ def main(argv=None):
         print("Show plots.")
         fig.write_image("HPSRun2021_progress.pdf", width=1800, height=700)
         fig.write_image("HPSRun2021_progress.png")
-        # charts.plot(fig, filename = 'Run2019_edit', auto_open=True)
+        fig.write_html("HPSRun2021_progress.html")
+        if args.chart:
+             charts.plot(fig, filename = 'Run2021_edit', width=2048, height=900, auto_open=True)
         fig.show(width=2048, height=900)  # width=1024,height=768
 
 
