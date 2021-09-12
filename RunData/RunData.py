@@ -1,6 +1,48 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
+#
+# Class RunData
+# author: Maurik Holtrop, UNH, 2019 - 2021
+#
+# This python class will read the RCDB and the Mya database to construct a Pandas DataFrame that is useful
+# for computing information about the run.
+#
+# Required externally supplied information:
+#
+# self.target_dict       = {}  # Dictionary of target name to target thickness in cm.
+# self.target_dens_dict  = {}  # Dictionary of (target density in gram/cm^3, molecular mass in gram/mole)
+# self.atten_dict        = {}  # Dictionary of attenuation values for each target.
+#
+# RunData.All_Runs  - Pandas DataFrame with run number of index.
+#
+# Contents of DataFrame:
+#
+# start_time            datetime                      2019-09-08 04:48:02
+# end_time              datetime                      2019-09-08 06:06:25
+# is_valid_run_end      bool                                         True
+# user_comment          str
+# run_type              str                                        PROD66
+# target                str                                       20 um W
+# beam_current_request  str                                           120
+# operators             str   expert: Mathew Graham, worker: Hakop Voskanyan
+# event_count           int                                      96056017
+# events_rate           float                                     169.888     =
+# run_config            str                                 hps_v12_1.cnf
+# status                int                                             0
+# evio_files_count      int                                           558
+# megabyte_count        int                                       1140687
+# run_start_time        datetime                      2019-09-08 04:48:02
+# run_end_time          datetime v                    2019-09-08 06:06:25
+# selected              bool                                         True   Is this run selected by select_good_runs()?
+# scaler_calc1b                                          470013449.718153   scaler_calc1b from Mya
+# live_time                                              405775888.513366   Trapezoidal integrated live_time * dt (ms)
+# charge                                                         0.443503   Total charge on target in mC
+#
+# Notes:
+# live_time is a percentage * time in ms. So to get the runs average live time in percent you need for run 10722:
+# data.All_Runs.loc[10722,'live_time']/
+#   (data.All_Runs.loc[10722,'run_end_time']  - data.All_Runs.loc[10722,'run_start_time']).total_seconds()/1000.
+#
 import sys
 import os
 import re
@@ -60,7 +102,7 @@ class RunData:
                                   'evio_files_count', 'megabyte_count', 'run_start_time', 'run_end_time']
 
         # Regex string or list of trigger conditions to use for run selection.
-        self.Good_triggers = r'hps_v..?_?.?\.cnf'
+        self.Good_triggers = r'hps.*\.cnf'
 
         self.not_good_triggers = []
 
@@ -69,6 +111,7 @@ class RunData:
 
         self.min_event_count = 1000000
         self.target_dict = {}
+        self.target_dens = {}
         # This is a dictionary of target dependent correction factors for correcting the FCup current.
         self.atten_dict = {}
         self.at_jlab = i_am_at_jlab
@@ -118,7 +161,7 @@ class RunData:
             return
         elif connector_string is True:
             connector_string = "sqlite:///" + self._cache_file_name
-        elif "///" not in connector_string:
+        elif type(connector_string) is str and "///" not in connector_string:
             connector_string = "sqlite:///" + connector_string
 
         self._cache_engine = sqlalchemy.create_engine(connector_string)
@@ -139,11 +182,11 @@ class RunData:
             # );
             # '''
             meta = sqlalchemy.MetaData()
-            kdr = sqlalchemy.Table('Known_Data_Ranges', meta,
-                                   sqlalchemy.Column('index', sqlalchemy.Integer, primary_key=True),
-                                   sqlalchemy.Column('start_time', sqlalchemy.DateTime),
-                                   sqlalchemy.Column('end_time', sqlalchemy.DateTime),
-                                   sqlalchemy.Column('min_event_count', sqlalchemy.Integer))
+            sqlalchemy.Table('Known_Data_Ranges', meta,
+                             sqlalchemy.Column('index', sqlalchemy.Integer, primary_key=True),
+                             sqlalchemy.Column('start_time', sqlalchemy.DateTime),
+                             sqlalchemy.Column('end_time', sqlalchemy.DateTime),
+                             sqlalchemy.Column('min_event_count', sqlalchemy.Integer))
             meta.create_all(self._cache_engine)
 
         self._cache_known_data = pd.read_sql("Known_Data_Ranges", self._cache_engine, index_col="index")
@@ -232,7 +275,8 @@ class RunData:
                                                   (self.All_Runs["end_time"] < end)].iloc[-1].is_valid_run_end
 
             if end_of_last_run_valid is None or not end_of_last_run_valid:
-                if self.debug: print("WARNING: Last run does not have is_valid_run_end set.")
+                if self.debug:
+                    print("WARNING: Last run does not have is_valid_run_end set.")
                 # If the last run does not have a valid end, could it be that it is still ongoing?
                 # Expect a run to not be more than 8 hours.
                 if self.All_Runs[(self.All_Runs["start_time"] > start) &
@@ -318,31 +362,31 @@ class RunData:
         # Get the runs ordered already.
         sql = f"select * from Runs_Table where start_time >= '{start}' and " \
               f"end_time <= '{end}' and event_count>= '{min_event}' order by number"
-        New_Runs = pd.read_sql(sql, self._cache_engine, index_col="number", parse_dates=["start_time", "end_time"])
+        new_runs = pd.read_sql(sql, self._cache_engine, index_col="number", parse_dates=["start_time", "end_time"])
 
         if self.All_Runs is None or len(self.All_Runs) == 0:
-            self.All_Runs = New_Runs
+            self.All_Runs = new_runs
         else:
             #
             # It is possible some (or all) of the new runs had already been fetched earlier.
             # We do not want overlaps, so we need to sort this out.
             if self.debug > 1:
-                print("Checking overlap for runs {} to All_Runs.".format(len(New_Runs)))
-            New_Runs.drop(New_Runs[New_Runs.index.isin(self.All_Runs.index)].index, inplace=True)
+                print("Checking overlap for runs {} to All_Runs.".format(len(new_runs)))
+            new_runs.drop(new_runs[new_runs.index.isin(self.All_Runs.index)].index, inplace=True)
             # Drop the overlapping runs.
             if self.debug > 1:
-                print("Number of runs that will be appended: {}".format(len(New_Runs)))
-            if len(New_Runs) > 0:
-                self.All_Runs = self.All_Runs.append(New_Runs)
+                print("Number of runs that will be appended: {}".format(len(new_runs)))
+            if len(new_runs) > 0:
+                self.All_Runs = self.All_Runs.append(new_runs)
                 self.All_Runs.sort_index(inplace=True)
                 if np.any(self.All_Runs.duplicated()):
                     print("ARGGGGG: we have duplicates in All_Runs")
                     self.All_Runs.drop_duplicates(inplace=True)
 
         if self.debug > 1:
-            print("Got {} runs from cache.".format(len(New_Runs)))
+            print("Got {} runs from cache.".format(len(new_runs)))
 
-        return len(New_Runs)
+        return len(new_runs)
 
     def _cache_consolidate(self):
         """Goes through cached regions and checks if any have 'grown' to touch or overlap.
@@ -425,17 +469,17 @@ class RunData:
             if (min_after is None) or ((min_before is not None) and (min_before <= min_after)):
                 # Start extending the before of the earliest overlap period to "start"
 
-                Save_Runs = None
-                Save_Runs, self.All_Runs = self.All_Runs, Save_Runs  # Save what is in All_Runs.
+                save_all_runs = None
+                save_all_runs, self.All_Runs = self.All_Runs, save_all_runs  # Save what is in All_Runs.
                 min_before_start = self._cache_known_data.loc[self._cache_known_data.index[min_before], "start_time"]
                 if self.debug > 2:
                     print("Extending {} before from {}  to {}".format(min_before, min_before_start, start))
                 # Add the new data to cache and All_Runs up to min_before_start
                 num_runs, new_end = self._cache_fill_runs(start, min_before_start, min_event)
                 if num_runs == 0:
-                    self.All_Runs = Save_Runs
+                    self.All_Runs = save_all_runs
                 else:
-                    self.All_Runs = self.All_Runs.append(Save_Runs, sort=True)  # Append the saved runs.
+                    self.All_Runs = self.All_Runs.append(save_all_runs, sort=True)  # Append the saved runs.
             else:
                 # The earliest overlap is in extend_after, so "start" is inside this overlap period.
                 # We need to extend out to the earliest of "end" or the "start" of the next period.
@@ -450,8 +494,8 @@ class RunData:
 
                 if self.debug > 2:
                     print("Extending {} after from {}  to {}".format(min_after, min_after_end, extend_to))
-                Save_Runs = None
-                Save_Runs, self.All_Runs = self.All_Runs, Save_Runs  # Save what is in All_Runs.
+                save_all_runs = None
+                save_all_runs, self.All_Runs = self.All_Runs, save_all_runs  # Save what is in All_Runs.
                 num_runs, end = self._cache_fill_runs(min_after_end, extend_to, min_event)
                 # Add the new data to cache and All_Runs.
                 # Note we re-set the end to the possibly corrected end.
@@ -459,10 +503,10 @@ class RunData:
                 if num_runs != 0:
                     if self.debug > 2:
                         print("Appending runs. ")
-                    self.All_Runs = Save_Runs.append(self.All_Runs, sort=True)
+                    self.All_Runs = save_all_runs.append(self.All_Runs, sort=True)
                 else:
                     # No new runs, so restore what we had before.
-                    self.All_Runs = Save_Runs
+                    self.All_Runs = save_all_runs
 
                 if self.All_Runs is None or len(self.All_Runs) == 0:  # There are no runs at all. Just quit.
                     return 0
@@ -480,30 +524,30 @@ class RunData:
         # We are done
         return len(self.All_Runs)
 
-    def get_ExcludedRuns(self, fileName):
+    def get_excluded_runs(self, filename):
 
-        if os.path.exists(fileName):
-            with open(fileName) as ff:
+        if os.path.exists(filename):
+            with open(filename) as ff:
                 for line in ff:
                     line = line.replace('\n', '')
 
                     if line not in self.ExcludeRuns:
                         self.ExcludeRuns.append(line)
 
-    def BeamAtenCorr(self, run):
+    def beam_aten_corr(self, run):
 
         corr = 1.
         if run < 10448:
             # print( self.All_Runs.loc[run, 'target'] )
-            targnameNoSpaces = (self.All_Runs.loc[run, 'target']).rstrip()
-            corr = self.atten_dict[targnameNoSpaces] / self.atten_dict['Empty']
+            targ_name_no_spaces = (self.All_Runs.loc[run, 'target']).rstrip()
+            corr = self.atten_dict[targ_name_no_spaces] / self.atten_dict['Empty']
             # print ('Corr is ' + str(corr))
 
         return corr
 
     def get_runs_from_rcdb(self, start_time, end_time, min_event_count):
-        '''Return a dictionary with a list of runs for each target in the run period.
-        This will get the list directly from the rcdb database, not looking at the local cache.'''
+        """Return a dictionary with a list of runs for each target in the run period.
+        This will get the list directly from the rcdb database, not looking at the local cache."""
         # A fundamental issue with how the tables are setup is that you cannot construct
         # a simple query filtering on two different conditions. You would need to
         # construct a rather complicated query with a sub query, at which point you may be
@@ -549,14 +593,16 @@ class RunData:
         return num_runs
 
     def add_current_cor(self, runnumber, override=False):
-        """Add the livetime corrected charge for a run to the pandas DataFrame.
+        """Add the livetime corrected charge and luminosity for a run to the pandas DataFrame.
         for that run.
         arguments:
              runnumber  - The run number for which you want to fetch the data.
              override   - Set to true if data should be fetched even if it seems it was already.
         """
 
-        if not override and ("charge" in self.All_Runs.keys()) and not np.isnan(self.All_Runs.loc[runnumber, "charge"]):
+        if not override and \
+                ("charge" in self.All_Runs.keys()) and \
+                not np.isnan(self.All_Runs.loc[runnumber, "charge"]):
             return
 
         if self.debug > 4:
@@ -574,9 +620,9 @@ class RunData:
 
         if self.Current_Channel == "scaler_calc1b":
             # Getting the target thickness dependend FCup charge correction
-            currCorrection = self.BeamAtenCorr(runnumber)
+            curr_correction = self.beam_aten_corr(runnumber)
             # Applying the correction
-            current['value'] *= currCorrection
+            current['value'] *= curr_correction
 
         #
         # The sampling of the current and live_time are NOT guaranteed to be the same.
@@ -609,6 +655,30 @@ class RunData:
         self.All_Runs.loc[runnumber, "charge"] = np.trapz(current_corr, current.ms) * 1e-9  # mC
         # self._Mya_cache[runnumber] = pd.DataFrame({"time":current.time,"current":current.value,
         #          "live_time":live_time_corr,"current_cor":current_corr})
+        #
+        target = self.All_Runs.loc[runnumber, "target"]
+        if target in self.target_dict:
+            target_thickness = self.target_dict[target]  # Target thickness in cm
+        else:
+            target_thickness = 0
+
+        if target in self.target_dens:
+            target_rho = self.target_dens[target][0]
+            target_mmass = self.target_dens[target][1]
+        else:
+            target_rho = 19.3           # rho = 19.3 g/cm^3 for Tungsten.
+            target_mmass = 183.84  # mmass = 183.84*u.gram/u.mol for Tungsten.
+        # 1 C/e = 6.241509074460763e+18  so 1 mC/e = 6.241509074460763e+15
+        charge = self.All_Runs.loc[runnumber, "charge"]  # Integrated number of e- in beam
+        # Avogadro = 6.02214076e+23 / mole
+        # (1.*u.avogadro_constant*1.*u.cm * 1.*u.g/(1*u.Unit('cm^3'))/(1.*u.Unit('g/mol'))).to('1/fb') =
+        #  6.02214076e-16 <Unit('1 / femtobarn')>
+        # 1 C/e = 6.241509074460763e+18  so 1 mC/e = 6.241509074460763e+15
+        # ((1.*u.avogadro_constant*1.*u.cm * 1.*u.g/(1*u.Unit('cm^3'))/(1.*u.Unit('g/mol')))*
+        #    (1*u.mC/(1*u.elementary_charge))).to('1/fb') =
+        # 6.241509074460763e+15 * 6.02214076e-16 = 3.758724620122004
+        lumi = 3758.724620122003 * charge * target_rho * target_thickness / target_mmass   # In 1/pb
+        self.All_Runs.loc[runnumber, "luminosity"] = lumi
         return
 
     def add_current_data_to_runs(self, targets=None, run_config=None):
@@ -678,9 +748,10 @@ class RunData:
         targets       - None, False, string or list
         run_config    - None, False, string or list.
         If targets is None or False, all targets will be listed.
-        If targets is a string, it will be matched case insensitive regex style. I.e. "um W" will give all thickness Tungsten.
-        If targets is a list, it will be matched only for the exact strings in the list. So "4 um W" will be empty, because
-        the space after the W is missing.
+        If targets is a string, it will be matched case insensitive regex style.
+        I.e. "um W" will give all thickness Tungsten.
+        If targets is a list, it will be matched only for the exact strings in the list.
+        So "4 um W" will be empty, because the space after the W is missing.
 
         If run_config is None, then only the pre-selected runs (set with All_Runs.selected True or 1) are used.
         If run_config is False, then all run_configs (triggers) are used.
@@ -696,7 +767,7 @@ class RunData:
         elif type(run_config) is str:
             test_run_config = self.All_Runs["run_config"].str.contains(run_config, case=False)
         elif type(run_config) is list:
-            test_run_congig = self.All_Runs["run_config"].isin(run_config)
+            test_run_config = self.All_Runs["run_config"].isin(run_config)
         else:
             print("I do not know what to do with run_config = ", type(run_config))
 
@@ -715,8 +786,9 @@ class RunData:
         return self.All_Runs.index[test_run_config & test_target]
 
     def compute_cumulative_charge(self, targets=None, run_config=None):
-        """Compute the cumulative charge and event count for the runs in the current All_Runs table.
-           The increasing numbers are put in the table in 'sum_charge', 'sum_charge_norm' and 'sum_event_count'.
+        """Compute the cumulative charge, luminosity, and event count for the runs in the current All_Runs table.
+           The increasing numbers are put in the table in 'sum_charge', 'sum_charge_norm' and 'sum_event_count',
+           and 'sum_lumi'
            The runs are selected with list_selected_runs with the same 'targets' and 'run_config' arguments.
            Returns the end value of: (sum_charge,sum_charge_norm,sum_event_count)"""
 
@@ -728,6 +800,7 @@ class RunData:
 
         self.All_Runs.loc[selected, "sum_event_count"] = np.cumsum(self.All_Runs.loc[selected, "event_count"])
         self.All_Runs.loc[selected, "sum_charge"] = np.cumsum(self.All_Runs.loc[selected, "charge"])
+        self.All_Runs.loc[selected, "sum_lumi"] = np.cumsum(self.All_Runs.loc[selected, "luminosity"])
 
         sum_charge_per_target = self.target_dict.copy()
         for k in sum_charge_per_target:
@@ -757,14 +830,14 @@ class RunData:
                         self.All_Runs.loc[selected, "sum_charge"].iloc[-1],
                         self.All_Runs.loc[selected, "sum_event_count"].iloc[-1])
             else:
-                return (0, 0, 0)
+                return 0, 0, 0
 
 
-def AttennuationsWithTargThickness():
-    ''' During the run we have observed that the beam attenuation depends on the target thickness too.
-    So this dictionary provides target<->attenuation dictionary '''
+def attennuations_with_targ_thickness():
+    """ During the run we have observed that the beam attenuation depends on the target thickness too.
+    So this dictionary provides target<->attenuation dictionary """
 
-    Attenuations = {
+    attenuations = {
         'Empty': 29.24555,
         'empty': 29.24555,
         'Unknown': 29.24555,
@@ -774,7 +847,7 @@ def AttennuationsWithTargThickness():
         '20 um W': 25.38535
     }
 
-    return Attenuations
+    return attenuations
 
 
 if __name__ == "__main__":

@@ -8,6 +8,9 @@ from __future__ import print_function
 import sys
 import os
 from datetime import datetime, timedelta
+import numpy as np
+import pint
+u = pint.UnitRegistry()
 
 from RunData.RunData import RunData
 
@@ -23,15 +26,13 @@ except ImportError:
     sys.exit(1)
 
 
-def hps_2019_run_target_thickness():
+def hps_2021_run_target_thickness():
     """ Returns the dictionary of target name to target thickness.
         One extra entry, named 'norm' is used for filling the
         Target thickness is in units of cm."""
     targets = {
-        'norm': 8.e-4,
-        '4 um W ': 4.e-4,
+        'norm': 20.e-4,       # Value to normalize to.
         '8 um W ': 8.e-4,
-        '15 um W ': 15.e-4,
         '20 um W ': 20.e-4
     }
     return targets
@@ -41,14 +42,18 @@ def attennuations_with_targ_thickness():
     """ During the run we have observed that the beam attenuation depends on the target thickness too.
     So this dictionary provides target<->attenuation dictionary """
 
+    # From logbook: https://logbooks.jlab.org/entry/3900778
+    # 0 um 36.556800
+    # 8 um 32.860550
+    # 20 um 27.330850
+    #
     attenuations = {
-        'Empty': 29.24555,
-        'empty': 29.24555,
-        'Unknown': 29.24555,
-        '4 um W': 28.40418,
-        '8 um W': 27.56255,
-        '15 um W': 26.16205,
-        '20 um W': 25.38535
+
+        'Empty': 36.556800,
+        'empty': 36.556800,
+        'Unknown': 36.556800,
+        '8 um W':  32.860550,
+        '20 um W': 27.330850
     }
 
     return attenuations
@@ -72,6 +77,8 @@ def main(argv=None):
     parser.add_argument('-d', '--debug', action="count", help="Be more verbose if possible. ", default=0)
     parser.add_argument('-p', '--plot', action="store_true", help="Create the plotly plots.")
     parser.add_argument('-e', '--excel', action="store_true", help="Create the Excel table of the data")
+    parser.add_argument('-c', '--charge', action="store_true", help="Make a plot of charge not luminosity.")
+
     args = parser.parse_args(argv[1:])
 
     hostname = os.uname()[1]
@@ -83,7 +90,7 @@ def main(argv=None):
     else:
         at_jlab = False
 
-    data = RunData(cache_file="HPS_run_cache.sqlite3", i_am_at_jlab=at_jlab)
+    data = RunData(cache_file="HPS_run_2021.sqlite3", i_am_at_jlab=at_jlab)
 
     # data._cache_engine=None   # Turn OFF cache?
     data.debug = args.debug
@@ -92,17 +99,17 @@ def main(argv=None):
     #                     'hps_v9_2.cnf','hps_v10.cnf',
     #                     'hps_v11_1.cnf','hps_v11_2.cnf','hps_v11_3.cnf','hps_v11_4.cnf',
     #                     'hps_v11_5.cnf','hps_v11_6.cnf','hps_v12_1.cnf']
-    data.Good_triggers = r'hps_v..?_?.?\.cnf'
-    data.Production_run_type = ["PROD66", "PROD67"]
-    data.target_dict = hps_2019_run_target_thickness()
+    data.Good_triggers = r'hps.*\.cnf'
+    data.Production_run_type = ["PROD77", "PROD77_PIN"]
+    data.target_dict = hps_2021_run_target_thickness()
     data.atten_dict = attennuations_with_targ_thickness()
     data.Current_Channel = "scaler_calc1b"
 
     min_event_count = 10000000  # Runs with at least 10M events.
     #    start_time = datatime(2019, 7, 17, 0, 0)  # Very start of run
-    start_time = datetime(2019, 7, 25, 0, 0)  # SVT back in correct position
-    end_time = datetime(2019, 9, 10, 0, 0)
-    # end_time = datetime.now()
+    start_time = datetime(2021, 9, 9, 0, 0)  # DAQ Issues resolved.
+    # end_time = datetime(2021, 9, 11, 0, 0)
+    end_time = datetime.now()
     end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
 
     print("Fetching the data from {} to {}".format(start_time, end_time))
@@ -117,7 +124,8 @@ def main(argv=None):
         print("Write new Excel table.")
         data.All_Runs.to_excel("hps_run_table.xlsx",
                                columns=['start_time', 'end_time', 'target', 'run_config', 'selected', 'event_count',
-                                        'sum_event_count', 'charge', 'sum_charge', 'operators', 'user_comment'])
+                                        'sum_event_count', 'charge', 'sum_charge', 'luminosity', 'sum_lumi',
+                                        'operators', 'user_comment'])
 
     #    print(data.All_Runs.to_string(columns=['start_time','end_time','target','run_config','selected','event_count','charge','user_comment']))
     #    data.All_Runs.to_latex("hps_run_table.latex",columns=['start_time','end_time','target','run_config','selected','event_count','charge','operators','user_comment'])
@@ -130,20 +138,32 @@ def main(argv=None):
         plot_runs["center"] = starts + (ends - starts) / 2
         plot_runs["dt"] = [(run["end_time"] - run["start_time"]).total_seconds() * 999 for num, run, in
                            plot_runs.iterrows()]
-        plot_runs["hover"] = ["Run: {}<br />Start: {}<br />End: {}<br /><Rate>:{:6.2f}kHz<br />Trigger:{}".format(
-            r, plot_runs.loc[r, "start_time"], plot_runs.loc[r, "end_time"],
-            999 * plot_runs.loc[r, "event_count"] / 1e3 / plot_runs.loc[r, "dt"],
-            plot_runs.loc[r, "run_config"]) for r in plot_runs.index]
+        plot_runs["event_rate"] = [plot_runs.loc[r, 'event_count']/plot_runs.loc[r, 'dt']
+                                    for r in plot_runs.index]
+        plot_runs["hover"] = [f"Run: {r}<br />"
+                              f"Trigger:{plot_runs.loc[r,'run_config']}<br />"
+                              f"Start: {plot_runs.loc[r, 'start_time']}<br />"
+                              f"End: {plot_runs.loc[r, 'end_time']}<br />"
+                              f"DT:   {plot_runs.loc[r, 'dt']/1000.:5.1f} s<br />"
+                              f"NEvt: {plot_runs.loc[r,'event_count']:10,d}<br />"
+                              f"Charge: {plot_runs.loc[r,'charge']:6.2f} mC <br />"
+                              f"Lumi: {plot_runs.loc[r,'luminosity']:6.2f} 1/pb<br />"
+                              f"<Rate>:{plot_runs.loc[r, 'event_rate']:6.2f}kHz<br />"
+                            for r in plot_runs.index]
 
         sumcharge = plot_runs.loc[:, "sum_charge"]
+        sumlumi = plot_runs.loc[:, "sum_lumi"]
         plot_sumcharge_t = [starts.iloc[0], ends.iloc[0]]
         plot_sumcharge_v = [0, sumcharge.iloc[0]]
+        plot_sumlumi = [0, sumlumi.iloc[0]]
 
         for i in range(1, len(sumcharge)):
             plot_sumcharge_t.append(starts.iloc[i])
             plot_sumcharge_t.append(ends.iloc[i])
             plot_sumcharge_v.append(sumcharge.iloc[i - 1])
             plot_sumcharge_v.append(sumcharge.iloc[i])
+            plot_sumlumi.append(sumlumi.iloc[i-1])
+            plot_sumlumi.append(sumlumi.iloc[i])
 
         sumcharge_norm = plot_runs.loc[:, "sum_charge_norm"]
         plot_sumcharge_norm_t = [starts.iloc[0], ends.iloc[0]]
@@ -160,6 +180,7 @@ def main(argv=None):
 
         for t in data.target_dict:
             sumch = plot_runs.loc[plot_runs["target"] == t, "sum_charge_targ"]
+            sumlum = plot_runs.loc[plot_runs["target"] == t, "sum_charge_targ"]
             st = plot_runs.loc[plot_runs["target"] == t, "start_time"]
             en = plot_runs.loc[plot_runs["target"] == t, "end_time"]
 
@@ -188,57 +209,74 @@ def main(argv=None):
             runs = plot_runs.target.str.contains(targ)
             fig.add_trace(
                 go.Bar(x=plot_runs.loc[runs, 'center'],
-                       y=plot_runs.loc[runs, 'event_count'],
+                       y=plot_runs.loc[runs, 'event_rate'],
                        width=plot_runs.loc[runs, 'dt'],
                        hovertext=plot_runs.loc[runs, 'hover'],
-                       name="#evt for " + targ,
+                       name="run with " + targ,
                        marker=dict(color=targ_cols[targ])
                        ),
                 secondary_y=False, )
 
-        fig.add_trace(
-            go.Scatter(x=plot_sumcharge_t,
-                       y=plot_sumcharge_v,
-                       line=dict(color='#B09090', width=3),
-                       name="Total Charge Live"),
-            secondary_y=True)
+        if args.charge:
+            fig.add_trace(
+                go.Scatter(x=plot_sumcharge_t,
+                           y=plot_sumcharge_v,
+                           line=dict(color='#B09090', width=3),
+                           name="Total Charge Live"),
+                secondary_y=True)
 
-        fig.add_trace(
-            go.Scatter(x=plot_sumcharge_norm_t,
-                       y=plot_sumcharge_norm_v,
-                       line=dict(color='red', width=3),
-                       name="Tot Charge * targ thick/8 µm"),
-            secondary_y=True)
+            fig.add_trace(
+                go.Scatter(x=plot_sumcharge_norm_t,
+                           y=plot_sumcharge_norm_v,
+                           line=dict(color='red', width=3),
+                           name="Tot Charge * targ thick/20 µm"),
+                secondary_y=True)
 
-        t = '8 um W '
-        fig.add_trace(
-            go.Scatter(x=plot_sumcharge_target_t[t],
-                       y=plot_sumcharge_target_v[t],
-                       line=dict(color='#990000', width=2),
-                       name="Charge on 8 µm W"),
-            secondary_y=True)
+            t = '8 um W '
+            fig.add_trace(
+                go.Scatter(x=plot_sumcharge_target_t[t],
+                           y=plot_sumcharge_target_v[t],
+                           line=dict(color='#990000', width=2),
+                           name="Charge on 8 µm W"),
+                secondary_y=True)
 
-        t = '20 um W '
-        fig.add_trace(
-            go.Scatter(x=plot_sumcharge_target_t[t],
-                       y=plot_sumcharge_target_v[t],
-                       line=dict(color='#009940', width=3),
-                       name="Charge on 20 µm W"),
-            secondary_y=True)
+            t = '20 um W '
+            fig.add_trace(
+                go.Scatter(x=plot_sumcharge_target_t[t],
+                           y=plot_sumcharge_target_v[t],
+                           line=dict(color='#009940', width=3),
+                           name="Charge on 20 µm W"),
+                secondary_y=True)
 
-        proposed_charge = (ends.iloc[-1] - starts.iloc[0]).total_seconds() * 150.e-6
-        # fig.add_trace(
-        #     go.Scatter(x=[starts.iloc[0],ends.iloc[-1]], y=[0,proposed_charge],
-        #     line=dict(color='yellow', width=2),name="300nA in 8µm W 50% up"),
-        #     secondary_y=True,
-        # )
-        fig.add_trace(
-            go.Scatter(x=[starts.iloc[0], ends.iloc[-1]],
-                       y=[0, proposed_charge / 2],
-                       line=dict(color='#88FF99', width=2),
-                       name="150nA on 8µm W 50% up"),
-            secondary_y=True
-        )
+            proposed_charge = (ends.iloc[-1] - starts.iloc[0]).total_seconds() * 120.e-6 * 0.5
+            fig.add_trace(
+                go.Scatter(x=[starts.iloc[0], ends.iloc[-1]],
+                           y=[0, proposed_charge],
+                           line=dict(color='#88FF99', width=2),
+                           name="120nA on 20µm W 50% up"),
+                secondary_y=True
+            )
+
+
+        else:
+            fig.add_trace(
+                go.Scatter(x=plot_sumcharge_t,
+                           y=plot_sumlumi,
+                           line=dict(color='#FF3030', width=3),
+                           name="Luminosity Live"),
+                secondary_y=True)
+
+            proposed_lumi_rate = 9.470415818323063e-05 # 1(pb s) = 0.09470415818323064 * 1/(nb s)
+            proposed_lumi = [0] + [(ends.iloc[i] - starts.iloc[0]).total_seconds() * proposed_lumi_rate * 0.5 for i
+                                   in range(len(ends)) ]
+
+            fig.add_trace(
+                go.Scatter(x=[starts.iloc[0]] + [ends.iloc[i] for i in range(len(ends))],
+#                           y=[0, proposed_lumi],
+                           y=proposed_lumi,
+                           line=dict(color='#FFC030', width=3),
+                           name="120nA on 20µm W 50% up"),
+                secondary_y=True)
 
         a_index = []
         a_x = []
@@ -246,63 +284,6 @@ def main(argv=None):
         a_text = []
         a_ax = []
         a_ay = []
-
-        index = plot_runs.index[plot_runs.loc[:, "end_time"] > datetime(2019, 8, 2, 8, 25)][0]
-        a_index.append(index)
-        a_x.append(plot_runs.loc[index, "end_time"])
-        a_y.append(sumcharge.loc[index])
-        a_text.append("Hall-A Wien Flip,<br />difficulty restoring beam.")
-        a_ax.append(10)
-        a_ay.append(-540)
-
-        index = plot_runs.index[plot_runs.loc[:, "end_time"] > datetime(2019, 8, 4, 12, 11)][0]
-        a_index.append(index)
-        a_x.append(plot_runs.loc[index, "end_time"])
-        a_y.append(sumcharge.loc[index])
-        a_text.append("DAQ problem,<br />followed by<br />beam restore issues.")
-        a_ax.append(10)
-        a_ay.append(-480)
-
-        index = plot_runs.index[plot_runs.loc[:, "end_time"] > datetime(2019, 8, 6, 14, 52)][0]
-        a_index.append(index)
-        a_x.append(plot_runs.loc[index, "end_time"])
-        a_y.append(sumcharge.loc[index])
-        a_text.append("Beam Halo,<br />retuning beam.")
-        a_ax.append(10)
-        a_ay.append(-590)
-
-        index = plot_runs.index[plot_runs.loc[:, "end_time"] > datetime(2019, 8, 7, 14, 22)][0]
-        a_index.append(index)
-        a_x.append(plot_runs.loc[index, "end_time"])
-        a_y.append(sumcharge.loc[index])
-        a_text.append("Thunder storm,<br />followed by retune<br />followed by DAQ issues.")
-        a_ax.append(-10)
-        a_ay.append(-630)
-
-        index = plot_runs.index[plot_runs.loc[:, "end_time"] > datetime(2019, 8, 13, 4, 7)][0]
-        a_index.append(index)
-        a_x.append(plot_runs.loc[index, "end_time"])
-        a_y.append(sumcharge.loc[index])
-        a_text.append("Calibration run <br /> Target replacement during beam studies<br />"
-                      "SVT motor issues.<br />CHL Event and Beam Tuning")
-        a_ax.append(40)
-        a_ay.append(-440)
-
-        index = plot_runs.index[plot_runs.loc[:, "end_time"] > datetime(2019, 8, 14, 1, 35)][0]
-        a_index.append(index)
-        a_x.append(plot_runs.loc[index, "end_time"])
-        a_y.append(sumcharge.loc[index])
-        a_text.append("SVT motor issues")
-        a_ax.append(0)
-        a_ay.append(-390)
-
-        index = plot_runs.index[plot_runs.loc[:, "end_time"] > datetime(2019, 8, 22, 4, 53)][0]
-        a_index.append(index)
-        a_x.append(plot_runs.loc[index, "end_time"])
-        a_y.append(sumcharge_norm.loc[index])
-        a_text.append("Scheduled down<br />then beam tuning")
-        a_ax.append(30)
-        a_ay.append(-260)
 
         a_annot = []
         for i in range(len(a_x)):
@@ -335,7 +316,7 @@ def main(argv=None):
         # Set x-axis title
         fig.update_layout(
             title=go.layout.Title(
-                text="HPS Run 2019 Progress",
+                text="HPS Run 2021 Progress",
                 yanchor="top",
                 y=0.95,
                 xanchor="center",
@@ -352,17 +333,28 @@ def main(argv=None):
 
         # Set y-axes titles
         fig.update_yaxes(
-            title_text="<b>Number of events</b>",
+            title_text="<b>Event rate kHz</b>",
             titlefont=dict(size=22),
             secondary_y=False,
             tickfont=dict(size=18)
         )
-        fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>",
-                         titlefont=dict(size=22),
-                         range=[0, proposed_charge],
-                         secondary_y=True,
-                         tickfont=dict(size=18)
-                         )
+
+        if args.charge:
+            fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>",
+                             titlefont=dict(size=22),
+                             range=[0, max(proposed_charge,plot_sumcharge_v[-1])],
+                             secondary_y=True,
+                             tickfont=dict(size=18)
+                             )
+        else:
+            fig.update_yaxes(title_text="<b>Integrated Luminosity (1/pb)</b>",
+                             titlefont=dict(size=22),
+                             range=[0, proposed_lumi[-1]],
+                             secondary_y=True,
+                             tickfont=dict(size=18)
+                             )
+
+
         fig.update_xaxes(
             title_text="Date",
             titlefont=dict(size=22),
@@ -370,10 +362,10 @@ def main(argv=None):
         )
 
         print("Show plots.")
-        fig.write_image("HPSRun2019_progress.pdf", width=1800, height=700)
-        fig.write_image("HPSRun2019_progress.png")
-        #    charts.plot(fig, filename = 'Run2019_edit', auto_open=True)
-        # fig.show(width=2048, height=900)  # width=1024,height=768
+        fig.write_image("HPSRun2021_progress.pdf", width=1800, height=700)
+        fig.write_image("HPSRun2021_progress.png")
+        # charts.plot(fig, filename = 'Run2019_edit', auto_open=True)
+        fig.show(width=2048, height=900)  # width=1024,height=768
 
 
 if __name__ == "__main__":
