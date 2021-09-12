@@ -73,6 +73,7 @@ def main(argv=None):
         For more info, read the script ^_^, or email maurik@physics.unh.edu.""")
 
     parser.add_argument('-d', '--debug', action="count", help="Be more verbose if possible. ", default=0)
+    parser.add_argument('-N', '--nocache', action="store_true", help="Do not use a sqlite3 cache")
     parser.add_argument('-p', '--plot', action="store_true", help="Create the plotly plots.")
     parser.add_argument('-l', '--live', action="store_true", help="Show the live plotly plot.")
     parser.add_argument('-e', '--excel', action="store_true", help="Create the Excel table of the data")
@@ -90,8 +91,11 @@ def main(argv=None):
     else:
         at_jlab = False
 
-    data = RunData(cache_file="HPS_run_2021.sqlite3", i_am_at_jlab=at_jlab)
-
+    data = None
+    if not args.nocache:
+        data = RunData(cache_file="HPS_run_2021.sqlite3", i_am_at_jlab=at_jlab)
+    else:
+        data = RunData(cache_file="", sqlcache=False, i_am_at_jlab=at_jlab)
     # data._cache_engine=None   # Turn OFF cache?
     data.debug = args.debug
 
