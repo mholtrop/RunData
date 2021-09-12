@@ -9,8 +9,6 @@ import sys
 import os
 from datetime import datetime, timedelta
 import numpy as np
-import pint
-u = pint.UnitRegistry()
 
 from RunData.RunData import RunData
 
