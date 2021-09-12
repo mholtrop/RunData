@@ -76,6 +76,7 @@ def main(argv=None):
 
     parser.add_argument('-d', '--debug', action="count", help="Be more verbose if possible. ", default=0)
     parser.add_argument('-p', '--plot', action="store_true", help="Create the plotly plots.")
+    parser.add_argument('-l', '--live', action="store_true", help="Show the live plotly plot.")
     parser.add_argument('-e', '--excel', action="store_true", help="Create the Excel table of the data")
     parser.add_argument('-c', '--charge', action="store_true", help="Make a plot of charge not luminosity.")
     parser.add_argument('-C', '--chart', action="store_true", help="Put plot on plotly charts website.")
@@ -368,7 +369,8 @@ def main(argv=None):
         fig.write_html("HPSRun2021_progress.html")
         if args.chart:
              charts.plot(fig, filename = 'Run2021_edit', width=2048, height=900, auto_open=True)
-        fig.show(width=2048, height=900)  # width=1024,height=768
+        if args.live:
+            fig.show(width=2048, height=900)  # width=1024,height=768
 
 
 if __name__ == "__main__":
