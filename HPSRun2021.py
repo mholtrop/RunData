@@ -56,6 +56,31 @@ def attennuations_with_targ_thickness():
 
     return attenuations
 
+def compute_plot_runs(targets, run_config, data):
+    print("Compute data for plots.")
+
+    runs = data.All_Runs.loc[data.list_selected_runs(targets=targets, run_config=run_config)]
+
+    starts = runs["start_time"]
+    ends = runs["end_time"]
+    runs["center"] = starts + (ends - starts) / 2
+    runs["dt"] = [(run["end_time"] - run["start_time"]).total_seconds() * 999 for num, run, in
+                       runs.iterrows()]
+    runs["event_rate"] = [runs.loc[r, 'event_count'] / runs.loc[r, 'dt']
+                               for r in runs.index]
+    runs["hover"] = [f"Run: {r}<br />"
+                          f"Trigger:{runs.loc[r, 'run_config']}<br />"
+                          f"Start: {runs.loc[r, 'start_time']}<br />"
+                          f"End: {runs.loc[r, 'end_time']}<br />"
+                          f"DT:   {runs.loc[r, 'dt'] / 1000.:5.1f} s<br />"
+                          f"NEvt: {runs.loc[r, 'event_count']:10,d}<br />"
+                          f"Charge: {runs.loc[r, 'charge']:6.2f} mC <br />"
+                          f"Lumi: {runs.loc[r, 'luminosity']:6.2f} 1/pb<br />"
+                          f"<Rate>:{runs.loc[r, 'event_rate']:6.2f}kHz<br />"
+                          for r in runs.index]
+    return runs, starts, ends
+
+
 
 def main(argv=None):
     import argparse
@@ -103,7 +128,17 @@ def main(argv=None):
     #                     'hps_v9_2.cnf','hps_v10.cnf',
     #                     'hps_v11_1.cnf','hps_v11_2.cnf','hps_v11_3.cnf','hps_v11_4.cnf',
     #                     'hps_v11_5.cnf','hps_v11_6.cnf','hps_v12_1.cnf']
-    data.Good_triggers = r'hps.*\.cnf'
+    data.Good_triggers = ['hps2021_NOSINGLES2_v2_2.cnf',
+                          'hps2021_v1_2.cnf',
+                          'hps2021_v2_2.cnf',
+                          'hps_v2021_v2_0.cnf']
+    data.Calibration_triggers = [ 'hps2021_v2_2_moller_only.cnf',
+                                  'hps2021_v1_2_FEE.cnf',
+                                  'hps2021_v2_2_30kHz_random.cnf',
+                                  'hps2021_v2_1_30kHz_random.cnf']
+
+    # 'hps2021_v2_1_30kHz_random.cnf', 'hps2021_v2_2_30kHz_random.cnf', 'hps2021_v1_2_FEE.cnf',
+    # 'hps2021_v2_2_moller_only.cnf',
     data.Production_run_type = ["PROD77", "PROD77_PIN"]
     data.target_dict = hps_2021_run_target_thickness()
     data.atten_dict = attennuations_with_targ_thickness()
@@ -126,7 +161,7 @@ def main(argv=None):
 
     if args.excel:
         print("Write new Excel table.")
-        data.All_Runs.to_excel("hps_run_table.xlsx",
+        data.All_Runs.to_excel("HPSRun2021_progress.xlsx",
                                columns=['start_time', 'end_time', 'target', 'run_config', 'selected', 'event_count',
                                         'sum_event_count', 'charge', 'sum_charge', 'luminosity', 'sum_lumi',
                                         'operators', 'user_comment'])
@@ -135,25 +170,9 @@ def main(argv=None):
     #    data.All_Runs.to_latex("hps_run_table.latex",columns=['start_time','end_time','target','run_config','selected','event_count','charge','operators','user_comment'])
 
     if args.plot:
-        print("Compute data for plots.")
-        plot_runs = data.All_Runs.loc[data.list_selected_runs(targets=targets)]
-        starts = plot_runs["start_time"]
-        ends = plot_runs["end_time"]
-        plot_runs["center"] = starts + (ends - starts) / 2
-        plot_runs["dt"] = [(run["end_time"] - run["start_time"]).total_seconds() * 999 for num, run, in
-                           plot_runs.iterrows()]
-        plot_runs["event_rate"] = [plot_runs.loc[r, 'event_count']/plot_runs.loc[r, 'dt']
-                                    for r in plot_runs.index]
-        plot_runs["hover"] = [f"Run: {r}<br />"
-                              f"Trigger:{plot_runs.loc[r,'run_config']}<br />"
-                              f"Start: {plot_runs.loc[r, 'start_time']}<br />"
-                              f"End: {plot_runs.loc[r, 'end_time']}<br />"
-                              f"DT:   {plot_runs.loc[r, 'dt']/1000.:5.1f} s<br />"
-                              f"NEvt: {plot_runs.loc[r,'event_count']:10,d}<br />"
-                              f"Charge: {plot_runs.loc[r,'charge']:6.2f} mC <br />"
-                              f"Lumi: {plot_runs.loc[r,'luminosity']:6.2f} 1/pb<br />"
-                              f"<Rate>:{plot_runs.loc[r, 'event_rate']:6.2f}kHz<br />"
-                            for r in plot_runs.index]
+
+        plot_runs, starts, ends = compute_plot_runs(targets=targets, run_config=None, data=data)
+        calib_runs, c_starts, c_ends = compute_plot_runs(targets=targets, run_config=data.Calibration_triggers, data=data)
 
         sumcharge = plot_runs.loc[:, "sum_charge"]
         sumlumi = plot_runs.loc[:, "sum_lumi"]
@@ -220,6 +239,16 @@ def main(argv=None):
                        marker=dict(color=targ_cols[targ])
                        ),
                 secondary_y=False, )
+
+        fig.add_trace(
+            go.Bar(x=calib_runs['center'],
+                   y=calib_runs['event_rate'],
+                   width=calib_runs['dt'],
+                   hovertext=calib_runs['hover'],
+                   name="Calibration runs",
+                   marker=dict(color='rgba(150,150,150,0.5)')
+                   ),
+            secondary_y=False, )
 
         if args.charge:
             fig.add_trace(
