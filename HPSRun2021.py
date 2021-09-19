@@ -311,36 +311,44 @@ def main(argv=None):
                            name="120nA on 20µm W 50% up"),
                 secondary_y=True)
 
-        a_index = []
-        a_x = []
-        a_y = []
-        a_text = []
-        a_ax = []
-        a_ay = []
+            fig.add_trace(
+                go.Scatter(x=[ends.iloc[-1],ends.iloc[-1]],
+                           y=[plot_sumlumi[-1],plot_sumlumi[-1]],
+                           line=dict(color='#FF0000', width=1),
+                           name=f"Int. Lumi. = {plot_sumlumi[-1]:4.1f} /pb = "
+                                f"{100*plot_sumlumi[-1]/200.:3.1f}% of 200 1/pb."),
+                           secondary_y=True)
 
-        a_annot = []
-        for i in range(len(a_x)):
-            a_annot.append(
-                go.layout.Annotation(
-                    x=a_x[i],
-                    y=a_y[i],
-                    xref="x",
-                    yref="y2",
-                    text=a_text[i],
-                    showarrow=True,
-                    arrowhead=2,
-                    arrowsize=1,
-                    arrowwidth=2,
-                    arrowcolor="#505050",
-                    ax=a_ax[i],
-                    ay=a_ay[i],
-                    font={
-                        "family": "Times",
-                        "size": 10,
-                        "color": "#0040C0"
-                    }
-                )
-            )
+        # a_index = []
+        # a_x = []
+        # a_y = []
+        # a_text = []
+        # a_ax = []
+        # a_ay = []
+        #
+        # a_annot = []
+        # for i in range(len(a_x)):
+        #     a_annot.append(
+        #         go.layout.Annotation(
+        #             x=a_x[i],
+        #             y=a_y[i],
+        #             xref="x",
+        #             yref="y2",
+        #             text=a_text[i],
+        #             showarrow=True,
+        #             arrowhead=2,
+        #             arrowsize=1,
+        #             arrowwidth=2,
+        #             arrowcolor="#505050",
+        #             ax=a_ax[i],
+        #             ay=a_ay[i],
+        #             font={
+        #                 "family": "Times",
+        #                 "size": 10,
+        #                 "color": "#0040C0"
+        #             }
+        #         )
+        #     )
 
         # fig.update_layout(
         #    annotations=a_annot + []
