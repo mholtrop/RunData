@@ -366,6 +366,7 @@ def main(argv=None):
             legend=dict(
                 x=0.02,
                 y=0.99,
+                bgcolor="rgba(250,250,250,0.9)",
                 font=dict(
                     size=16
                 ),
@@ -377,7 +378,8 @@ def main(argv=None):
             title_text="<b>Event rate kHz</b>",
             titlefont=dict(size=22),
             secondary_y=False,
-            tickfont=dict(size=18)
+            tickfont=dict(size=18),
+            range = [0, 35.]
         )
 
         if args.charge:
