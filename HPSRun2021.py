@@ -131,7 +131,10 @@ def main(argv=None):
     data.Good_triggers = ['hps2021_NOSINGLES2_v2_2.cnf',
                           'hps2021_v1_2.cnf',
                           'hps2021_v2_2.cnf',
+                          'hps2021_v2_3.trg',
+                          'hps2021_v2_4.trg',
                           'hps_v2021_v2_0.cnf']
+    
     data.Calibration_triggers = [ 'hps2021_v2_2_moller_only.cnf',
                                   'hps2021_v1_2_FEE.cnf',
                                   'hps2021_v2_2_30kHz_random.cnf',
