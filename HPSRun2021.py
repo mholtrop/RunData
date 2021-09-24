@@ -138,7 +138,8 @@ def main(argv=None):
     data.Calibration_triggers = [ 'hps2021_v2_2_moller_only.cnf',
                                   'hps2021_v1_2_FEE.cnf',
                                   'hps2021_v2_2_30kHz_random.cnf',
-                                  'hps2021_v2_1_30kHz_random.cnf']
+                                  'hps2021_v2_1_30kHz_random.cnf',
+                                  'hps2021_v2_2_moller_LowLumi.cnf']
 
     # 'hps2021_v2_1_30kHz_random.cnf', 'hps2021_v2_2_30kHz_random.cnf', 'hps2021_v1_2_FEE.cnf',
     # 'hps2021_v2_2_moller_only.cnf',
