@@ -239,10 +239,15 @@ class RunData:
         if num_runs == 0:
             # We still need to adjust the "end" time, so we don't end up in a endless loop.
             # Now data.All_Runs is likely empty, so use RCDB to get end of last run.
-            rcdb_runs = self._db.session.query(Run).order_by(Run.start_time.desc()).limit(2)
+            rcdb_runs = self._db.session.query(Run).order_by(Run.start_time.desc()).limit(20)  # Set a limit to speedup
             use_index = 0
-            if not rcdb_runs[0].get_condition_value("is_valid_run_end"):
-                use_index = 1
+
+            while not rcdb_runs[use_index].get_condition_value("is_valid_run_end"):
+                use_index += 1
+                if self.debug > 4:
+                    print("num_runs == 0: end adjust found: ", use_index, " = ",
+                          rcdb_runs[use_index].get_condition_value("is_valid_run_end"))
+
             end = rcdb_runs[use_index].end_time
             if self.debug > 2:
                 print("Adjusted end for empty rcdb fetch to: ", end)
