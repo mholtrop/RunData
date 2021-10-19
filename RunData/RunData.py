@@ -746,7 +746,7 @@ class RunData:
 
         return good_runs
 
-    def list_selected_runs(self, targets=None, run_config=None):
+    def list_selected_runs(self, targets=None, run_config=None, date_min=None, date_max=None):
         """return the list of run numbers with the selected flag set. If 'targets' is specified, list only the runs with
         those targets.
         Arguments:
@@ -788,7 +788,19 @@ class RunData:
         else:
             print("I do not know what to do with target = ", type(targets))
 
-        return self.All_Runs.index[test_run_config & test_target]
+        test_date_min = None
+        if date_min is None:
+            test_date_min = np.array([True]* len(self.All_Runs))
+        elif type(date_min) is datetime:
+            test_date_min = (date_min < self.All_Runs.start_time)
+
+        test_date_max = None
+        if date_max is None:
+            test_date_max = np.array([True] * len(self.All_Runs))
+        elif type(date_max) is datetime:
+            test_date_max = ( self.All_Runs.end_time < date_max)
+
+        return self.All_Runs.index[test_run_config & test_target & test_date_min & test_date_max]
 
     def compute_cumulative_charge(self, targets=None, run_config=None):
         """Compute the cumulative charge, luminosity, and event count for the runs in the current All_Runs table.
