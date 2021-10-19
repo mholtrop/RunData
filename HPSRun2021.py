@@ -19,6 +19,8 @@ try:
     import chart_studio.plotly as charts
 
     pio.renderers.default = "browser"
+    pio.templates.default = "plotly_white"
+
 except ImportError:
     print("Sorry, but to make the nice plots, you really need a computer with 'plotly' installed.")
     sys.exit(1)
@@ -56,10 +58,11 @@ def attennuations_with_targ_thickness():
 
     return attenuations
 
-def compute_plot_runs(targets, run_config, data):
+def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data=None):
     print("Compute data for plots.")
 
-    runs = data.All_Runs.loc[data.list_selected_runs(targets=targets, run_config=run_config)]
+    runs = data.All_Runs.loc[data.list_selected_runs(targets=targets, run_config=run_config,
+                                                     date_min=date_min, date_max=date_max)]
 
     starts = runs["start_time"]
     ends = runs["end_time"]
@@ -90,6 +93,11 @@ def main(argv=None):
     else:
         argv = argv.split()
         argv.insert(0, sys.argv[0])  # add the program name.
+
+    # Total_days_in_proposed_run - The calandar days (NOT PAC DAYS) this run was scheduled for.
+    Total_days_in_proposed_run = 8*7
+    Start_1pass_running = datetime(2021, 10, 18, 9, 0)
+    End_1pass_running = datetime(2021, 10, 22, 18, 0)
 
     parser = argparse.ArgumentParser(
         description="""Make a plot, an excel spreadsheet and/or an sqlite3 database for the HPS Run 2019
@@ -175,7 +183,18 @@ def main(argv=None):
 
     if args.plot:
 
-        plot_runs, starts, ends = compute_plot_runs(targets=targets, run_config=None, data=data)
+        plot_runs1, starts1, ends1 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
+                                                    date_max=Start_1pass_running, data=data)
+        plot_runs2, starts2, ends2 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
+                                                    date_min=End_1pass_running, data=data)
+
+        plot_runs_1pass, starts_1pass, ends_1pass = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
+                                                    date_min=Start_1pass_running, date_max = End_1pass_running, data=data)
+
+        plot_runs = plot_runs1.append(plot_runs2)
+        starts = starts1.append(starts2)
+        ends = ends1.append(ends2)
+
         calib_runs, c_starts, c_ends = compute_plot_runs(targets=targets, run_config=data.Calibration_triggers, data=data)
 
         sumcharge = plot_runs.loc[:, "sum_charge"]
@@ -244,6 +263,18 @@ def main(argv=None):
                        ),
                 secondary_y=False, )
 
+        print(f"N 1pass = {len(plot_runs_1pass)}")
+        if len(plot_runs_1pass) > 0:
+            fig.add_trace(
+                go.Bar(x=plot_runs_1pass.center,
+                       y=plot_runs_1pass.event_rate,
+                       width=plot_runs_1pass.dt,
+                       hovertext=plot_runs_1pass.hover,
+                       name="1 Pass production runs",
+                       marker=dict(color='rgba(100, 100, 80, 0.8)')
+                       ),
+                secondary_y=False, )
+
         fig.add_trace(
             go.Bar(x=calib_runs['center'],
                    y=calib_runs['event_rate'],
@@ -303,17 +334,23 @@ def main(argv=None):
                            name="Luminosity Live"),
                 secondary_y=True)
 
+            end_time_eight_week_run = starts.iloc[0] + timedelta(days=Total_days_in_proposed_run)
+            num_runs_before_eight_week_end = np.count_nonzero( ends < end_time_eight_week_run)
+            # print(f"Run end: {end_time_eight_week_run} has {num_runs_before_eight_week_end} runs.")
             proposed_lumi_rate = 9.470415818323063e-05 # 1(pb s) = 0.09470415818323064 * 1/(nb s)
             proposed_lumi = [0] + [(ends.iloc[i] - starts.iloc[0]).total_seconds() * proposed_lumi_rate * 0.5 for i
-                                   in range(len(ends)) ]
-
+                                   in range(num_runs_before_eight_week_end) ] # len(ends)
+            if len(ends) > num_runs_before_eight_week_end:
+                # print("extend the graph.")
+                proposed_lumi += [(ends.iloc[num_runs_before_eight_week_end] - starts.iloc[0]).total_seconds() * proposed_lumi_rate * 0.5 for i
+                                   in range(num_runs_before_eight_week_end, len(ends)) ]
             fig.add_trace(
                 go.Scatter(x=[starts.iloc[0]] + [ends.iloc[i] for i in range(len(ends))],
 #                           y=[0, proposed_lumi],
                            y=proposed_lumi,
                            line=dict(color='#FFC030', width=3),
                            name="120nA on 20µm W 50% up"),
-                secondary_y=True)
+                           secondary_y=True)
 
             fig.add_trace(
                 go.Scatter(x=[ends.iloc[-1],ends.iloc[-1]],
@@ -396,7 +433,7 @@ def main(argv=None):
         else:
             fig.update_yaxes(title_text="<b>Integrated Luminosity (1/pb)</b>",
                              titlefont=dict(size=22),
-                             range=[0, proposed_lumi[-1]],
+                             range=[0, max(proposed_lumi[-1],plot_sumlumi[-1])],
                              secondary_y=True,
                              tickfont=dict(size=18)
                              )
