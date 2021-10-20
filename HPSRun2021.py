@@ -96,7 +96,7 @@ def main(argv=None):
 
     # Total_days_in_proposed_run - The calandar days (NOT PAC DAYS) this run was scheduled for.
     Total_days_in_proposed_run = 8*7
-    Start_1pass_running = datetime(2021, 10, 18, 9, 0)
+    Start_1pass_running = datetime(2021, 10, 19, 9, 0)
     End_1pass_running = datetime(2021, 10, 22, 18, 0)
 
     parser = argparse.ArgumentParser(

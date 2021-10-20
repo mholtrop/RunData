@@ -511,6 +511,8 @@ class RunData:
                     self.All_Runs = save_all_runs.append(self.All_Runs, sort=True)
                 else:
                     # No new runs, so restore what we had before.
+                    # TODO: Fix this. When no new runs, because no new data, this can cause an infinite loop.
+                    # Do we set the loop to break out?
                     self.All_Runs = save_all_runs
 
                 if self.All_Runs is None or len(self.All_Runs) == 0:  # There are no runs at all. Just quit.
