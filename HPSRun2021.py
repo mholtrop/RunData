@@ -141,13 +141,17 @@ def main(argv=None):
                           'hps2021_v2_2.cnf',
                           'hps2021_v2_3.cnf',
                           'hps2021_v2_4.cnf',
-                          'hps_v2021_v2_0.cnf']
+                          'hps_v2021_v2_0.cnf',
+                          'hps_1.9_v2_3.cnf',
+                          'hps_1.9_v2_4.cnf']
 
     data.Calibration_triggers = [ 'hps2021_v2_2_moller_only.cnf',
                                   'hps2021_v1_2_FEE.cnf',
                                   'hps2021_v2_2_30kHz_random.cnf',
                                   'hps2021_v2_1_30kHz_random.cnf',
-                                  'hps2021_v2_2_moller_LowLumi.cnf']
+                                  'hps2021_v2_2_moller_LowLumi.cnf',
+                                  'hps_1.9_Random_30kHz_v2_3.cnf'
+                                  ]
 
     # 'hps2021_v2_1_30kHz_random.cnf', 'hps2021_v2_2_30kHz_random.cnf', 'hps2021_v1_2_FEE.cnf',
     # 'hps2021_v2_2_moller_only.cnf',
@@ -196,7 +200,8 @@ def main(argv=None):
         ends = ends1.append(ends2)
 
         calib_runs, c_starts, c_ends = compute_plot_runs(targets=targets, run_config=data.Calibration_triggers, data=data)
-
+        if args.debug:
+            print("Calibration runs: ",calib_runs)
         sumcharge = plot_runs.loc[:, "sum_charge"]
         sumlumi = plot_runs.loc[:, "sum_lumi"]
         plot_sumcharge_t = [starts.iloc[0], ends.iloc[0]]
@@ -263,7 +268,9 @@ def main(argv=None):
                        ),
                 secondary_y=False, )
 
-        print(f"N 1pass = {len(plot_runs_1pass)}")
+        if args.debug:
+            print(f"N 1pass = {len(plot_runs_1pass)}")
+
         if len(plot_runs_1pass) > 0:
             fig.add_trace(
                 go.Bar(x=plot_runs_1pass.center,
