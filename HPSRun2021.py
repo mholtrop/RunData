@@ -143,7 +143,9 @@ def main(argv=None):
                           'hps2021_v2_4.cnf',
                           'hps_v2021_v2_0.cnf',
                           'hps_1.9_v2_3.cnf',
-                          'hps_1.9_v2_4.cnf']
+                          'hps_1.9_v2_4.cnf',
+                          'hps_1.9_v2_5.cnf',
+                          'hps_1.9_v2_6.cnf']
 
     data.Calibration_triggers = [ 'hps2021_v2_2_moller_only.cnf',
                                   'hps2021_v1_2_FEE.cnf',
