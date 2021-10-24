@@ -97,7 +97,7 @@ def main(argv=None):
     # Total_days_in_proposed_run - The calandar days (NOT PAC DAYS) this run was scheduled for.
     Total_days_in_proposed_run = 8*7
     Start_1pass_running = datetime(2021, 10, 19, 9, 0)
-    End_1pass_running = datetime(2021, 10, 22, 18, 0)
+    End_1pass_running = datetime(2021, 10, 24, 12, 0)
 
     parser = argparse.ArgumentParser(
         description="""Make a plot, an excel spreadsheet and/or an sqlite3 database for the HPS Run 2019
@@ -152,7 +152,8 @@ def main(argv=None):
                                   'hps2021_v2_2_30kHz_random.cnf',
                                   'hps2021_v2_1_30kHz_random.cnf',
                                   'hps2021_v2_2_moller_LowLumi.cnf',
-                                  'hps_1.9_Random_30kHz_v2_3.cnf'
+                                  'hps_1.9_Random_30kHz_v2_3.cnf',
+                                  'hps_1.9_Moller_v2_6.cnf'
                                   ]
 
     # 'hps2021_v2_1_30kHz_random.cnf', 'hps2021_v2_2_30kHz_random.cnf', 'hps2021_v1_2_FEE.cnf',
@@ -280,7 +281,7 @@ def main(argv=None):
                        width=plot_runs_1pass.dt,
                        hovertext=plot_runs_1pass.hover,
                        name="1 Pass production runs",
-                       marker=dict(color='rgba(100, 100, 80, 0.8)')
+                       marker=dict(color='rgba(130, 130, 100, 0.8)')
                        ),
                 secondary_y=False, )
 
