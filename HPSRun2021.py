@@ -97,7 +97,7 @@ def main(argv=None):
     # Total_days_in_proposed_run - The calandar days (NOT PAC DAYS) this run was scheduled for.
     Total_days_in_proposed_run = 8*7
     Start_1pass_running = datetime(2021, 10, 19, 9, 0)
-    End_1pass_running = datetime(2021, 10, 24, 12, 0)
+    End_1pass_running = datetime(2021, 10, 25, 9, 0)
 
     parser = argparse.ArgumentParser(
         description="""Make a plot, an excel spreadsheet and/or an sqlite3 database for the HPS Run 2019
