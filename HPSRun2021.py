@@ -59,7 +59,8 @@ def attennuations_with_targ_thickness():
     return attenuations
 
 def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data=None):
-    print("Compute data for plots.")
+    '''This function selects the runs from data according to the target, run_configuration and date'''
+    # print("Compute data for plots.")
 
     runs = data.All_Runs.loc[data.list_selected_runs(targets=targets, run_config=run_config,
                                                      date_min=date_min, date_max=date_max)]
@@ -94,8 +95,12 @@ def main(argv=None):
         argv = argv.split()
         argv.insert(0, sys.argv[0])  # add the program name.
 
-    # Total_days_in_proposed_run - The calandar days (NOT PAC DAYS) this run was scheduled for.
-    Total_days_in_proposed_run = 8*7
+    # total_days_in_proposed_run - The calandar days (NOT PAC DAYS) this run was scheduled for.
+    proposed_lumi_rate = 9.470415818323063e-05  # 1(pb s) = 0.09470415818323064 * 1/(nb s)
+    total_days_in_proposed_run = 7*7
+    total_proposed_luminosity = proposed_lumi_rate * total_days_in_proposed_run * 24 * 3600 / 2
+    print(f"Total days expected in run= {total_days_in_proposed_run} = {total_days_in_proposed_run*24*3600} s")
+    print(f"Total proposed luminosity = {total_proposed_luminosity}")
     Start_1pass_running = datetime(2021, 10, 19, 9, 0)
     End_1pass_running = datetime(2021, 10, 25, 12, 0)
 
@@ -175,8 +180,30 @@ def main(argv=None):
     data.select_good_runs()
     #    data.add_current_data_to_runs()
     targets = '.*um W *'
+
+    # Select runs into the different catagories.
+    plot_runs1, starts1, ends1 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
+                                                   date_max=Start_1pass_running, data=data)
+    plot_runs2, starts2, ends2 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
+                                                   date_min=End_1pass_running, data=data)
+
+    plot_runs = plot_runs1.append(plot_runs2)
+    starts = starts1.append(starts2)
+    ends = ends1.append(ends2)
+
+    plot_runs_1pass, starts_1pass, ends_1pass = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
+                                                                  date_min=Start_1pass_running,
+                                                                  date_max=End_1pass_running, data=data)
+
+
+
+    calib_runs, c_starts, c_ends = compute_plot_runs(targets=targets, run_config=data.Calibration_triggers, data=data)
+    if args.debug:
+        print("Calibration runs: ", calib_runs)
+
     print("Compute cumulative charge.")
-    data.compute_cumulative_charge(targets)  # Only the tungsten targets count.
+    data.compute_cumulative_charge(targets, runs=plot_runs)  # Only the tungsten targets count.
+    data.compute_cumulative_charge(targets, runs=plot_runs_1pass)  # Only the tungsten targets count.
 
     if args.excel:
         print("Write new Excel table.")
@@ -189,22 +216,6 @@ def main(argv=None):
     #    data.All_Runs.to_latex("hps_run_table.latex",columns=['start_time','end_time','target','run_config','selected','event_count','charge','operators','user_comment'])
 
     if args.plot:
-
-        plot_runs1, starts1, ends1 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
-                                                    date_max=Start_1pass_running, data=data)
-        plot_runs2, starts2, ends2 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
-                                                    date_min=End_1pass_running, data=data)
-
-        plot_runs_1pass, starts_1pass, ends_1pass = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
-                                                    date_min=Start_1pass_running, date_max = End_1pass_running, data=data)
-
-        plot_runs = plot_runs1.append(plot_runs2)
-        starts = starts1.append(starts2)
-        ends = ends1.append(ends2)
-
-        calib_runs, c_starts, c_ends = compute_plot_runs(targets=targets, run_config=data.Calibration_triggers, data=data)
-        if args.debug:
-            print("Calibration runs: ",calib_runs)
         sumcharge = plot_runs.loc[:, "sum_charge"]
         sumlumi = plot_runs.loc[:, "sum_lumi"]
         plot_sumcharge_t = [starts.iloc[0], ends.iloc[0]]
@@ -335,7 +346,9 @@ def main(argv=None):
                 secondary_y=True
             )
 
-
+#################################################################################################################
+#                     Luminosity
+#################################################################################################################
         else:
             fig.add_trace(
                 go.Scatter(x=plot_sumcharge_t,
@@ -344,18 +357,31 @@ def main(argv=None):
                            name="Luminosity Live"),
                 secondary_y=True)
 
-            end_time_eight_week_run = starts.iloc[0] + timedelta(days=Total_days_in_proposed_run)
-            num_runs_before_eight_week_end = np.count_nonzero( ends < end_time_eight_week_run)
-            # print(f"Run end: {end_time_eight_week_run} has {num_runs_before_eight_week_end} runs.")
+            # starts_lumi = starts.copy()
+            ends_lumi = ends.copy()
+            end_time_proposed_run = starts.iloc[0] + timedelta(days=total_days_in_proposed_run)
+            num_runs_before_eight_week_end = np.count_nonzero(ends_lumi < end_time_proposed_run)  # Drop the last run
+            # print(f"Run end: {end_time_proposed_run} has {num_runs_before_eight_week_end} runs.")
             proposed_lumi_rate = 9.470415818323063e-05 # 1(pb s) = 0.09470415818323064 * 1/(nb s)
-            proposed_lumi = [0] + [(ends.iloc[i] - starts.iloc[0]).total_seconds() * proposed_lumi_rate * 0.5 for i
-                                   in range(num_runs_before_eight_week_end) ] # len(ends)
+            proposed_lumi = [0] + [(ends_lumi.iloc[i] - starts.iloc[0]).total_seconds() * proposed_lumi_rate * 0.5
+                                   for i in range(num_runs_before_eight_week_end) ] # len(ends)
+
+            # The last run completed proposed run time but kept going.
+            if ends_lumi.iloc[num_runs_before_eight_week_end] > end_time_proposed_run:
+                print(f"Fixing at index {num_runs_before_eight_week_end} of {len(ends_lumi)} ")
+                # proposed_lumi[num_runs_before_eight_week_end] = total_proposed_luminosity
+                ends_lumi = ends_lumi.append(ends_lumi.iloc[-1:])   # Duplicate last value
+                ends_lumi.iloc[num_runs_before_eight_week_end] = end_time_proposed_run
+                proposed_lumi += [total_proposed_luminosity]        # Add another value at the end.
+                print(ends_lumi.iloc[-5:])
+
             if len(ends) > num_runs_before_eight_week_end:
-                # print("extend the graph.")
-                proposed_lumi += [(ends.iloc[num_runs_before_eight_week_end] - starts.iloc[0]).total_seconds() * proposed_lumi_rate * 0.5 for i
+                # Extend the curve for runs past the proposed end of run, i.e for the extension time.
+                proposed_lumi += [ total_proposed_luminosity for i
                                    in range(num_runs_before_eight_week_end, len(ends)) ]
+
             fig.add_trace(
-                go.Scatter(x=[starts.iloc[0]] + [ends.iloc[i] for i in range(len(ends))],
+                go.Scatter(x=[starts.iloc[0]] + [ends_lumi.iloc[i] for i in range(len(ends_lumi))],
 #                           y=[0, proposed_lumi],
                            y=proposed_lumi,
                            line=dict(color='#FFC030', width=3),

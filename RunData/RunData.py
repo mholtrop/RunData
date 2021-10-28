@@ -748,12 +748,16 @@ class RunData:
 
         return good_runs
 
-    def list_selected_runs(self, targets=None, run_config=None, date_min=None, date_max=None):
+    def list_selected_runs(self, targets=None, run_config=None, date_min=None, date_max=None, runs=None):
         """return the list of run numbers with the selected flag set. If 'targets' is specified, list only the runs with
         those targets.
         Arguments:
         targets       - None, False, string or list
         run_config    - None, False, string or list.
+        date_min      - Earliest date to consider, must be datetime object or None
+        date_max      - Latest date to consider, must be datetime object or None
+        runs          - Runs DateFrame to operate on, or self.All_Runs if None
+
         If targets is None or False, all targets will be listed.
         If targets is a string, it will be matched case insensitive regex style.
         I.e. "um W" will give all thickness Tungsten.
@@ -766,60 +770,68 @@ class RunData:
         If run_config is a list, then that list will be used instead of the data.Good_triggers list.
         """
 
+        if runs is None:
+            runs = self.All_Runs
+
         test_run_config = None
         if run_config is None:
-            test_run_config = self.All_Runs.selected
+            test_run_config = runs.selected
         elif run_config is False or len(run_config) == 0:
-            test_run_config = np.array([True] * len(self.All_Runs))  # I.e. select all. Yes, funny logic.
+            test_run_config = np.array([True] * len(runs))  # I.e. select all. Yes, funny logic.
         elif type(run_config) is str:
-            test_run_config = self.All_Runs["run_config"].str.contains(run_config, case=False)
+            test_run_config = runs["run_config"].str.contains(run_config, case=False)
         elif type(run_config) is list:
-            test_run_config = self.All_Runs["run_config"].isin(run_config)
+            test_run_config = runs["run_config"].isin(run_config)
         else:
             print("I do not know what to do with run_config = ", type(run_config))
 
         test_target = None
         if targets is None or targets is False or len(targets) == 0:
-            test_target = np.array([True] * len(self.All_Runs))
+            test_target = np.array([True] * len(runs))
         elif type(targets) is str:
-            test_target = self.All_Runs["target"].str.contains(targets, case=False)
+            test_target = runs["target"].str.contains(targets, case=False)
         elif type(targets) is list:
-            test_target = self.All_Runs.target.isin(targets)
+            test_target = runs.target.isin(targets)
         elif type(targets) is dict:
-            test_target = self.All_Runs.target.isin(targets.keys())
+            test_target = runs.target.isin(targets.keys())
         else:
             print("I do not know what to do with target = ", type(targets))
 
         test_date_min = None
         if date_min is None:
-            test_date_min = np.array([True]* len(self.All_Runs))
+            test_date_min = np.array([True]* len(runs))
         elif type(date_min) is datetime:
-            test_date_min = (date_min < self.All_Runs.start_time)
+            test_date_min = (date_min < runs.start_time)
 
         test_date_max = None
         if date_max is None:
-            test_date_max = np.array([True] * len(self.All_Runs))
+            test_date_max = np.array([True] * len(runs))
         elif type(date_max) is datetime:
-            test_date_max = ( self.All_Runs.end_time < date_max)
+            test_date_max = ( runs.end_time < date_max)
 
-        return self.All_Runs.index[test_run_config & test_target & test_date_min & test_date_max]
+        return runs.index[test_run_config & test_target & test_date_min & test_date_max]
 
-    def compute_cumulative_charge(self, targets=None, run_config=None):
+    def compute_cumulative_charge(self, targets=None, run_config=None, date_min=None, date_max=None, runs=None):
         """Compute the cumulative charge, luminosity, and event count for the runs in the current All_Runs table.
            The increasing numbers are put in the table in 'sum_charge', 'sum_charge_norm' and 'sum_event_count',
            and 'sum_lumi'
-           The runs are selected with list_selected_runs with the same 'targets' and 'run_config' arguments.
+           The runs are selected with list_selected_runs with the same 'targets' and 'run_config' and date arguments.
+           If runs is set to a Pandas data frame of runs, compute the sums only for those runs.
            Returns the end value of: (sum_charge,sum_charge_norm,sum_event_count)"""
 
-        # filter the runs with a target it.
-        selected = self.list_selected_runs(targets, run_config)
+        # filter the runs on target, run_config, date_min, date_max.
+        selected = self.list_selected_runs(targets=targets, run_config=run_config,
+                                           date_min=date_min, date_max=date_max, runs=runs)
+
+        if runs is None:
+            runs = self.All_Runs
 
         if self.debug > 1:
             print("Computing cumulative charge, lumi, and event count for runs:", list(selected))
 
-        self.All_Runs.loc[selected, "sum_event_count"] = np.cumsum(self.All_Runs.loc[selected, "event_count"])
-        self.All_Runs.loc[selected, "sum_charge"] = np.cumsum(self.All_Runs.loc[selected, "charge"])
-        self.All_Runs.loc[selected, "sum_lumi"] = np.cumsum(self.All_Runs.loc[selected, "luminosity"])
+        runs.loc[selected, "sum_event_count"] = np.cumsum(runs.loc[selected, "event_count"])
+        runs.loc[selected, "sum_charge"] = np.cumsum(runs.loc[selected, "charge"])
+        runs.loc[selected, "sum_lumi"] = np.cumsum(runs.loc[selected, "luminosity"])
 
         sum_charge_per_target = self.target_dict.copy()
         for k in sum_charge_per_target:
@@ -828,29 +840,28 @@ class RunData:
         if 'norm' in self.target_dict:
             cumsum_charge_norm = 0.
             for run in selected:
-                if self.All_Runs.loc[run, "target"] in self.target_dict:
-                    target_norm = self.target_dict[self.All_Runs.loc[run, "target"]] / self.target_dict['norm']
-                    if not np.isnan(self.All_Runs.loc[run, "charge"]):
-                        sum_charge_per_target[self.All_Runs.loc[run, "target"]] += self.All_Runs.loc[run, "charge"]
-                        self.All_Runs.loc[run, "sum_charge_targ"] = sum_charge_per_target[
-                            self.All_Runs.loc[run, "target"]]
-                        cumsum_charge_norm += self.All_Runs.loc[run, "charge"] * target_norm
-                        self.All_Runs.loc[run, "sum_charge_norm"] = cumsum_charge_norm
+                if runs.loc[run, "target"] in self.target_dict:
+                    target_norm = self.target_dict[runs.loc[run, "target"]] / self.target_dict['norm']
+                    if not np.isnan(runs.loc[run, "charge"]):
+                        sum_charge_per_target[runs.loc[run, "target"]] += runs.loc[run, "charge"]
+                        runs.loc[run, "sum_charge_targ"] = sum_charge_per_target[
+                            runs.loc[run, "target"]]
+                        cumsum_charge_norm += runs.loc[run, "charge"] * target_norm
+                        runs.loc[run, "sum_charge_norm"] = cumsum_charge_norm
 
-            if len(self.All_Runs.loc[selected]):
-                return (self.All_Runs.loc[selected, "sum_charge"].iloc[-1],
-                        self.All_Runs.loc[selected, "sum_charge_norm"].iloc[-1],
-                        self.All_Runs.loc[selected, "sum_event_count"].iloc[-1])
+            if len(runs.loc[selected]):
+                return (runs.loc[selected, "sum_charge"].iloc[-1],
+                        runs.loc[selected, "sum_charge_norm"].iloc[-1],
+                        runs.loc[selected, "sum_event_count"].iloc[-1])
             else:
                 return 0, 0, 0
         else:
-            if len(self.All_Runs.loc[selected]):
-                return (self.All_Runs.loc[selected, "sum_charge"].iloc[-1],
-                        self.All_Runs.loc[selected, "sum_charge"].iloc[-1],
-                        self.All_Runs.loc[selected, "sum_event_count"].iloc[-1])
+            if len(runs.loc[selected]):
+                return (runs.loc[selected, "sum_charge"].iloc[-1],
+                        runs.loc[selected, "sum_charge"].iloc[-1],
+                        runs.loc[selected, "sum_event_count"].iloc[-1])
             else:
                 return 0, 0, 0
-
 
 def attennuations_with_targ_thickness():
     """ During the run we have observed that the beam attenuation depends on the target thickness too.
