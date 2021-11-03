@@ -26,15 +26,16 @@ except ImportError:
     sys.exit(1)
 
 
-def hps_2021_run_target_thickness():
+def rgm_2021_targets():
     """ Returns the dictionary of target name to target thickness.
-        One extra entry, named 'norm' is used for filling the
+        One extra entry, named 'norm' is used for normalization of the charge curve.
         Target thickness is in units of cm."""
     targets = {
-        'norm': 20.e-4,       # Value to normalize to.
-        '8 um W ': 8.e-4,
-        '20 um W ': 20.e-4
+        'norm': (20.e-4, 'rgba(255,100,255,0.8)'),      # Value to normalize to.
+        '8 um W ': (8.e-4, 'rgba(20,80,255,0.8)'),
+        '20 um W ': (20.e-4, 'rgba(0,120,150,0.8)')
     }
+
     return targets
 
 
@@ -58,8 +59,9 @@ def attennuations_with_targ_thickness():
 
     return attenuations
 
+
 def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data=None):
-    '''This function selects the runs from data according to the target, run_configuration and date'''
+    """This function selects the runs from data according to the target, run_configuration and date"""
     # print("Compute data for plots.")
 
     runs = data.All_Runs.loc[data.list_selected_runs(targets=targets, run_config=run_config,
@@ -68,22 +70,20 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data=No
     starts = runs["start_time"]
     ends = runs["end_time"]
     runs["center"] = starts + (ends - starts) / 2
-    runs["dt"] = [(run["end_time"] - run["start_time"]).total_seconds() * 999 for num, run, in
-                       runs.iterrows()]
-    runs["event_rate"] = [runs.loc[r, 'event_count'] / runs.loc[r, 'dt']
-                               for r in runs.index]
+    runs["dt"] = [(run["end_time"] - run["start_time"]).total_seconds() * 999 for num, run, in runs.iterrows()]
+    runs["event_rate"] = [runs.loc[r, 'event_count'] / runs.loc[r, 'dt'] for r in runs.index]
     runs["hover"] = [f"Run: {r}<br />"
-                          f"Trigger:{runs.loc[r, 'run_config']}<br />"
-                          f"Start: {runs.loc[r, 'start_time']}<br />"
-                          f"End: {runs.loc[r, 'end_time']}<br />"
-                          f"DT:   {runs.loc[r, 'dt'] / 1000.:5.1f} s<br />"
-                          f"NEvt: {runs.loc[r, 'event_count']:10,d}<br />"
-                          f"Charge: {runs.loc[r, 'charge']:6.2f} mC <br />"
-                          f"Lumi: {runs.loc[r, 'luminosity']:6.2f} 1/pb<br />"
-                          f"<Rate>:{runs.loc[r, 'event_rate']:6.2f}kHz<br />"
-                          for r in runs.index]
-    return runs, starts, ends
+                     f"Trigger:{runs.loc[r, 'run_config']}<br />"
+                     f"Start: {runs.loc[r, 'start_time']}<br />"
+                     f"End: {runs.loc[r, 'end_time']}<br />"
+                     f"DT:   {runs.loc[r, 'dt'] / 1000.:5.1f} s<br />"
+                     f"NEvt: {runs.loc[r, 'event_count']:10,d}<br />"
+                     f"Charge: {runs.loc[r, 'charge']:6.2f} mC <br />"
+                     f"Lumi: {runs.loc[r, 'luminosity']:6.2f} 1/pb<br />"
+                     f"<Rate>:{runs.loc[r, 'event_rate']:6.2f}kHz<br />"
+                     for r in runs.index]
 
+    return runs, starts, ends
 
 
 def main(argv=None):
@@ -101,11 +101,9 @@ def main(argv=None):
     total_proposed_luminosity = proposed_lumi_rate * total_days_in_proposed_run * 24 * 3600 / 2
     print(f"Total days expected in run= {total_days_in_proposed_run} = {total_days_in_proposed_run*24*3600} s")
     print(f"Total proposed luminosity = {total_proposed_luminosity}")
-    Start_1pass_running = datetime(2021, 10, 19, 9, 0)
-    End_1pass_running = datetime(2021, 10, 25, 12, 0)
 
     parser = argparse.ArgumentParser(
-        description="""Make a plot, an excel spreadsheet and/or an sqlite3 database for the HPS Run 2019
+        description="""Make a plot, an excel spreadsheet and/or an sqlite3 database for the current run using
         conditions from the RCDB and MYA.""",
         epilog="""
         For more info, read the script ^_^, or email maurik@physics.unh.edu.""")
@@ -133,7 +131,7 @@ def main(argv=None):
 
     data = None
     if not args.nocache:
-        data = RunData(cache_file="HPS_run_2021.sqlite3", i_am_at_jlab=at_jlab)
+        data = RunData(cache_file="RGM_2021.sqlite3", i_am_at_jlab=at_jlab)
     else:
         data = RunData(cache_file="", sqlcache=False, i_am_at_jlab=at_jlab)
     # data._cache_engine=None   # Turn OFF cache?
@@ -143,37 +141,17 @@ def main(argv=None):
     #                     'hps_v9_2.cnf','hps_v10.cnf',
     #                     'hps_v11_1.cnf','hps_v11_2.cnf','hps_v11_3.cnf','hps_v11_4.cnf',
     #                     'hps_v11_5.cnf','hps_v11_6.cnf','hps_v12_1.cnf']
-    data.Good_triggers = ['hps2021_NOSINGLES2_v2_2.cnf',
-                          'hps2021_v1_2.cnf',
-                          'hps2021_v2_2.cnf',
-                          'hps2021_v2_3.cnf',
-                          'hps2021_v2_4.cnf',
-                          'hps_v2021_v2_0.cnf',
-                          'hps_1.9_v2_3.cnf',
-                          'hps_1.9_v2_4.cnf',
-                          'hps_1.9_v2_5.cnf',
-                          'hps_1.9_v2_6.cnf']
+    data.Good_triggers = '.*'
+    data.Calibration_triggers = ' '
 
-    data.Calibration_triggers = [ 'hps2021_v2_2_moller_only.cnf',
-                                  'hps2021_v1_2_FEE.cnf',
-                                  'hps2021_v2_2_30kHz_random.cnf',
-                                  'hps2021_v2_1_30kHz_random.cnf',
-                                  'hps2021_v2_2_moller_LowLumi.cnf',
-                                  'hps_1.9_Random_30kHz_v2_3.cnf',
-                                  'hps_1.9_Moller_v2_6.cnf',
-                                  'hps2021_v2_3_SVT_WIRE_RUN.cnf'
-                                  ]
-
-    # 'hps2021_v2_1_30kHz_random.cnf', 'hps2021_v2_2_30kHz_random.cnf', 'hps2021_v1_2_FEE.cnf',
-    # 'hps2021_v2_2_moller_only.cnf',
     data.Production_run_type = ["PROD77", "PROD77_PIN"]
-    data.target_dict = hps_2021_run_target_thickness()
+    data.target_dict = rgm_2021_target_thickness()
     data.atten_dict = attennuations_with_targ_thickness()
     data.Current_Channel = "scaler_calc1b"
 
     min_event_count = 10000000  # Runs with at least 10M events.
     #    start_time = datatime(2019, 7, 17, 0, 0)  # Very start of run
-    start_time = datetime(2021, 9, 9, 0, 0)  # DAQ Issues resolved.
+    start_time = datetime(2021, 11, 9, 0, 0)  # DAQ Issues resolved.
     # end_time = datetime(2021, 9, 11, 0, 0)
     end_time = datetime.now()
     end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
@@ -185,26 +163,15 @@ def main(argv=None):
     targets = '.*um W *'
 
     # Select runs into the different catagories.
-    plot_runs1, starts1, ends1 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
-                                                   date_max=Start_1pass_running, data=data)
-    plot_runs2, starts2, ends2 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
-                                                   date_min=End_1pass_running, data=data)
+    plot_runs, starts, ends = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
+                                                data=data)
 
-    plot_runs = plot_runs1.append(plot_runs2)
-    starts = starts1.append(starts2)
-    ends = ends1.append(ends2)
-
-    plot_runs_1pass, starts_1pass, ends_1pass = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
-                                                                  date_min=Start_1pass_running,
-                                                                  date_max=End_1pass_running, data=data)
-
-    calib_runs, c_starts, c_ends = compute_plot_runs(targets='.*', run_config=data.Calibration_triggers, data=data)
+    calib_runs, c_starts, c_ends = compute_plot_runs(targets=targets, run_config=data.Calibration_triggers, data=data)
     if args.debug:
         print("Calibration runs: ", calib_runs)
 
     print("Compute cumulative charge.")
     data.compute_cumulative_charge(targets, runs=plot_runs)  # Only the tungsten targets count.
-    data.compute_cumulative_charge(targets, runs=plot_runs_1pass)  # Only the tungsten targets count.
 
     if args.excel:
         print("Write new Excel table.")
@@ -264,13 +231,6 @@ def main(argv=None):
         print("Build Plots.")
         fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-        targ_cols = {
-            '4 um W ': 'rgba(255,100,255,0.8)',
-            '8 um W ': 'rgba(20,80,255,0.8)',
-            '15 um W ': 'rgba(0,255,255,0.8)',
-            '20 um W ': 'rgba(0,120,150,0.8)'
-        }
-
         for targ in targ_cols:
             runs = plot_runs.target.str.contains(targ)
             fig.add_trace(
@@ -279,21 +239,7 @@ def main(argv=None):
                        width=plot_runs.loc[runs, 'dt'],
                        hovertext=plot_runs.loc[runs, 'hover'],
                        name="run with " + targ,
-                       marker=dict(color=targ_cols[targ])
-                       ),
-                secondary_y=False, )
-
-        if args.debug:
-            print(f"N 1pass = {len(plot_runs_1pass)}")
-
-        if len(plot_runs_1pass) > 0:
-            fig.add_trace(
-                go.Bar(x=plot_runs_1pass.center,
-                       y=plot_runs_1pass.event_rate,
-                       width=plot_runs_1pass.dt,
-                       hovertext=plot_runs_1pass.hover,
-                       name="1 Pass production runs",
-                       marker=dict(color='rgba(130, 130, 100, 0.8)')
+                       marker=dict(color=target_colors[targ])
                        ),
                 secondary_y=False, )
 
@@ -363,9 +309,8 @@ def main(argv=None):
             end_time_proposed_run = starts.iloc[0] + timedelta(days=total_days_in_proposed_run)
             num_runs_before_eight_week_end = np.count_nonzero(ends_lumi < end_time_proposed_run)  # Drop the last run
             # print(f"Run end: {end_time_proposed_run} has {num_runs_before_eight_week_end} runs.")
-            proposed_lumi_rate = 9.470415818323063e-05 # 1/(pb s) = 0.09470415818323064 * 1/(nb s)
             proposed_lumi = [0] + [(ends_lumi.iloc[i] - starts.iloc[0]).total_seconds() * proposed_lumi_rate * 0.5
-                                   for i in range(num_runs_before_eight_week_end) ] # len(ends)
+                                   for i in range(num_runs_before_eight_week_end)]  # len(ends)
 
             # The last run completed proposed run time but kept going.
             if ends_lumi.iloc[num_runs_before_eight_week_end] > end_time_proposed_run:
@@ -378,16 +323,14 @@ def main(argv=None):
 
             if len(ends) > num_runs_before_eight_week_end:
                 # Extend the curve for runs past the proposed end of run, i.e for the extension time.
-                proposed_lumi += [ total_proposed_luminosity for i
-                                   in range(num_runs_before_eight_week_end, len(ends)) ]
+                proposed_lumi += [total_proposed_luminosity for i in range(num_runs_before_eight_week_end, len(ends))]
 
             fig.add_trace(
                 go.Scatter(x=[starts.iloc[0]] + [ends_lumi.iloc[i] for i in range(len(ends_lumi))],
-#                           y=[0, proposed_lumi],
                            y=proposed_lumi,
                            line=dict(color='#FFC030', width=3),
                            name="120nA on 20µm W 50% up"),
-                           secondary_y=True)
+                secondary_y=True)
 
             fig.add_trace(
                 go.Scatter(x=[ends.iloc[-1],ends.iloc[-1]],
@@ -395,47 +338,12 @@ def main(argv=None):
                            line=dict(color='#FF0000', width=1),
                            name=f"Int. Lumi. = {plot_sumlumi[-1]:4.1f} /pb = "
                                 f"{100*plot_sumlumi[-1]/200.:3.1f}% of 200 1/pb."),
-                           secondary_y=True)
-
-        # a_index = []
-        # a_x = []
-        # a_y = []
-        # a_text = []
-        # a_ax = []
-        # a_ay = []
-        #
-        # a_annot = []
-        # for i in range(len(a_x)):
-        #     a_annot.append(
-        #         go.layout.Annotation(
-        #             x=a_x[i],
-        #             y=a_y[i],
-        #             xref="x",
-        #             yref="y2",
-        #             text=a_text[i],
-        #             showarrow=True,
-        #             arrowhead=2,
-        #             arrowsize=1,
-        #             arrowwidth=2,
-        #             arrowcolor="#505050",
-        #             ax=a_ax[i],
-        #             ay=a_ay[i],
-        #             font={
-        #                 "family": "Times",
-        #                 "size": 10,
-        #                 "color": "#0040C0"
-        #             }
-        #         )
-        #     )
-
-        # fig.update_layout(
-        #    annotations=a_annot + []
-        # )
+                secondary_y=True)
 
         # Set x-axis title
         fig.update_layout(
             title=go.layout.Title(
-                text="HPS Run 2021 Progress",
+                text="RGM 2021 Progress",
                 yanchor="top",
                 y=0.95,
                 xanchor="left",
@@ -457,20 +365,20 @@ def main(argv=None):
             titlefont=dict(size=22),
             secondary_y=False,
             tickfont=dict(size=18),
-            range = [0, 35.]
+            range=[0, 35.]
         )
 
         if args.charge:
             fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>",
                              titlefont=dict(size=22),
-                             range=[0, max(proposed_charge,plot_sumcharge_v[-1])],
+                             range=[0, max(proposed_charge, plot_sumcharge_v[-1])],
                              secondary_y=True,
                              tickfont=dict(size=18)
                              )
         else:
             fig.update_yaxes(title_text="<b>Integrated Luminosity (1/pb)</b>",
                              titlefont=dict(size=22),
-                             range=[0, 1.05*max(proposed_lumi[-1],plot_sumlumi[-1])],
+                             range=[0, 1.05*max(proposed_lumi[-1], plot_sumlumi[-1])],
                              secondary_y=True,
                              tickfont=dict(size=18)
                              )
@@ -502,7 +410,7 @@ def main(argv=None):
         fig.write_image("HPSRun2021_progress.png", width=2048, height=900)
         fig.write_html("HPSRun2021_progress.html")
         if args.chart:
-             charts.plot(fig, filename = 'Run2021_edit', width=2048, height=900, auto_open=True)
+            charts.plot(fig, filename='Run2021_edit', width=2048, height=900, auto_open=True)
         if args.live:
             fig.show(width=2048, height=900)  # width=1024,height=768
 
