@@ -426,6 +426,9 @@ class RunData:
         If not get them from the rcdb and update the cache (if not None).
         Times are rounded down to the second for start and up to the second for end."""
 
+        # TODO: This whole algorithm has gotten away from itself. Too complicated! It should be replaced.
+        # Currently this is too difficult to trace, verify, debug and fix.
+
         self.min_event_count = min_event
 
         start = start + timedelta(0, 0, -start.microsecond)  # Round down on start
@@ -514,6 +517,7 @@ class RunData:
                     # TODO: Fix this. When no new runs, because no new data, this can cause an infinite loop.
                     # Do we set the loop to break out?
                     self.All_Runs = save_all_runs
+                    end = min_after_end
 
                 if self.All_Runs is None or len(self.All_Runs) == 0:  # There are no runs at all. Just quit.
                     return 0
