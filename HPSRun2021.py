@@ -161,7 +161,8 @@ def main(argv=None):
                                   'hps2021_v2_2_moller_LowLumi.cnf',
                                   'hps_1.9_Random_30kHz_v2_3.cnf',
                                   'hps_1.9_Moller_v2_6.cnf',
-                                  'hps2021_v2_3_SVT_WIRE_RUN.cnf'
+                                  'hps2021_v2_3_SVT_WIRE_RUN.cnf',
+                                  'hps2021_FEE_straight_v2_3.cnf'
                                   ]
 
     # 'hps2021_v2_1_30kHz_random.cnf', 'hps2021_v2_2_30kHz_random.cnf', 'hps2021_v1_2_FEE.cnf',
