@@ -546,13 +546,29 @@ class RunData:
                         self.ExcludeRuns.append(line)
 
     def beam_aten_corr(self, run):
-
+        """This method computes a correction to the Faraday Cup current from sclare_calc1b Epics channel from Mya
+        This correction is sometimes needed, such as in HPS runs with a beam blocker in front of the FCup.
+        If self.atten_dict is None, this correction is ignored.
+        if self.atten_dict is a dictionary, and the current target is in the dictionary then
+              if atten_dict is a list or tuple, the run number is compared to [0] < run < [1] if true use correction.
+              else use correction
+        The correction is equal to atten_dict(target_name)/atten_dict('Empty')
+        """
         corr = 1.
-        if run < 10448:
-            # print( self.All_Runs.loc[run, 'target'] )
-            targ_name_no_spaces = (self.All_Runs.loc[run, 'target']).rstrip()
-            corr = self.atten_dict[targ_name_no_spaces] / self.atten_dict['Empty']
-            # print ('Corr is ' + str(corr))
+        # print( self.All_Runs.loc[run, 'target'] )
+        targ_name_no_spaces = (self.All_Runs.loc[run, 'target']).rstrip()
+        if self.atten_dict and targ_name_no_spaces in self.atten_dict:
+            if (type(self.atten_dict[targ_name_no_spaces]) is list) or \
+                    (type(self.atten_dict[targ_name_no_spaces]) is tuple):
+                if self.atten_dict[targ_name_no_spaces][0] < run < self.atten_dict[targ_name_no_spaces][1]:
+                    corr = self.atten_dict[targ_name_no_spaces][2] / self.atten_dict['Empty'][2]
+                    if self.debug > 3:
+                        print(f"Using a beam attenuation correction of {corr} for run {run}")
+            else:
+                corr = self.atten_dict[targ_name_no_spaces]/ self.atten_dict['Empty']
+                if self.debug > 3:
+                    print(f"Using a beam attenuation correction of {corr}")
+        # print ('Corr is ' + str(corr))
 
         return corr
 

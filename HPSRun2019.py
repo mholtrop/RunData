@@ -42,13 +42,13 @@ def attennuations_with_targ_thickness():
     So this dictionary provides target<->attenuation dictionary """
 
     attenuations = {
-        'Empty': 29.24555,
-        'empty': 29.24555,
-        'Unknown': 29.24555,
-        '4 um W': 28.40418,
-        '8 um W': 27.56255,
-        '15 um W': 26.16205,
-        '20 um W': 25.38535
+        'Empty': [10000, 10448, 29.24555],
+        'empty': [10000, 10448, 29.24555],
+        'Unknown': [10000, 10448, 29.24555],
+        '4 um W': [10000, 10448, 28.40418],
+        '8 um W': [10000, 10448, 27.56255],
+        '15 um W': [10000, 10448,26.16205],
+        '20 um W': [10000, 10448, 25.38535]
     }
 
     return attenuations

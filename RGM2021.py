@@ -26,38 +26,46 @@ except ImportError:
     sys.exit(1)
 
 
-def rgm_2021_targets():
-    """ Returns the dictionary of target name to target thickness.
-        One extra entry, named 'norm' is used for normalization of the charge curve.
-        Target thickness is in units of cm."""
-    targets = {
-        'norm': (20.e-4, 'rgba(255,100,255,0.8)'),      # Value to normalize to.
-        '8 um W ': (8.e-4, 'rgba(20,80,255,0.8)'),
-        '20 um W ': (20.e-4, 'rgba(0,120,150,0.8)')
+def rgm_2021_target_properties():
+    """ Returns the dictionary of dictionaries for target properties. """
+    target_props = {
+        'density': {     # Units: mg/cm^2
+            'empty': 0,
+            'LH': 335,
+            'LD2': 820,
+            'LHe': 625,
+            '40Ca': 310,
+            '48Ca': 310,
+            'C (Multi-foil)': 440,
+            '120Sn': 205,
+            'LAr': 698
+        },
+        'attenuation': {     # Units: number
+            'empty': 1,
+            'LH':  1,
+            'LD2': 1,
+            'LHe': 1,
+            '40Ca': 1,
+            '48Ca': 1,
+            'C (Multi-foil)': 1,
+            '120Sn': 1,
+            'LAr': 1
+        },
+        'color': {  # Plot color: r,g,b,a
+            'empty': 'rgba(200, 200, 200, 0.8)',
+            'LH':  'rgba(0, 120, 150, 0.8)',
+            'LD2': 'rgba(20, 80, 255, 0.8)',
+            'LHe': 'rgba(120, 120, 80, 0.8)',
+            '40Ca': 'rgba(0, 80, 0, 0.8)',
+            '48Ca': 'rgba(0, 150, 0, 0.8)',
+            'C (Multi-foil)': 'rgba(120, 120, 200, 0.8)',
+            '120Sn': 'rgba(120, 0, 200, 0.8)',
+            'LAr': 'rgba(120, 120, 0, 0.8)'
+        },
+
     }
 
-    return targets
-
-
-def attennuations_with_targ_thickness():
-    """ During the run we have observed that the beam attenuation depends on the target thickness too.
-    So this dictionary provides target<->attenuation dictionary """
-
-    # From logbook: https://logbooks.jlab.org/entry/3900778
-    # 0 um 36.556800
-    # 8 um 32.860550
-    # 20 um 27.330850
-    #
-    attenuations = {
-
-        'Empty': 36.556800,
-        'empty': 36.556800,
-        'Unknown': 36.556800,
-        '8 um W':  32.860550,
-        '20 um W': 27.330850
-    }
-
-    return attenuations
+    return target_props
 
 
 def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data=None):
@@ -85,6 +93,33 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data=No
 
     return runs, starts, ends
 
+def used_triggers():
+
+    Good_triggers = '.*'
+    Calibration_triggers = ' '
+
+    return Good_triggers, Calibration_triggers
+
+def setup_rundata_structures(data):
+    """Setup the data structures for parsing the databases."""
+    data.Good_triggers, data.Calibration_triggers = used_triggers()
+
+    data.Production_run_type = ["PROD77", "PROD77_PIN"]
+    data.target_dict = hps_2021_run_target_thickness()
+    data.atten_dict = attennuations_with_targ_thickness()
+    data.Current_Channel = "scaler_calc1b"
+
+    min_event_count = 10000000  # Runs with at least 10M events.
+    start_time = datatime(2019, 4, 8, 0, 0)  # Very start of run
+    end_time = datatime(2019, 4, 15, 0, 0)  # Very start of run
+#    start_time = datetime(2021, 11, 9, 0, 0)  # Start of run.
+#    end_time = datetime(2022, 01, 31, 8, 11)
+#    end_time = datetime.now()
+#    end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
+    print("Fetching the data from {} to {}".format(start_time, end_time))
+    data.get_runs(start_time, end_time, min_event_count)
+    data.select_good_runs()
+
 
 def main(argv=None):
     import argparse
@@ -94,13 +129,6 @@ def main(argv=None):
     else:
         argv = argv.split()
         argv.insert(0, sys.argv[0])  # add the program name.
-
-    # total_days_in_proposed_run - The calandar days (NOT PAC DAYS) this run was scheduled for.
-    proposed_lumi_rate = 9.470415818323063e-05  # 1(pb s) = 0.09470415818323064 * 1/(nb s)
-    total_days_in_proposed_run = 7*7
-    total_proposed_luminosity = proposed_lumi_rate * total_days_in_proposed_run * 24 * 3600 / 2
-    print(f"Total days expected in run= {total_days_in_proposed_run} = {total_days_in_proposed_run*24*3600} s")
-    print(f"Total proposed luminosity = {total_proposed_luminosity}")
 
     parser = argparse.ArgumentParser(
         description="""Make a plot, an excel spreadsheet and/or an sqlite3 database for the current run using
@@ -115,8 +143,8 @@ def main(argv=None):
     parser.add_argument('-e', '--excel', action="store_true", help="Create the Excel table of the data")
     parser.add_argument('-c', '--charge', action="store_true", help="Make a plot of charge not luminosity.")
     parser.add_argument('-C', '--chart', action="store_true", help="Put plot on plotly charts website.")
-    parser.add_argument('-f', '--date_from', type=str, help="Plot from date, eg '2021,07,03' ", default=None)
-    parser.add_argument('-t', '--date_to', type=str, help="Plot to date, eg '2022,11,22' ", default=None)
+    parser.add_argument('-f', '--date_from', type=str, help="Plot from date, eg '2021,11,09' ", default=None)
+    parser.add_argument('-t', '--date_to', type=str, help="Plot to date, eg '2022,01,22' ", default=None)
 
     args = parser.parse_args(argv[1:])
 
@@ -136,13 +164,7 @@ def main(argv=None):
         data = RunData(cache_file="", sqlcache=False, i_am_at_jlab=at_jlab)
     # data._cache_engine=None   # Turn OFF cache?
     data.debug = args.debug
-
-    # data.Good_triggers=['hps_v7.cnf','hps_v8.cnf','hps_v9.cnf','hps_v9_1.cnf',
-    #                     'hps_v9_2.cnf','hps_v10.cnf',
-    #                     'hps_v11_1.cnf','hps_v11_2.cnf','hps_v11_3.cnf','hps_v11_4.cnf',
-    #                     'hps_v11_5.cnf','hps_v11_6.cnf','hps_v12_1.cnf']
-    data.Good_triggers = '.*'
-    data.Calibration_triggers = ' '
+    setup_rundata_structures(data)
 
     data.Production_run_type = ["PROD77", "PROD77_PIN"]
     data.target_dict = rgm_2021_target_thickness()

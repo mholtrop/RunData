@@ -25,6 +25,19 @@ except ImportError:
     print("Sorry, but to make the nice plots, you really need a computer with 'plotly' installed.")
     sys.exit(1)
 
+#############################################################################################
+#  Globals to set conditions for display
+#  These are useful so they also get defined when you import this file.
+#############################################################################################
+# total_days_in_proposed_run - The calandar days (NOT PAC DAYS) this run was scheduled for.
+
+total_days_in_proposed_run = 7*7
+proposed_lumi_rate = 9.470415818323063e-05  # 1(pb s) = 0.09470415818323064 * 1/(nb s)
+total_proposed_luminosity = proposed_lumi_rate * total_days_in_proposed_run * 24 * 3600 / 2
+print(f"Total days expected in run= {total_days_in_proposed_run} = {total_days_in_proposed_run*24*3600} s")
+print(f"Total proposed luminosity = {total_proposed_luminosity}")
+Start_1pass_running = datetime(2021, 10, 19, 9, 0)
+End_1pass_running = datetime(2021, 10, 25, 12, 0)
 
 def hps_2021_run_target_thickness():
     """ Returns the dictionary of target name to target thickness.
@@ -84,6 +97,50 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data=No
                           for r in runs.index]
     return runs, starts, ends
 
+def used_triggers():
+    Good_triggers = ['hps2021_NOSINGLES2_v2_2.cnf',
+                          'hps2021_v1_2.cnf',
+                          'hps2021_v2_2.cnf',
+                          'hps2021_v2_3.cnf',
+                          'hps2021_v2_4.cnf',
+                          'hps_v2021_v2_0.cnf',
+                          'hps_1.9_v2_3.cnf',
+                          'hps_1.9_v2_4.cnf',
+                          'hps_1.9_v2_5.cnf',
+                          'hps_1.9_v2_6.cnf']
+
+    Calibration_triggers = [ 'hps2021_v2_2_moller_only.cnf',
+                                  'hps2021_v1_2_FEE.cnf',
+                                  'hps2021_v2_2_30kHz_random.cnf',
+                                  'hps2021_v2_1_30kHz_random.cnf',
+                                  'hps2021_v2_2_moller_LowLumi.cnf',
+                                  'hps_1.9_Random_30kHz_v2_3.cnf',
+                                  'hps_1.9_Moller_v2_6.cnf',
+                                  'hps2021_v2_3_SVT_WIRE_RUN.cnf',
+                                  'hps2021_FEE_straight_v2_3.cnf',
+                                  'hps2021_FEE_straight_v2_4.cnf'
+                                  ]
+
+    return Good_triggers, Calibration_triggers
+
+def setup_rundata_structures(data):
+    """Setup the data structures for parsing the databases."""
+    data.Good_triggers, data.Calibration_triggers = used_triggers()
+
+    data.Production_run_type = ["PROD77", "PROD77_PIN"]
+    data.target_dict = hps_2021_run_target_thickness()
+    data.atten_dict = None #  attennuations_with_targ_thickness()  # The corrections are already taken into account.
+    data.Current_Channel = "scaler_calc1b"
+
+    min_event_count = 10000000  # Runs with at least 10M events.
+    #    start_time = datatime(2019, 7, 17, 0, 0)  # Very start of run
+    start_time = datetime(2021, 9, 9, 0, 0)  # DAQ Issues resolved.
+    end_time = datetime(2021, 11, 5, 8, 11)
+#    end_time = datetime.now()
+#    end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
+#    print("Fetching the data from {} to {}".format(start_time, end_time))
+    data.get_runs(start_time, end_time, min_event_count)
+    data.select_good_runs()
 
 
 def main(argv=None):
@@ -94,15 +151,6 @@ def main(argv=None):
     else:
         argv = argv.split()
         argv.insert(0, sys.argv[0])  # add the program name.
-
-    # total_days_in_proposed_run - The calandar days (NOT PAC DAYS) this run was scheduled for.
-    proposed_lumi_rate = 9.470415818323063e-05  # 1(pb s) = 0.09470415818323064 * 1/(nb s)
-    total_days_in_proposed_run = 7*7
-    total_proposed_luminosity = proposed_lumi_rate * total_days_in_proposed_run * 24 * 3600 / 2
-    print(f"Total days expected in run= {total_days_in_proposed_run} = {total_days_in_proposed_run*24*3600} s")
-    print(f"Total proposed luminosity = {total_proposed_luminosity}")
-    Start_1pass_running = datetime(2021, 10, 19, 9, 0)
-    End_1pass_running = datetime(2021, 10, 25, 12, 0)
 
     parser = argparse.ArgumentParser(
         description="""Make a plot, an excel spreadsheet and/or an sqlite3 database for the HPS Run 2019
@@ -138,51 +186,15 @@ def main(argv=None):
         data = RunData(cache_file="", sqlcache=False, i_am_at_jlab=at_jlab)
     # data._cache_engine=None   # Turn OFF cache?
     data.debug = args.debug
+    setup_rundata_structures(data)
 
     # data.Good_triggers=['hps_v7.cnf','hps_v8.cnf','hps_v9.cnf','hps_v9_1.cnf',
     #                     'hps_v9_2.cnf','hps_v10.cnf',
     #                     'hps_v11_1.cnf','hps_v11_2.cnf','hps_v11_3.cnf','hps_v11_4.cnf',
     #                     'hps_v11_5.cnf','hps_v11_6.cnf','hps_v12_1.cnf']
-    data.Good_triggers = ['hps2021_NOSINGLES2_v2_2.cnf',
-                          'hps2021_v1_2.cnf',
-                          'hps2021_v2_2.cnf',
-                          'hps2021_v2_3.cnf',
-                          'hps2021_v2_4.cnf',
-                          'hps_v2021_v2_0.cnf',
-                          'hps_1.9_v2_3.cnf',
-                          'hps_1.9_v2_4.cnf',
-                          'hps_1.9_v2_5.cnf',
-                          'hps_1.9_v2_6.cnf']
-
-    data.Calibration_triggers = [ 'hps2021_v2_2_moller_only.cnf',
-                                  'hps2021_v1_2_FEE.cnf',
-                                  'hps2021_v2_2_30kHz_random.cnf',
-                                  'hps2021_v2_1_30kHz_random.cnf',
-                                  'hps2021_v2_2_moller_LowLumi.cnf',
-                                  'hps_1.9_Random_30kHz_v2_3.cnf',
-                                  'hps_1.9_Moller_v2_6.cnf',
-                                  'hps2021_v2_3_SVT_WIRE_RUN.cnf',
-                                  'hps2021_FEE_straight_v2_3.cnf',
-                                  'hps2021_FEE_straight_v2_4.cnf'
-                                  ]
 
     # 'hps2021_v2_1_30kHz_random.cnf', 'hps2021_v2_2_30kHz_random.cnf', 'hps2021_v1_2_FEE.cnf',
     # 'hps2021_v2_2_moller_only.cnf',
-    data.Production_run_type = ["PROD77", "PROD77_PIN"]
-    data.target_dict = hps_2021_run_target_thickness()
-    data.atten_dict = attennuations_with_targ_thickness()
-    data.Current_Channel = "scaler_calc1b"
-
-    min_event_count = 10000000  # Runs with at least 10M events.
-    #    start_time = datatime(2019, 7, 17, 0, 0)  # Very start of run
-    start_time = datetime(2021, 9, 9, 0, 0)  # DAQ Issues resolved.
-    # end_time = datetime(2021, 9, 11, 0, 0)
-    end_time = datetime.now()
-    end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
-
-    print("Fetching the data from {} to {}".format(start_time, end_time))
-    data.get_runs(start_time, end_time, min_event_count)
-    data.select_good_runs()
     #    data.add_current_data_to_runs()
     targets = '.*um W *'
 
@@ -204,7 +216,6 @@ def main(argv=None):
     if args.debug:
         print("Calibration runs: ", calib_runs)
 
-    print("Compute cumulative charge.")
     data.compute_cumulative_charge(targets, runs=plot_runs)  # Only the tungsten targets count.
     data.compute_cumulative_charge(targets, runs=plot_runs_1pass)  # Only the tungsten targets count.
 
@@ -511,3 +522,26 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+else:
+    print("HPSRun2021.py is being imported, not executed.")
+    data = RunData(cache_file="HPS_run_2021.sqlite3", i_am_at_jlab=False)
+    setup_rundata_structures(data)
+    targets = '.*um W *'
+
+    # Select runs into the different catagories.
+    plot_runs1, starts1, ends1 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
+                                                   date_max=Start_1pass_running, data=data)
+    plot_runs2, starts2, ends2 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
+                                                   date_min=End_1pass_running, data=data)
+
+    plot_runs = plot_runs1.append(plot_runs2)
+    starts = starts1.append(starts2)
+    ends = ends1.append(ends2)
+
+    plot_runs_1pass, starts_1pass, ends_1pass = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
+                                                                  date_min=Start_1pass_running,
+                                                                  date_max=End_1pass_running, data=data)
+
+    calib_runs, c_starts, c_ends = compute_plot_runs(targets='.*', run_config=data.Calibration_triggers, data=data)
+    data.compute_cumulative_charge(targets, runs=plot_runs)  # Only the tungsten targets count.
+    data.compute_cumulative_charge(targets, runs=plot_runs_1pass)  # Only the tungsten targets count.
