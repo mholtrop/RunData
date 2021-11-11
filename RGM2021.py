@@ -29,36 +29,37 @@ except ImportError:
 def rgm_2021_target_properties():
     """ Returns the dictionary of dictionaries for target properties. """
     target_props = {
-        'density': {     # Units: mg/cm^2
+        'density': {     # Units: g/cm^2
             'empty': 0,
-            'LH': 335,
-            'LD2': 820,
-            'LHe': 625,
-            '40Ca': 310,
-            '48Ca': 310,
-            'C (Multi-foil)': 440,
-            '120Sn': 205,
-            'LAr': 698
+            'norm': 0.335,
+            'H': 0.335,
+            'D2': 0.820,
+            'He': 0.625,
+            '40Ca': 0.310,
+            '48Ca': 0.310,
+            'C': 0.440,
+            '120Sn': 0.205,
+            'LAr': 0.698
         },
         'attenuation': {     # Units: number
             'empty': 1,
-            'LH':  1,
-            'LD2': 1,
-            'LHe': 1,
+            'H':  1,
+            'D2': 1,
+            'He': 1,
             '40Ca': 1,
             '48Ca': 1,
-            'C (Multi-foil)': 1,
+            'C': 1,
             '120Sn': 1,
             'LAr': 1
         },
         'color': {  # Plot color: r,g,b,a
             'empty': 'rgba(200, 200, 200, 0.8)',
-            'LH':  'rgba(0, 120, 150, 0.8)',
-            'LD2': 'rgba(20, 80, 255, 0.8)',
-            'LHe': 'rgba(120, 120, 80, 0.8)',
+            'H':  'rgba(0, 120, 150, 0.8)',
+            'D2': 'rgba(20, 80, 255, 0.8)',
+            'He': 'rgba(120, 120, 80, 0.8)',
             '40Ca': 'rgba(0, 80, 0, 0.8)',
             '48Ca': 'rgba(0, 150, 0, 0.8)',
-            'C (Multi-foil)': 'rgba(120, 120, 200, 0.8)',
+            'C': 'rgba(120, 120, 200, 0.8)',
             '120Sn': 'rgba(120, 0, 200, 0.8)',
             'LAr': 'rgba(120, 120, 0, 0.8)'
         },
@@ -87,7 +88,7 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data=No
                      f"DT:   {runs.loc[r, 'dt'] / 1000.:5.1f} s<br />"
                      f"NEvt: {runs.loc[r, 'event_count']:10,d}<br />"
                      f"Charge: {runs.loc[r, 'charge']:6.2f} mC <br />"
-                     f"Lumi: {runs.loc[r, 'luminosity']:6.2f} 1/pb<br />"
+                     f"Lumi: {runs.loc[r, 'luminosity']:6.2f} 1/fb<br />"
                      f"<Rate>:{runs.loc[r, 'event_rate']:6.2f}kHz<br />"
                      for r in runs.index]
 
@@ -104,18 +105,18 @@ def setup_rundata_structures(data):
     """Setup the data structures for parsing the databases."""
     data.Good_triggers, data.Calibration_triggers = used_triggers()
 
-    data.Production_run_type = ["PROD77", "PROD77_PIN"]
-    data.target_dict = hps_2021_run_target_thickness()
-    data.atten_dict = attennuations_with_targ_thickness()
+    data.Production_run_type = ["PROD66", "PROD66_PIN"]
+    data.target_properties = rgm_2021_target_properties()
+    data.target_dens = data.target_properties['density']
+    data.atten_dict = None
     data.Current_Channel = "scaler_calc1b"
+    data.LiveTime_Channel = "B_DAQ:livetime"
 
     min_event_count = 10000000  # Runs with at least 10M events.
-    start_time = datatime(2019, 4, 8, 0, 0)  # Very start of run
-    end_time = datatime(2019, 4, 15, 0, 0)  # Very start of run
-#    start_time = datetime(2021, 11, 9, 0, 0)  # Start of run.
+    start_time = datetime(2021, 11, 10, 8, 0)  # Start of run.
 #    end_time = datetime(2022, 01, 31, 8, 11)
-#    end_time = datetime.now()
-#    end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
+    end_time = datetime.now()
+    end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
     print("Fetching the data from {} to {}".format(start_time, end_time))
     data.get_runs(start_time, end_time, min_event_count)
     data.select_good_runs()
@@ -165,35 +166,22 @@ def main(argv=None):
     # data._cache_engine=None   # Turn OFF cache?
     data.debug = args.debug
     setup_rundata_structures(data)
+    data.All_Runs['luminosity'] *= 1E-3   # Rescale luminosity from 1/pb to 1/fb
 
-    data.Production_run_type = ["PROD77", "PROD77_PIN"]
-    data.target_dict = rgm_2021_target_thickness()
-    data.atten_dict = attennuations_with_targ_thickness()
-    data.Current_Channel = "scaler_calc1b"
-
-    min_event_count = 10000000  # Runs with at least 10M events.
-    #    start_time = datatime(2019, 7, 17, 0, 0)  # Very start of run
-    start_time = datetime(2021, 11, 9, 0, 0)  # DAQ Issues resolved.
-    # end_time = datetime(2021, 9, 11, 0, 0)
-    end_time = datetime.now()
-    end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
-
-    print("Fetching the data from {} to {}".format(start_time, end_time))
-    data.get_runs(start_time, end_time, min_event_count)
-    data.select_good_runs()
     #    data.add_current_data_to_runs()
-    targets = '.*um W *'
+    targets = '.*'
 
     # Select runs into the different catagories.
     plot_runs, starts, ends = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
                                                 data=data)
 
-    calib_runs, c_starts, c_ends = compute_plot_runs(targets=targets, run_config=data.Calibration_triggers, data=data)
-    if args.debug:
-        print("Calibration runs: ", calib_runs)
+    # calib_runs, c_starts, c_ends = compute_plot_runs(targets=targets, run_config=data.Calibration_triggers, data=data)
+
+    # if args.debug:
+    #     print("Calibration runs: ", calib_runs)
 
     print("Compute cumulative charge.")
-    data.compute_cumulative_charge(targets, runs=plot_runs)  # Only the tungsten targets count.
+    data.compute_cumulative_charge(targets, runs=plot_runs)
 
     if args.excel:
         print("Write new Excel table.")
@@ -220,20 +208,20 @@ def main(argv=None):
             plot_sumlumi.append(sumlumi.iloc[i-1])
             plot_sumlumi.append(sumlumi.iloc[i])
 
-        sumcharge_norm = plot_runs.loc[:, "sum_charge_norm"]
-        plot_sumcharge_norm_t = [starts.iloc[0], ends.iloc[0]]
-        plot_sumcharge_norm_v = [0, sumcharge_norm.iloc[0]]
-
-        for i in range(1, len(sumcharge_norm)):
-            plot_sumcharge_norm_t.append(starts.iloc[i])
-            plot_sumcharge_norm_t.append(ends.iloc[i])
-            plot_sumcharge_norm_v.append(sumcharge_norm.iloc[i - 1])
-            plot_sumcharge_norm_v.append(sumcharge_norm.iloc[i])
+        # sumcharge_norm = plot_runs.loc[:, "sum_charge_norm"]
+        # plot_sumcharge_norm_t = [starts.iloc[0], ends.iloc[0]]
+        # plot_sumcharge_norm_v = [0, sumcharge_norm.iloc[0]]
+        #
+        # for i in range(1, len(sumcharge_norm)):
+        #     plot_sumcharge_norm_t.append(starts.iloc[i])
+        #     plot_sumcharge_norm_t.append(ends.iloc[i])
+        #     plot_sumcharge_norm_v.append(sumcharge_norm.iloc[i - 1])
+        #     plot_sumcharge_norm_v.append(sumcharge_norm.iloc[i])
 
         plot_sumcharge_target_t = {}
         plot_sumcharge_target_v = {}
 
-        for t in data.target_dict:
+        for t in data.target_dens:
             sumch = plot_runs.loc[plot_runs["target"] == t, "sum_charge_targ"]
             sumlum = plot_runs.loc[plot_runs["target"] == t, "sum_charge_targ"]
             st = plot_runs.loc[plot_runs["target"] == t, "start_time"]
@@ -253,7 +241,9 @@ def main(argv=None):
         print("Build Plots.")
         fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-        for targ in targ_cols:
+        for targ in data.target_properties['color']:
+            if args.debug:
+                print(f"Processing plot for target {targ}")
             runs = plot_runs.target.str.contains(targ)
             fig.add_trace(
                 go.Bar(x=plot_runs.loc[runs, 'center'],
@@ -261,59 +251,28 @@ def main(argv=None):
                        width=plot_runs.loc[runs, 'dt'],
                        hovertext=plot_runs.loc[runs, 'hover'],
                        name="run with " + targ,
-                       marker=dict(color=target_colors[targ])
+                       marker=dict(color=data.target_properties['color'][targ])
                        ),
                 secondary_y=False, )
 
-        fig.add_trace(
-            go.Bar(x=calib_runs['center'],
-                   y=calib_runs['event_rate'],
-                   width=calib_runs['dt'],
-                   hovertext=calib_runs['hover'],
-                   name="Calibration runs",
-                   marker=dict(color='rgba(150,150,150,0.5)')
-                   ),
-            secondary_y=False, )
+        # fig.add_trace(
+        #     go.Bar(x=calib_runs['center'],
+        #            y=calib_runs['event_rate'],
+        #            width=calib_runs['dt'],
+        #            hovertext=calib_runs['hover'],
+        #            name="Calibration runs",
+        #            marker=dict(color='rgba(150,150,150,0.5)')
+        #            ),
+        #     secondary_y=False, )
 
         if args.charge:
             fig.add_trace(
                 go.Scatter(x=plot_sumcharge_t,
                            y=plot_sumcharge_v,
-                           line=dict(color='#B09090', width=3),
+                           line=dict(color='#F05000', width=3),
                            name="Total Charge Live"),
                 secondary_y=True)
 
-            fig.add_trace(
-                go.Scatter(x=plot_sumcharge_norm_t,
-                           y=plot_sumcharge_norm_v,
-                           line=dict(color='red', width=3),
-                           name="Tot Charge * targ thick/20 µm"),
-                secondary_y=True)
-
-            t = '8 um W '
-            fig.add_trace(
-                go.Scatter(x=plot_sumcharge_target_t[t],
-                           y=plot_sumcharge_target_v[t],
-                           line=dict(color='#990000', width=2),
-                           name="Charge on 8 µm W"),
-                secondary_y=True)
-
-            t = '20 um W '
-            fig.add_trace(
-                go.Scatter(x=plot_sumcharge_target_t[t],
-                           y=plot_sumcharge_target_v[t],
-                           line=dict(color='#009940', width=3),
-                           name="Charge on 20 µm W"),
-                secondary_y=True)
-
-            proposed_charge = (ends.iloc[-1] - starts.iloc[0]).total_seconds() * 120.e-6 * 0.5
-            fig.add_trace(
-                go.Scatter(x=[starts.iloc[0], ends.iloc[-1]],
-                           y=[0, proposed_charge],
-                           line=dict(color='#88FF99', width=2),
-                           name="120nA on 20µm W 50% up"),
-                secondary_y=True
-            )
 
 #################################################################################################################
 #                     Luminosity
@@ -326,41 +285,41 @@ def main(argv=None):
                            name="Luminosity Live"),
                 secondary_y=True)
 
-            # starts_lumi = starts.copy()
-            ends_lumi = ends.copy()
-            end_time_proposed_run = starts.iloc[0] + timedelta(days=total_days_in_proposed_run)
-            num_runs_before_eight_week_end = np.count_nonzero(ends_lumi < end_time_proposed_run)  # Drop the last run
-            # print(f"Run end: {end_time_proposed_run} has {num_runs_before_eight_week_end} runs.")
-            proposed_lumi = [0] + [(ends_lumi.iloc[i] - starts.iloc[0]).total_seconds() * proposed_lumi_rate * 0.5
-                                   for i in range(num_runs_before_eight_week_end)]  # len(ends)
-
-            # The last run completed proposed run time but kept going.
-            if ends_lumi.iloc[num_runs_before_eight_week_end] > end_time_proposed_run:
-                print(f"Fixing at index {num_runs_before_eight_week_end} of {len(ends_lumi)} ")
-                # proposed_lumi[num_runs_before_eight_week_end] = total_proposed_luminosity
-                ends_lumi = ends_lumi.append(ends_lumi.iloc[-1:])   # Duplicate last value
-                ends_lumi.iloc[num_runs_before_eight_week_end] = end_time_proposed_run
-                proposed_lumi += [total_proposed_luminosity]        # Add another value at the end.
-                print(ends_lumi.iloc[-5:])
-
-            if len(ends) > num_runs_before_eight_week_end:
-                # Extend the curve for runs past the proposed end of run, i.e for the extension time.
-                proposed_lumi += [total_proposed_luminosity for i in range(num_runs_before_eight_week_end, len(ends))]
-
-            fig.add_trace(
-                go.Scatter(x=[starts.iloc[0]] + [ends_lumi.iloc[i] for i in range(len(ends_lumi))],
-                           y=proposed_lumi,
-                           line=dict(color='#FFC030', width=3),
-                           name="120nA on 20µm W 50% up"),
-                secondary_y=True)
-
-            fig.add_trace(
-                go.Scatter(x=[ends.iloc[-1],ends.iloc[-1]],
-                           y=[plot_sumlumi[-1],plot_sumlumi[-1]],
-                           line=dict(color='#FF0000', width=1),
-                           name=f"Int. Lumi. = {plot_sumlumi[-1]:4.1f} /pb = "
-                                f"{100*plot_sumlumi[-1]/200.:3.1f}% of 200 1/pb."),
-                secondary_y=True)
+            # # starts_lumi = starts.copy()
+            # ends_lumi = ends.copy()
+            # end_time_proposed_run = starts.iloc[0] + timedelta(days=total_days_in_proposed_run)
+            # num_runs_before_eight_week_end = np.count_nonzero(ends_lumi < end_time_proposed_run)  # Drop the last run
+            # # print(f"Run end: {end_time_proposed_run} has {num_runs_before_eight_week_end} runs.")
+            # proposed_lumi = [0] + [(ends_lumi.iloc[i] - starts.iloc[0]).total_seconds() * proposed_lumi_rate * 0.5
+            #                        for i in range(num_runs_before_eight_week_end)]  # len(ends)
+            #
+            # # The last run completed proposed run time but kept going.
+            # if ends_lumi.iloc[num_runs_before_eight_week_end] > end_time_proposed_run:
+            #     print(f"Fixing at index {num_runs_before_eight_week_end} of {len(ends_lumi)} ")
+            #     # proposed_lumi[num_runs_before_eight_week_end] = total_proposed_luminosity
+            #     ends_lumi = ends_lumi.append(ends_lumi.iloc[-1:])   # Duplicate last value
+            #     ends_lumi.iloc[num_runs_before_eight_week_end] = end_time_proposed_run
+            #     proposed_lumi += [total_proposed_luminosity]        # Add another value at the end.
+            #     print(ends_lumi.iloc[-5:])
+            #
+            # if len(ends) > num_runs_before_eight_week_end:
+            #     # Extend the curve for runs past the proposed end of run, i.e for the extension time.
+            #     proposed_lumi += [total_proposed_luminosity for i in range(num_runs_before_eight_week_end, len(ends))]
+            #
+            # fig.add_trace(
+            #     go.Scatter(x=[starts.iloc[0]] + [ends_lumi.iloc[i] for i in range(len(ends_lumi))],
+            #                y=proposed_lumi,
+            #                line=dict(color='#FFC030', width=3),
+            #                name="120nA on 20µm W 50% up"),
+            #     secondary_y=True)
+            #
+            # fig.add_trace(
+            #     go.Scatter(x=[ends.iloc[-1],ends.iloc[-1]],
+            #                y=[plot_sumlumi[-1],plot_sumlumi[-1]],
+            #                line=dict(color='#FF0000', width=1),
+            #                name=f"Int. Lumi. = {plot_sumlumi[-1]:4.1f} /pb = "
+            #                     f"{100*plot_sumlumi[-1]/200.:3.1f}% of 200 1/pb."),
+            #     secondary_y=True)
 
         # Set x-axis title
         fig.update_layout(
@@ -387,20 +346,20 @@ def main(argv=None):
             titlefont=dict(size=22),
             secondary_y=False,
             tickfont=dict(size=18),
-            range=[0, 35.]
+            range=[0, 15.]
         )
 
         if args.charge:
             fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>",
                              titlefont=dict(size=22),
-                             range=[0, max(proposed_charge, plot_sumcharge_v[-1])],
+                             range=[0, max(1, plot_sumcharge_v[-1])],  # proposed_charge
                              secondary_y=True,
                              tickfont=dict(size=18)
                              )
         else:
-            fig.update_yaxes(title_text="<b>Integrated Luminosity (1/pb)</b>",
+            fig.update_yaxes(title_text="<b>Integrated Luminosity (1/fb)</b>",
                              titlefont=dict(size=22),
-                             range=[0, 1.05*max(proposed_lumi[-1], plot_sumlumi[-1])],
+                             range=[0, 1.05*max(1, plot_sumlumi[-1])],  # proposed_lumi[-1]
                              secondary_y=True,
                              tickfont=dict(size=18)
                              )

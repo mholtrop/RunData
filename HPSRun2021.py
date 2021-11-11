@@ -31,6 +31,11 @@ except ImportError:
 #############################################################################################
 # total_days_in_proposed_run - The calandar days (NOT PAC DAYS) this run was scheduled for.
 
+# This will be over written in main and filled with actual arguments.
+class args:
+    def __init__(self):
+        self.debug = 1
+
 total_days_in_proposed_run = 7*7
 proposed_lumi_rate = 9.470415818323063e-05  # 1(pb s) = 0.09470415818323064 * 1/(nb s)
 total_proposed_luminosity = proposed_lumi_rate * total_days_in_proposed_run * 24 * 3600 / 2
@@ -39,37 +44,38 @@ print(f"Total proposed luminosity = {total_proposed_luminosity}")
 Start_1pass_running = datetime(2021, 10, 19, 9, 0)
 End_1pass_running = datetime(2021, 10, 25, 12, 0)
 
-def hps_2021_run_target_thickness():
-    """ Returns the dictionary of target name to target thickness.
-        One extra entry, named 'norm' is used for filling the
-        Target thickness is in units of cm."""
-    targets = {
-        'norm': 20.e-4,       # Value to normalize to.
-        '8 um W ': 8.e-4,
-        '20 um W ': 20.e-4
+def hps_2021_target_properties():
+    """ Returns the dictionary of dictionaries for target properties. """
+    target_props = {
+        'density': {     # Units: g/cm^2 = rho * thickness/ molar mass
+            # rho = 19.3 g/cm^3 for Tungsten.
+            # mmass = 183.84*u.gram/u.mol for Tungsten.
+            'norm':     20.e-4*19.3/183.84,  # Value to normalize to.
+            '8 um W ':   8.e-4*19.3/183.84,
+            '20 um W ': 20.e-4*19.3/183.84
+        },
+        # 'attenuation': {
+        # 'Empty': 36.556800,
+        # 'empty': 36.556800,
+        # 'Unknown': 36.556800,
+        # '8 um W':  32.860550,
+        # '20 um W': 27.330850
+        #  },
+        'attenuation': {     # Units: number
+            'empty': 1,
+            '8 um W':  1,
+            '20 um W': 1
+        },
+        'color': {  # Plot color: r,g,b,a
+            'norm'   : 'rgba(0,0,0,0)',
+            '8 um W ': 'rgba(20,80,255,0.8)',
+            '20 um W ': 'rgba(0,120,150,0.8)'
+        },
     }
-    return targets
+
+    return target_props
 
 
-def attennuations_with_targ_thickness():
-    """ During the run we have observed that the beam attenuation depends on the target thickness too.
-    So this dictionary provides target<->attenuation dictionary """
-
-    # From logbook: https://logbooks.jlab.org/entry/3900778
-    # 0 um 36.556800
-    # 8 um 32.860550
-    # 20 um 27.330850
-    #
-    attenuations = {
-
-        'Empty': 36.556800,
-        'empty': 36.556800,
-        'Unknown': 36.556800,
-        '8 um W':  32.860550,
-        '20 um W': 27.330850
-    }
-
-    return attenuations
 
 def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data=None):
     '''This function selects the runs from data according to the target, run_configuration and date'''
@@ -128,8 +134,9 @@ def setup_rundata_structures(data):
     data.Good_triggers, data.Calibration_triggers = used_triggers()
 
     data.Production_run_type = ["PROD77", "PROD77_PIN"]
-    data.target_dict = hps_2021_run_target_thickness()
-    data.atten_dict = None #  attennuations_with_targ_thickness()  # The corrections are already taken into account.
+    target_props = hps_2021_target_properties()
+    data.target_dens = target_props['density']
+    data.atten_dict = None #  target_props['attenuation']  # The corrections are already taken into account.
     data.Current_Channel = "scaler_calc1b"
 
     min_event_count = 10000000  # Runs with at least 10M events.
@@ -142,9 +149,38 @@ def setup_rundata_structures(data):
     data.get_runs(start_time, end_time, min_event_count)
     data.select_good_runs()
 
+def setup_plot_structures(data):
+    """Setup the plotting structures from the RunData structure in data.
+    This is mostly done here and not in main() so that you can use these results from the ipython command line."""
+    targets = '.*um W *'
+
+    # Select runs into the different catagories.
+    plot_runs1, starts1, ends1 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
+                                                   date_max=Start_1pass_running, data=data)
+    plot_runs2, starts2, ends2 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
+                                                   date_min=End_1pass_running, data=data)
+
+    plot_runs = plot_runs1.append(plot_runs2)
+    starts = starts1.append(starts2)
+    ends = ends1.append(ends2)
+
+    plot_runs_1pass, starts_1pass, ends_1pass = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
+                                                                  date_min=Start_1pass_running,
+                                                                  date_max=End_1pass_running, data=data)
+
+    calib_runs, c_starts, c_ends = compute_plot_runs(targets='.*', run_config=data.Calibration_triggers, data=data)
+    if args.debug:
+        print("Calibration runs: ", calib_runs)
+
+    data.compute_cumulative_charge(targets, runs=plot_runs)  # Only the tungsten targets count.
+    data.compute_cumulative_charge(targets, runs=plot_runs_1pass)  # Only the tungsten targets count.
+
+    return plot_runs, starts, ends, calib_runs, c_starts, c_ends, plot_runs_1pass, starts_1pass, ends_1pass
+
 
 def main(argv=None):
     import argparse
+    global args
 
     if argv is None:
         argv = sys.argv
@@ -184,40 +220,12 @@ def main(argv=None):
         data = RunData(cache_file="HPS_run_2021.sqlite3", i_am_at_jlab=at_jlab)
     else:
         data = RunData(cache_file="", sqlcache=False, i_am_at_jlab=at_jlab)
-    # data._cache_engine=None   # Turn OFF cache?
+
     data.debug = args.debug
     setup_rundata_structures(data)
 
-    # data.Good_triggers=['hps_v7.cnf','hps_v8.cnf','hps_v9.cnf','hps_v9_1.cnf',
-    #                     'hps_v9_2.cnf','hps_v10.cnf',
-    #                     'hps_v11_1.cnf','hps_v11_2.cnf','hps_v11_3.cnf','hps_v11_4.cnf',
-    #                     'hps_v11_5.cnf','hps_v11_6.cnf','hps_v12_1.cnf']
-
-    # 'hps2021_v2_1_30kHz_random.cnf', 'hps2021_v2_2_30kHz_random.cnf', 'hps2021_v1_2_FEE.cnf',
-    # 'hps2021_v2_2_moller_only.cnf',
-    #    data.add_current_data_to_runs()
-    targets = '.*um W *'
-
-    # Select runs into the different catagories.
-    plot_runs1, starts1, ends1 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
-                                                   date_max=Start_1pass_running, data=data)
-    plot_runs2, starts2, ends2 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
-                                                   date_min=End_1pass_running, data=data)
-
-    plot_runs = plot_runs1.append(plot_runs2)
-    starts = starts1.append(starts2)
-    ends = ends1.append(ends2)
-
-    plot_runs_1pass, starts_1pass, ends_1pass = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
-                                                                  date_min=Start_1pass_running,
-                                                                  date_max=End_1pass_running, data=data)
-
-    calib_runs, c_starts, c_ends = compute_plot_runs(targets='.*', run_config=data.Calibration_triggers, data=data)
-    if args.debug:
-        print("Calibration runs: ", calib_runs)
-
-    data.compute_cumulative_charge(targets, runs=plot_runs)  # Only the tungsten targets count.
-    data.compute_cumulative_charge(targets, runs=plot_runs_1pass)  # Only the tungsten targets count.
+    plot_runs, starts, ends, calib_runs, c_starts, c_ends,plot_runs_1pass, starts_1pass, ends_1pass = \
+        setup_plot_structures(data)
 
     if args.excel:
         print("Write new Excel table.")
@@ -257,7 +265,7 @@ def main(argv=None):
         plot_sumcharge_target_t = {}
         plot_sumcharge_target_v = {}
 
-        for t in data.target_dict:
+        for t in data.target_dens:
             sumch = plot_runs.loc[plot_runs["target"] == t, "sum_charge_targ"]
             sumlum = plot_runs.loc[plot_runs["target"] == t, "sum_charge_targ"]
             st = plot_runs.loc[plot_runs["target"] == t, "start_time"]
@@ -295,9 +303,6 @@ def main(argv=None):
                        marker=dict(color=targ_cols[targ])
                        ),
                 secondary_y=False, )
-
-        if args.debug:
-            print(f"N 1pass = {len(plot_runs_1pass)}")
 
         if len(plot_runs_1pass) > 0:
             fig.add_trace(
@@ -524,24 +529,3 @@ if __name__ == "__main__":
     sys.exit(main())
 else:
     print("HPSRun2021.py is being imported, not executed.")
-    data = RunData(cache_file="HPS_run_2021.sqlite3", i_am_at_jlab=False)
-    setup_rundata_structures(data)
-    targets = '.*um W *'
-
-    # Select runs into the different catagories.
-    plot_runs1, starts1, ends1 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
-                                                   date_max=Start_1pass_running, data=data)
-    plot_runs2, starts2, ends2 = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
-                                                   date_min=End_1pass_running, data=data)
-
-    plot_runs = plot_runs1.append(plot_runs2)
-    starts = starts1.append(starts2)
-    ends = ends1.append(ends2)
-
-    plot_runs_1pass, starts_1pass, ends_1pass = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
-                                                                  date_min=Start_1pass_running,
-                                                                  date_max=End_1pass_running, data=data)
-
-    calib_runs, c_starts, c_ends = compute_plot_runs(targets='.*', run_config=data.Calibration_triggers, data=data)
-    data.compute_cumulative_charge(targets, runs=plot_runs)  # Only the tungsten targets count.
-    data.compute_cumulative_charge(targets, runs=plot_runs_1pass)  # Only the tungsten targets count.

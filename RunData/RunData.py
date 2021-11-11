@@ -9,8 +9,9 @@
 #
 # Required externally supplied information:
 #
-# self.target_dict       = {}  # Dictionary of target name to target thickness in cm.
-# self.target_dens_dict  = {}  # Dictionary of (target density in gram/cm^3, molecular mass in gram/mole)
+# self.target_dens  = {}
+#          Dictionary of target areal density in gram/cm^2  OR
+#          a list of target thickness in cm, target density in gram/cm^3, molecular mass in gram/mole
 # self.atten_dict        = {}  # Dictionary of attenuation values for each target.
 #
 # RunData.All_Runs  - Pandas DataFrame with run number of index.
@@ -110,7 +111,7 @@ class RunData:
         self.ExcludeRuns = []
 
         self.min_event_count = 1000000
-        self.target_dict = {}
+        self.target_properties = {}
         self.target_dens = {}
         # This is a dictionary of target dependent correction factors for correcting the FCup current.
         self.atten_dict = {}
@@ -607,11 +608,15 @@ class RunData:
                 run_dict[c] = R.get_condition_value(c)
 
             run_dict["start_time"] = run_dict["run_start_time"]  # Use the run_start_time and run_end_time
-            run_dict["end_time"] = run_dict[
-                "run_end_time"]  # from the RCDB records. This allows for start/end corrections.
+            run_dict["end_time"] = run_dict["run_end_time"]      # from the RCDB records.
+            # This allows for start/end corrections.
             runs.append(run_dict)
 
         self.All_Runs = pd.DataFrame(runs)
+        self.All_Runs["target"] = [x.strip() for x in self.All_Runs["target"]]   # Squeeze spaces.
+        #
+        # TODO: We may need to add a target name translator in case the same target is given different names.
+        #
         self.All_Runs.loc[:, "selected"] = True  # Default to selected
         # Rewrite the run_config to eliminate the long directory name, which is not useful.
         self.All_Runs.loc[:, "run_config"] = [self.All_Runs.loc[r, "run_config"].split('/')[-1]
@@ -684,17 +689,18 @@ class RunData:
         #          "live_time":live_time_corr,"current_cor":current_corr})
         #
         target = self.All_Runs.loc[runnumber, "target"]
-        if target in self.target_dict:
-            target_thickness = self.target_dict[target]  # Target thickness in cm
-        else:
-            target_thickness = 0
 
         if target in self.target_dens:
-            target_rho = self.target_dens[target][0]
-            target_mmass = self.target_dens[target][1]
+            if (type(self.target_dens[target]) is float) or (type(self.target_dens[target]) is int):
+                target_dens = self.target_dens[target]
+            else:
+                target_thick = self.target_dens[target][0]
+                target_rho = self.target_dens[target][1]
+                target_mmass = self.target_dens[target][2]
+                target_dens = target_rho * target_thick / target_mmass
         else:
-            target_rho = 19.3           # rho = 19.3 g/cm^3 for Tungsten.
-            target_mmass = 183.84  # mmass = 183.84*u.gram/u.mol for Tungsten.
+            target_dens = 1.
+
         # 1 C/e = 6.241509074460763e+18  so 1 mC/e = 6.241509074460763e+15
         charge = self.All_Runs.loc[runnumber, "charge"]  # Integrated number of e- in beam
         # Avogadro = 6.02214076e+23 / mole
@@ -704,7 +710,7 @@ class RunData:
         # ((1.*u.avogadro_constant*1.*u.cm * 1.*u.g/(1*u.Unit('cm^3'))/(1.*u.Unit('g/mol')))*
         #    (1*u.mC/(1*u.elementary_charge))).to('1/fb') =
         # 6.241509074460763e+15 * 6.02214076e-16 = 3.758724620122004
-        lumi = 3758.724620122003 * charge * target_rho * target_thickness / target_mmass   # In 1/pb
+        lumi = 3758.724620122003 * charge * target_dens   # In 1/pb
         self.All_Runs.loc[runnumber, "luminosity"] = lumi
         return
 
@@ -853,15 +859,20 @@ class RunData:
         runs.loc[selected, "sum_charge"] = np.cumsum(runs.loc[selected, "charge"])
         runs.loc[selected, "sum_lumi"] = np.cumsum(runs.loc[selected, "luminosity"])
 
-        sum_charge_per_target = self.target_dict.copy()
+        sum_charge_per_target = self.target_dens.copy()
         for k in sum_charge_per_target:
             sum_charge_per_target[k] = 0.
 
-        if 'norm' in self.target_dict:
+        if 'norm' in self.target_dens:
             cumsum_charge_norm = 0.
             for run in selected:
-                if runs.loc[run, "target"] in self.target_dict:
-                    target_norm = self.target_dict[runs.loc[run, "target"]] / self.target_dict['norm']
+                target = runs.loc[run, "target"]
+                if target in self.target_dens:
+                    if (type(self.target_dens[target]) is float) or (type(self.target_dens[target]) is int):
+                        target_norm = self.target_dens[target]/self.target_dens['norm']
+                    else:
+                        target_norm = self.target_dens[target][0]/self.target_dens['norm'][0]
+
                     if not np.isnan(runs.loc[run, "charge"]):
                         sum_charge_per_target[runs.loc[run, "target"]] += runs.loc[run, "charge"]
                         runs.loc[run, "sum_charge_targ"] = sum_charge_per_target[
