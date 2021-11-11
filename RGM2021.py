@@ -387,11 +387,11 @@ def main(argv=None):
             )
 
         print("Show plots.")
-        fig.write_image("HPSRun2021_progress.pdf", width=2048, height=900)
-        fig.write_image("HPSRun2021_progress.png", width=2048, height=900)
-        fig.write_html("HPSRun2021_progress.html")
+        fig.write_image("RGM2021_progress.pdf", width=2048, height=900)
+        fig.write_image("RGM2021_progress.png", width=2048, height=900)
+        fig.write_html("RGM2021_progress.html")
         if args.chart:
-            charts.plot(fig, filename='Run2021_edit', width=2048, height=900, auto_open=True)
+            charts.plot(fig, filename='RGM2021_edit', width=2048, height=900, auto_open=True)
         if args.live:
             fig.show(width=2048, height=900)  # width=1024,height=768
 
