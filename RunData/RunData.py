@@ -605,8 +605,11 @@ class RunData:
                 continue
 
             for c in self.Useful_conditions:
-                run_dict[c] = R.get_condition_value(c)
-
+                value = R.get_condition_value(c)
+                if value is not None:          # Try to scrub for junk input. This may need expanding depending on junk.
+                    run_dict[c] = value
+                else:
+                    run_dict[c] = "None"
             run_dict["start_time"] = run_dict["run_start_time"]  # Use the run_start_time and run_end_time
             run_dict["end_time"] = run_dict["run_end_time"]      # from the RCDB records.
             # This allows for start/end corrections.
