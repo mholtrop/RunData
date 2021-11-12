@@ -29,6 +29,20 @@ except ImportError:
 def rgm_2021_target_properties():
     """ Returns the dictionary of dictionaries for target properties. """
     target_props = {
+        'names': {     # Translation table for long name to short name.
+            'Empty': 'empty',
+            'empty': 'empty',
+            'H': 'H',
+            'Liquid Hydrogen Target': 'H',
+            'D2': 'D2',
+            'Liquid Deuterium Target': 'D2',
+            'He': 'He',
+            '40Ca': '40Ca',
+            '48Ca': '48Ca',
+            'C': 'C',
+            '120Sn': '120Sn',
+            'Ar': 'Ar'
+        },
         'density': {     # Units: g/cm^2
             'empty': 0,
             'norm': 0.335,
@@ -39,7 +53,7 @@ def rgm_2021_target_properties():
             '48Ca': 0.310,
             'C': 0.440,
             '120Sn': 0.205,
-            'LAr': 0.698
+            'Ar': 0.698
         },
         'attenuation': {     # Units: number
             'empty': 1,
@@ -50,7 +64,7 @@ def rgm_2021_target_properties():
             '48Ca': 1,
             'C': 1,
             '120Sn': 1,
-            'LAr': 1
+            'Ar': 1
         },
         'color': {  # Plot color: r,g,b,a
             'empty': 'rgba(200, 200, 200, 0.8)',
@@ -61,7 +75,7 @@ def rgm_2021_target_properties():
             '48Ca': 'rgba(0, 150, 0, 0.8)',
             'C': 'rgba(120, 120, 200, 0.8)',
             '120Sn': 'rgba(120, 0, 200, 0.8)',
-            'LAr': 'rgba(120, 120, 0, 0.8)'
+            'Ar': 'rgba(120, 120, 0, 0.8)'
         },
 
     }
@@ -92,12 +106,12 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data=No
                      f"<Rate>:{runs.loc[r, 'event_rate']:6.2f}kHz<br />"
                      for r in runs.index]
 
-    return runs, starts, ends
+    return runs
 
 def used_triggers():
 
     Good_triggers = '.*'
-    Calibration_triggers = ' '
+    Calibration_triggers = ['None', 'RNDM']
 
     return Good_triggers, Calibration_triggers
 
@@ -171,11 +185,18 @@ def main(argv=None):
     #    data.add_current_data_to_runs()
     targets = '.*'
 
-    # Select runs into the different catagories.
-    plot_runs, starts, ends = compute_plot_runs(targets=targets, run_config=data.Good_triggers,
-                                                data=data)
+    # Select runs into the different categories.
+    plot_runs = compute_plot_runs(targets=targets, run_config=data.Good_triggers, data=data)
 
-    # calib_runs, c_starts, c_ends = compute_plot_runs(targets=targets, run_config=data.Calibration_triggers, data=data)
+    calib_run_numbers = data.list_selected_runs(targets='.*', run_config=data.Calibration_triggers)
+
+    calib_runs = plot_runs.loc[calib_run_numbers]
+    calib_starts = calib_runs["start_time"]
+    calib_ends = calib_runs["end_time"]
+
+    plot_runs = plot_runs.loc[~plot_runs.index.isin(calib_run_numbers)]  # Take the calibration runs out.
+    starts = plot_runs["start_time"]
+    ends = plot_runs["end_time"]
 
     # if args.debug:
     #     print("Calibration runs: ", calib_runs)
@@ -255,15 +276,15 @@ def main(argv=None):
                        ),
                 secondary_y=False, )
 
-        # fig.add_trace(
-        #     go.Bar(x=calib_runs['center'],
-        #            y=calib_runs['event_rate'],
-        #            width=calib_runs['dt'],
-        #            hovertext=calib_runs['hover'],
-        #            name="Calibration runs",
-        #            marker=dict(color='rgba(150,150,150,0.5)')
-        #            ),
-        #     secondary_y=False, )
+        fig.add_trace(
+             go.Bar(x=calib_runs['center'],
+                    y=calib_runs['event_rate'],
+                    width=calib_runs['dt'],
+                    hovertext=calib_runs['hover'],
+                    name="Calibration runs",
+                    marker=dict(color='rgba(150,150,150,0.5)')
+                    ),
+             secondary_y=False, )
 
         if args.charge:
             fig.add_trace(
@@ -400,5 +421,5 @@ if __name__ == "__main__":
     sys.exit(main())
 else:
     print("Imported the RGM2021 info. Setting up data.")
-    data = RunData(cache_file="", sqlcache=False, i_am_at_jlab=False)
+    data = RunData(cache_file="RGM_2021.sqlite3", sqlcache=True, i_am_at_jlab=False) #
     setup_rundata_structures(data)

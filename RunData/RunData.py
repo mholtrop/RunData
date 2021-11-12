@@ -610,6 +610,14 @@ class RunData:
                     run_dict[c] = value
                 else:
                     run_dict[c] = "None"
+
+                # Do Target name translation if the target_properties are set and contain an entry, "names"
+                if (c == "target") and (self.target_properties is not None) and ("names" in self.target_properties):
+                    if run_dict[c].strip() in self.target_properties["names"]:
+                        run_dict[c] = self.target_properties["names"][run_dict[c].strip()]
+                    else:
+                        print(f"Warning. The target name {run_dict[c]} does not appear in the translation table.")
+
             run_dict["start_time"] = run_dict["run_start_time"]  # Use the run_start_time and run_end_time
             run_dict["end_time"] = run_dict["run_end_time"]      # from the RCDB records.
             # This allows for start/end corrections.
@@ -617,9 +625,7 @@ class RunData:
 
         self.All_Runs = pd.DataFrame(runs)
         self.All_Runs["target"] = [x.strip() for x in self.All_Runs["target"]]   # Squeeze spaces.
-        #
-        # TODO: We may need to add a target name translator in case the same target is given different names.
-        #
+
         self.All_Runs.loc[:, "selected"] = True  # Default to selected
         # Rewrite the run_config to eliminate the long directory name, which is not useful.
         self.All_Runs.loc[:, "run_config"] = [self.All_Runs.loc[r, "run_config"].split('/')[-1]
@@ -810,7 +816,10 @@ class RunData:
         elif type(run_config) is str:
             test_run_config = runs["run_config"].str.contains(run_config, case=False)
         elif type(run_config) is list:
-            test_run_config = runs["run_config"].isin(run_config)
+            # test_run_config = runs["run_config"].isin(run_config)  #-- This works, but requires exact match
+            test_run_config = np.array([False] * len(runs))  # Set All to false
+            for t_str in run_config:
+                test_run_config = test_run_config | runs["run_config"].str.contains(t_str, case=False)
         else:
             print("I do not know what to do with run_config = ", type(run_config))
 
