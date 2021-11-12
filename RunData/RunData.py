@@ -77,6 +77,8 @@ except ImportError:
     sys.exit(1)
 
 import numpy as np
+import warnings
+warnings.filterwarnings("ignore", 'This pattern has match groups')   # Turn off the warning for regex with () in it.
 
 from .MyaData import MyaData
 

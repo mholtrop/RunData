@@ -30,52 +30,66 @@ def rgm_2021_target_properties():
     """ Returns the dictionary of dictionaries for target properties. """
     target_props = {
         'names': {     # Translation table for long name to short name.
+            'Empty cell': 'empty',
             'Empty': 'empty',
             'empty': 'empty',
-            'H': 'H',
-            'Liquid Hydrogen Target': 'H',
-            'D2': 'D2',
-            'Liquid Deuterium Target': 'D2',
-            'He': 'He',
+            'LH2': 'LH2',
+            'H': 'LH2',
+            'Liquid Hydrogen Target': 'LH2',
+            'LD2': 'LD2',
+            'D2': 'LD2',
+            'Liquid Deuterium Target': 'LD2',
+            'He': 'L4He',
+            'L4He': 'L4He',
+            'Liquid 4He target': 'L4He',
             '40Ca': '40Ca',
             '48Ca': '48Ca',
             'C': 'C',
-            '120Sn': '120Sn',
-            'Ar': 'Ar'
+            'Carbon target 2 mm': 'C',
+            'C (x4)': 'C (x4)',
+            'Carbon target 2 mm (4x)': 'C (4x)',
+            'Sn (x4)': 'Sn (x4)',
+            '300 um Sn': 'Sn (x4)',
+            'LAr': 'LAr',
+            'Ar': 'LAr',
+            'Liquid Argon': 'LAr'
         },
         'density': {     # Units: g/cm^2
             'empty': 0,
             'norm': 0.335,
-            'H': 0.335,
-            'D2': 0.820,
-            'He': 0.625,
+            'LH2': 0.335,
+            'LD2': 0.820,
+            'L4He': 0.625,
             '40Ca': 0.310,
             '48Ca': 0.310,
             'C': 0.440,
-            '120Sn': 0.205,
-            'Ar': 0.698
+            'C (x4)': 0.440,
+            'Sn (x4)': 0.205,
+            'LAr': 0.698
         },
         'attenuation': {     # Units: number
             'empty': 1,
-            'H':  1,
-            'D2': 1,
-            'He': 1,
+            'LH2':  1,
+            'LD2': 1,
+            'L4He': 1,
             '40Ca': 1,
             '48Ca': 1,
             'C': 1,
-            '120Sn': 1,
-            'Ar': 1
+            'C (x4)': 1,
+            'Sn (x4)': 1,
+            'LAr': 1
         },
         'color': {  # Plot color: r,g,b,a
             'empty': 'rgba(200, 200, 200, 0.8)',
-            'H':  'rgba(0, 120, 150, 0.8)',
-            'D2': 'rgba(20, 80, 255, 0.8)',
-            'He': 'rgba(120, 120, 80, 0.8)',
+            'LH2':  'rgba(0, 120, 150, 0.8)',
+            'LD2': 'rgba(20, 80, 255, 0.8)',
+            'L4He': 'rgba(120, 120, 80, 0.8)',
             '40Ca': 'rgba(0, 80, 0, 0.8)',
             '48Ca': 'rgba(0, 150, 0, 0.8)',
             'C': 'rgba(120, 120, 200, 0.8)',
-            '120Sn': 'rgba(120, 0, 200, 0.8)',
-            'Ar': 'rgba(120, 120, 0, 0.8)'
+            'C(x4)': 'rgba(120, 120, 120, 0.8)',
+            'Sn (x4)': 'rgba(120, 0, 200, 0.8)',
+            'LAr': 'rgba(120, 120, 0, 0.8)'
         },
 
     }
