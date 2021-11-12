@@ -346,7 +346,7 @@ def main(argv=None):
             titlefont=dict(size=22),
             secondary_y=False,
             tickfont=dict(size=18),
-            range=[0, 15.]
+            range=[0, 1.05*max(25., plot_runs.loc[runs, 'event_rate'].max())]
         )
 
         if args.charge:
@@ -398,3 +398,7 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+else:
+    print("Imported the RGM2021 info. Setting up data.")
+    data = RunData(cache_file="", sqlcache=False, i_am_at_jlab=False)
+    setup_rundata_structures(data)
