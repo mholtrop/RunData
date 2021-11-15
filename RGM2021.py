@@ -33,6 +33,7 @@ def rgm_2021_target_properties():
             'Empty cell': 'empty',
             'Empty': 'empty',
             'empty': 'empty',
+            'None': 'empty',
             'LH2': 'LH2',
             'H': 'LH2',
             'Liquid Hydrogen Target': 'LH2',
@@ -140,7 +141,7 @@ def setup_rundata_structures(data):
     data.Current_Channel = "scaler_calc1b"
     data.LiveTime_Channel = "B_DAQ:livetime"
 
-    min_event_count = 10000000  # Runs with at least 10M events.
+    min_event_count = 1000000  # Runs with at least 1M events.
     start_time = datetime(2021, 11, 10, 8, 0)  # Start of run.
 #    end_time = datetime(2022, 01, 31, 8, 11)
     end_time = datetime.now()
