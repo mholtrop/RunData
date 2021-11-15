@@ -129,7 +129,7 @@ def used_triggers():
 
     return Good_triggers, Calibration_triggers
 
-def setup_rundata_structures(data):
+def setup_rundata_structures(data, date_from=None, date_to=None):
     """Setup the data structures for parsing the databases."""
     data.Good_triggers, data.Calibration_triggers = used_triggers()
 
@@ -141,10 +141,17 @@ def setup_rundata_structures(data):
 
     min_event_count = 10000000  # Runs with at least 10M events.
     #    start_time = datatime(2019, 7, 17, 0, 0)  # Very start of run
-    start_time = datetime(2021, 9, 9, 0, 0)  # DAQ Issues resolved.
-    end_time = datetime(2021, 11, 5, 8, 11)
-#    end_time = datetime.now()
-#    end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
+    if date_from is not None:
+        start_time = datetime.strptime(args.date_from, '%Y,%m,%d')
+    else:
+        start_time = datetime(2021, 9, 9, 0, 0)
+
+    if date_to is not None:
+        end_time = datetime.strptime(args.date_to, '%Y,%m,%d')
+    else:
+        end_time = datetime(2021, 11, 5, 8, 11)
+        # end_time = datetime.now()
+        # end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
 #    print("Fetching the data from {} to {}".format(start_time, end_time))
     data.get_runs(start_time, end_time, min_event_count)
     data.select_good_runs()
@@ -169,8 +176,6 @@ def setup_plot_structures(data):
                                                                   date_max=End_1pass_running, data=data)
 
     calib_runs, c_starts, c_ends = compute_plot_runs(targets='.*', run_config=data.Calibration_triggers, data=data)
-    if args.debug:
-        print("Calibration runs: ", calib_runs)
 
     data.compute_cumulative_charge(targets, runs=plot_runs)  # Only the tungsten targets count.
     data.compute_cumulative_charge(targets, runs=plot_runs_1pass)  # Only the tungsten targets count.
@@ -222,16 +227,32 @@ def main(argv=None):
         data = RunData(cache_file="", sqlcache=False, i_am_at_jlab=at_jlab)
 
     data.debug = args.debug
-    setup_rundata_structures(data)
+
+    setup_rundata_structures(data, args.date_from, args.date_to)
 
     plot_runs, starts, ends, calib_runs, c_starts, c_ends,plot_runs_1pass, starts_1pass, ends_1pass = \
         setup_plot_structures(data)
 
     if args.excel:
-        print("Write new Excel table.")
-        data.All_Runs.to_excel("HPSRun2021_progress.xlsx",
+        if args.date_from is not None:
+            start_time = datetime.strptime(args.date_from, '%Y,%m,%d')
+        else:
+            start_time = datetime(2021, 9, 9, 0, 0)
+
+        if args.date_to is not None:
+            end_time = datetime.strptime(args.date_to, '%Y,%m,%d')
+        else:
+            end_time = datetime(2021, 11, 5, 8, 11)
+
+        print("Write new Excel table for all runs from {start_time} to {end_time}")
+        runs = data.All_Runs.loc[data.list_selected_runs(targets='.*um W *', run_config=data.Good_triggers,
+                                                         date_min=start_time, date_max=end_time)]
+        data.compute_cumulative_charge('.*um W *', runs=runs)
+        print(data.All_Runs.keys())
+        runs.to_excel("HPSRun2021_progress.xlsx",
                                columns=['start_time', 'end_time', 'target', 'run_config', 'selected', 'event_count',
-                                        'sum_event_count', 'charge', 'sum_charge', 'luminosity', 'sum_lumi',
+                                        'megabyte_count', 'evio_files_count',
+                                        'sum_event_count', 'live_time', 'charge', 'sum_charge', 'luminosity', 'sum_lumi',
                                         'operators', 'user_comment'])
 
     #    print(data.All_Runs.to_string(columns=['start_time','end_time','target','run_config','selected','event_count','charge','user_comment']))
@@ -240,9 +261,14 @@ def main(argv=None):
     if args.plot:
         sumcharge = plot_runs.loc[:, "sum_charge"]
         sumlumi = plot_runs.loc[:, "sum_lumi"]
-        plot_sumcharge_t = [starts.iloc[0], ends.iloc[0]]
-        plot_sumcharge_v = [0, sumcharge.iloc[0]]
-        plot_sumlumi = [0, sumlumi.iloc[0]]
+        if len(starts) and len(ends):
+            plot_sumcharge_t = [starts.iloc[0], ends.iloc[0]]
+            plot_sumcharge_v = [0, sumcharge.iloc[0]]
+            plot_sumlumi = [0, sumlumi.iloc[0]]
+        else:
+            plot_sumcharge_t = [0, 0]
+            plot_sumcharge_v = [0, 0]
+            plot_sumlumi = [0, 0]
 
         for i in range(1, len(sumcharge)):
             plot_sumcharge_t.append(starts.iloc[i])
@@ -252,9 +278,14 @@ def main(argv=None):
             plot_sumlumi.append(sumlumi.iloc[i-1])
             plot_sumlumi.append(sumlumi.iloc[i])
 
-        sumcharge_norm = plot_runs.loc[:, "sum_charge_norm"]
-        plot_sumcharge_norm_t = [starts.iloc[0], ends.iloc[0]]
-        plot_sumcharge_norm_v = [0, sumcharge_norm.iloc[0]]
+        if 'sum_charge_norm' in plot_runs.keys():
+            sumcharge_norm = plot_runs.loc[:, "sum_charge_norm"]
+            plot_sumcharge_norm_v = [0, sumcharge_norm.iloc[0]]
+        else:
+            sumcharge_norm = [0]
+
+        plot_sumcharge_norm_t = plot_sumcharge_t
+
 
         for i in range(1, len(sumcharge_norm)):
             plot_sumcharge_norm_t.append(starts.iloc[i])
@@ -265,22 +296,23 @@ def main(argv=None):
         plot_sumcharge_target_t = {}
         plot_sumcharge_target_v = {}
 
-        for t in data.target_dens:
-            sumch = plot_runs.loc[plot_runs["target"] == t, "sum_charge_targ"]
-            sumlum = plot_runs.loc[plot_runs["target"] == t, "sum_charge_targ"]
-            st = plot_runs.loc[plot_runs["target"] == t, "start_time"]
-            en = plot_runs.loc[plot_runs["target"] == t, "end_time"]
+        if "sum_charge_targ" in plot_runs.keys():
+            for t in data.target_dens:
+                sumch = plot_runs.loc[plot_runs["target"] == t, "sum_charge_targ"]
+                sumlum = plot_runs.loc[plot_runs["target"] == t, "sum_charge_targ"]
+                st = plot_runs.loc[plot_runs["target"] == t, "start_time"]
+                en = plot_runs.loc[plot_runs["target"] == t, "end_time"]
 
-            if len(sumch > 3):
-                plot_sumcharge_target_t[t] = [starts.iloc[0], st.iloc[0], en.iloc[0]]
-                plot_sumcharge_target_v[t] = [0, 0, sumch.iloc[0]]
-                for i in range(1, len(sumch)):
-                    plot_sumcharge_target_t[t].append(st.iloc[i])
-                    plot_sumcharge_target_t[t].append(en.iloc[i])
-                    plot_sumcharge_target_v[t].append(sumch.iloc[i - 1])
-                    plot_sumcharge_target_v[t].append(sumch.iloc[i])
-                plot_sumcharge_target_t[t].append(ends.iloc[-1])
-                plot_sumcharge_target_v[t].append(sumch.iloc[-1])
+                if len(sumch > 3):
+                    plot_sumcharge_target_t[t] = [starts.iloc[0], st.iloc[0], en.iloc[0]]
+                    plot_sumcharge_target_v[t] = [0, 0, sumch.iloc[0]]
+                    for i in range(1, len(sumch)):
+                        plot_sumcharge_target_t[t].append(st.iloc[i])
+                        plot_sumcharge_target_t[t].append(en.iloc[i])
+                        plot_sumcharge_target_v[t].append(sumch.iloc[i - 1])
+                        plot_sumcharge_target_v[t].append(sumch.iloc[i])
+                    plot_sumcharge_target_t[t].append(ends.iloc[-1])
+                    plot_sumcharge_target_v[t].append(sumch.iloc[-1])
 
         print("Build Plots.")
         fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -340,21 +372,22 @@ def main(argv=None):
                            name="Tot Charge * targ thick/20 µm"),
                 secondary_y=True)
 
-            t = '8 um W '
-            fig.add_trace(
-                go.Scatter(x=plot_sumcharge_target_t[t],
-                           y=plot_sumcharge_target_v[t],
-                           line=dict(color='#990000', width=2),
-                           name="Charge on 8 µm W"),
-                secondary_y=True)
+            if "sum_charge_targ" in plot_runs.keys():
+                t = '8 um W '
+                fig.add_trace(
+                    go.Scatter(x=plot_sumcharge_target_t[t],
+                               y=plot_sumcharge_target_v[t],
+                               line=dict(color='#990000', width=2),
+                               name="Charge on 8 µm W"),
+                    secondary_y=True)
 
-            t = '20 um W '
-            fig.add_trace(
-                go.Scatter(x=plot_sumcharge_target_t[t],
-                           y=plot_sumcharge_target_v[t],
-                           line=dict(color='#009940', width=3),
-                           name="Charge on 20 µm W"),
-                secondary_y=True)
+                t = '20 um W '
+                fig.add_trace(
+                    go.Scatter(x=plot_sumcharge_target_t[t],
+                               y=plot_sumcharge_target_v[t],
+                               line=dict(color='#009940', width=3),
+                               name="Charge on 20 µm W"),
+                    secondary_y=True)
 
             proposed_charge = (ends.iloc[-1] - starts.iloc[0]).total_seconds() * 120.e-6 * 0.5
             fig.add_trace(
@@ -369,51 +402,59 @@ def main(argv=None):
 #                     Luminosity
 #################################################################################################################
         else:
-            fig.add_trace(
-                go.Scatter(x=plot_sumcharge_t,
-                           y=plot_sumlumi,
-                           line=dict(color='#FF3030', width=3),
-                           name="Luminosity Live"),
-                secondary_y=True)
+            if len(starts):
+                fig.add_trace(
+                    go.Scatter(x=plot_sumcharge_t,
+                               y=plot_sumlumi,
+                               line=dict(color='#FF3030', width=3),
+                               name="Luminosity Live"),
+                    secondary_y=True)
 
-            # starts_lumi = starts.copy()
-            ends_lumi = ends.copy()
-            end_time_proposed_run = starts.iloc[0] + timedelta(days=total_days_in_proposed_run)
-            num_runs_before_eight_week_end = np.count_nonzero(ends_lumi < end_time_proposed_run)  # Drop the last run
-            # print(f"Run end: {end_time_proposed_run} has {num_runs_before_eight_week_end} runs.")
-            proposed_lumi_rate = 9.470415818323063e-05 # 1/(pb s) = 0.09470415818323064 * 1/(nb s)
-            proposed_lumi = [0] + [(ends_lumi.iloc[i] - starts.iloc[0]).total_seconds() * proposed_lumi_rate * 0.5
-                                   for i in range(num_runs_before_eight_week_end) ] # len(ends)
+                # starts_lumi = starts.copy()
+                ends_lumi = ends.copy()
+                end_time_proposed_run = starts.iloc[0] + timedelta(days=total_days_in_proposed_run)
+                num_runs_before_eight_week_end = np.count_nonzero(ends_lumi < end_time_proposed_run)  # Drop the last run
+                # print(f"Run end: {end_time_proposed_run} has {num_runs_before_eight_week_end} runs.")
+                proposed_lumi_rate = 9.470415818323063e-05 # 1/(pb s) = 0.09470415818323064 * 1/(nb s)
+                proposed_lumi = [0] + [(ends_lumi.iloc[i] - starts.iloc[0]).total_seconds() * proposed_lumi_rate * 0.5
+                                       for i in range(num_runs_before_eight_week_end) ] # len(ends)
 
-            # The last run completed proposed run time but kept going.
-            if ends_lumi.iloc[num_runs_before_eight_week_end] > end_time_proposed_run:
-                print(f"Fixing at index {num_runs_before_eight_week_end} of {len(ends_lumi)} ")
-                # proposed_lumi[num_runs_before_eight_week_end] = total_proposed_luminosity
-                ends_lumi = ends_lumi.append(ends_lumi.iloc[-1:])   # Duplicate last value
-                ends_lumi.iloc[num_runs_before_eight_week_end] = end_time_proposed_run
-                proposed_lumi += [total_proposed_luminosity]        # Add another value at the end.
-                print(ends_lumi.iloc[-5:])
+                # The last run completed proposed run time but kept going.
+                if ends_lumi.iloc[num_runs_before_eight_week_end-1] > end_time_proposed_run:
+                    print(f"Fixing at index {num_runs_before_eight_week_end} of {len(ends_lumi)} ")
+                    # proposed_lumi[num_runs_before_eight_week_end] = total_proposed_luminosity
+                    ends_lumi = ends_lumi.append(ends_lumi.iloc[-1:])   # Duplicate last value
+                    ends_lumi.iloc[num_runs_before_eight_week_end] = end_time_proposed_run
+                    proposed_lumi += [total_proposed_luminosity]        # Add another value at the end.
+                    print(ends_lumi.iloc[-5:])
 
-            if len(ends) > num_runs_before_eight_week_end:
-                # Extend the curve for runs past the proposed end of run, i.e for the extension time.
-                proposed_lumi += [ total_proposed_luminosity for i
-                                   in range(num_runs_before_eight_week_end, len(ends)) ]
+                if len(ends) > num_runs_before_eight_week_end:
+                    # Extend the curve for runs past the proposed end of run, i.e for the extension time.
+                    proposed_lumi += [ total_proposed_luminosity for i
+                                       in range(num_runs_before_eight_week_end, len(ends)) ]
 
-            fig.add_trace(
-                go.Scatter(x=[starts.iloc[0]] + [ends_lumi.iloc[i] for i in range(len(ends_lumi))],
-#                           y=[0, proposed_lumi],
-                           y=proposed_lumi,
-                           line=dict(color='#FFC030', width=3),
-                           name="120nA on 20µm W 50% up"),
-                           secondary_y=True)
+                fig.add_trace(
+                    go.Scatter(x=[starts.iloc[0]] + [ends_lumi.iloc[i] for i in range(len(ends_lumi))],
+    #                           y=[0, proposed_lumi],
+                               y=proposed_lumi,
+                               line=dict(color='#FFC030', width=3),
+                               name="120nA on 20µm W 50% up"),
+                               secondary_y=True)
 
-            fig.add_trace(
-                go.Scatter(x=[ends.iloc[-1],ends.iloc[-1]],
-                           y=[plot_sumlumi[-1],plot_sumlumi[-1]],
-                           line=dict(color='#FF0000', width=1),
-                           name=f"Int. Lumi. = {plot_sumlumi[-1]:4.1f} /pb = "
-                                f"{100*plot_sumlumi[-1]/200.:3.1f}% of 200 1/pb."),
-                           secondary_y=True)
+                fig.add_trace(
+                    go.Scatter(x=[ends.iloc[-1],ends.iloc[-1]],
+                               y=[plot_sumlumi[-1],plot_sumlumi[-1]],
+                               line=dict(color='#FF0000', width=1),
+                               name=f"Int. Lumi. = {plot_sumlumi[-1]:4.1f} /pb = "
+                                    f"{100*plot_sumlumi[-1]/200.:3.1f}% of 200 1/pb."),
+                               secondary_y=True)
+
+                fig.update_yaxes(title_text="<b>Integrated Luminosity (1/pb)</b>",
+                                 titlefont=dict(size=22),
+                                 range=[0, 1.05 * max(proposed_lumi[-1], plot_sumlumi[-1])],
+                                 secondary_y=True,
+                                 tickfont=dict(size=18)
+                                 )
 
         # a_index = []
         # a_x = []
@@ -485,35 +526,12 @@ def main(argv=None):
                              secondary_y=True,
                              tickfont=dict(size=18)
                              )
-        else:
-            fig.update_yaxes(title_text="<b>Integrated Luminosity (1/pb)</b>",
-                             titlefont=dict(size=22),
-                             range=[0, 1.05*max(proposed_lumi[-1],plot_sumlumi[-1])],
-                             secondary_y=True,
-                             tickfont=dict(size=18)
-                             )
-
 
         fig.update_xaxes(
             title_text="Date",
             titlefont=dict(size=22),
             tickfont=dict(size=18),
         )
-
-        if (args.date_from is not None) or (args.date_to is not None):
-            if args.date_from is not None:
-                date_from = datetime.strptime(args.date_from, '%Y,%m,%d')
-            else:
-                date_from = starts.iloc[0]
-
-            if args.date_to is not None:
-                date_to = datetime.strptime(args.date_to, '%Y,%m,%d')
-            else:
-                date_to = ends.iloc[-1]
-
-            fig.update_xaxes(
-                range=[date_from, date_to]
-            )
 
         print("Show plots.")
         fig.write_image("HPSRun2021_progress.pdf", width=2048, height=900)
@@ -529,3 +547,5 @@ if __name__ == "__main__":
     sys.exit(main())
 else:
     print("HPSRun2021.py is being imported, not executed.")
+    data = RunData(cache_file="HPS_run_2021.sqlite3", i_am_at_jlab=False)
+    setup_rundata_structures(data)
