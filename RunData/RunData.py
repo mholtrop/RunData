@@ -654,10 +654,11 @@ class RunData:
         current = self.Mya.get(self.Current_Channel,
                                self.All_Runs.loc[runnumber, "start_time"],
                                self.All_Runs.loc[runnumber, "end_time"])
+        current.fillna(0, inplace=True)     # Replace Nan or None with 0
         live_time = self.Mya.get(self.LiveTime_Channel,
                                  self.All_Runs.loc[runnumber, "start_time"],
                                  self.All_Runs.loc[runnumber, "end_time"])
-
+        live_time.fillna(0, inplace=True)  # Replace Nan or None with 0
         # If there is bad data in the live_time, None or nan, then set those to zero.
         live_time.loc[live_time.value.isna(), 'value'] = 0
 
@@ -693,6 +694,7 @@ class RunData:
         # Scale conversion:  I is in nA, dt is in ms, so I*dt is in nA*ms = 1e-9 A*1e-3 s = 1e-12 C
         # If we want mC instead of Coulombs, the factor is 1e-12*1e3 = 1e-9
         #
+
         self.All_Runs.loc[runnumber, self.Current_Channel] = np.trapz(current.value, current.ms)
         self.All_Runs.loc[runnumber, "live_time"] = np.trapz(live_time.value, live_time.ms)
         self.All_Runs.loc[runnumber, "charge"] = np.trapz(current_corr, current.ms) * 1e-9  # mC
