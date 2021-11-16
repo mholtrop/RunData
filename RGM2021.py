@@ -92,8 +92,8 @@ def rgm_2021_target_properties():
             'Sn (x4)': 'rgba(120, 0, 200, 0.8)',
             'LAr': 'rgba(120, 120, 0, 0.8)'
         },
-        'color_charge': {  # Plot color: r,g,b,a
-            'empty': 'rgba(255, 200, 200, 0.8)',
+        'sums_color': {  # Plot color: r,g,b,a
+            # 'empty': 'rgba(255, 200, 200, 0.8)',
             'LH2': 'rgba(255, 120, 150, 0.8)',
             'LD2': 'rgba(255, 80, 255, 0.8)',
             'L4He': 'rgba(255, 120, 80, 0.8)',
@@ -244,6 +244,8 @@ def main(argv=None):
 
     if args.plot:
 
+        max_y_value_sums = 0.
+
         print("Build Plots.")
         fig = make_subplots(specs=[[{"secondary_y": True}]])
 
@@ -273,10 +275,10 @@ def main(argv=None):
 
         if args.charge:
             sumcharge = plot_runs.loc[:, "sum_charge"]
+            max_y_value_sums = plot_runs.sum_charge_targ.max()
 
             plot_sumcharge_t = [starts.iloc[0], ends.iloc[0]]
             plot_sumcharge_v = [0, sumcharge.iloc[0]]
-
 
             for i in range(1, len(sumcharge)):
                 plot_sumcharge_t.append(starts.iloc[i])
@@ -284,35 +286,25 @@ def main(argv=None):
                 plot_sumcharge_v.append(sumcharge.iloc[i - 1])
                 plot_sumcharge_v.append(sumcharge.iloc[i])
 
-            # sumcharge_norm = plot_runs.loc[:, "sum_charge_norm"]
-            # plot_sumcharge_norm_t = [starts.iloc[0], ends.iloc[0]]
-            # plot_sumcharge_norm_v = [0, sumcharge_norm.iloc[0]]
-            #
-            # for i in range(1, len(sumcharge_norm)):
-            #     plot_sumcharge_norm_t.append(starts.iloc[i])
-            #     plot_sumcharge_norm_t.append(ends.iloc[i])
-            #     plot_sumcharge_norm_v.append(sumcharge_norm.iloc[i - 1])
-            #     plot_sumcharge_norm_v.append(sumcharge_norm.iloc[i])
-
-            plot_sumcharge_target_t = {}
-            plot_sumcharge_target_v = {}
-
-            for t in data.target_dens:
+            for t in data.target_properties['sums_color']:
                 sumch = plot_runs.loc[plot_runs["target"] == t, "sum_charge_targ"]
                 st = plot_runs.loc[plot_runs["target"] == t, "start_time"]
                 en = plot_runs.loc[plot_runs["target"] == t, "end_time"]
 
-                if len(sumch > 3):
-                    plot_sumcharge_target_t[t] = [st.iloc[0], en.iloc[0]]
-                    plot_sumcharge_target_v[t] = [0, sumch.iloc[0]]
+                if len(sumch) > 3:
+                    plot_sumcharge_target_t = [st.iloc[0], en.iloc[0]]
+                    plot_sumcharge_target_v = [0, sumch.iloc[0]]
                     for i in range(1, len(sumch)):
-                        plot_sumcharge_target_t[t].append(st.iloc[i])
-                        plot_sumcharge_target_t[t].append(en.iloc[i])
-                        plot_sumcharge_target_v[t].append(sumch.iloc[i - 1])
-                        plot_sumcharge_target_v[t].append(sumch.iloc[i])
+                        plot_sumcharge_target_t.append(st.iloc[i])
+                        plot_sumcharge_target_t.append(en.iloc[i])
+                        plot_sumcharge_target_v.append(sumch.iloc[i - 1])
+                        plot_sumcharge_target_v.append(sumch.iloc[i])
+
+            # The lines below would draw a horizontal line to the end of the graph for each target.
             #                plot_sumcharge_target_t[t].append(ends.iloc[-1])
             #                plot_sumcharge_target_v[t].append(sumch.iloc[-1])
 
+            # The lines below would add a curve for the sum total charge, all targets added together.
             # fig.add_trace(
             #     go.Scatter(x=plot_sumcharge_t,
             #                y=plot_sumcharge_v,
@@ -320,14 +312,35 @@ def main(argv=None):
             #                name="Total Charge Live"),
             #     secondary_y=True)
 
-            for targ in data.target_dens:
-                if targ in plot_sumcharge_target_v:
                     fig.add_trace(
-                        go.Scatter(x=plot_sumcharge_target_t[targ],
-                                   y=plot_sumcharge_target_v[targ],
-                                   line=dict(color=data.target_properties['color_charge'][targ], width=3),
-                                   name=f"Total Charge on {targ}"),
+                        go.Scatter(x=plot_sumcharge_target_t,
+                                   y=plot_sumcharge_target_v,
+                                   line=dict(color=data.target_properties['sums_color'][t], width=3),
+                                   name=f"Total Charge on {t}"),
                         secondary_y=True)
+
+                    # Decorative: add a dot at the end of the curve.
+                    fig.add_trace(
+                        go.Scatter(x=[plot_sumcharge_target_t[-1]],
+                                   y=[plot_sumcharge_target_v[-1]],
+                                   marker=dict(color=data.target_properties['sums_color'][t],
+                                               size=6),
+                                   showlegend=False),
+                        secondary_y=True)
+
+                    fig.add_annotation(
+                        x=plot_sumcharge_target_t[-1],
+                        y=plot_sumcharge_target_v[-1] + max_y_value_sums*0.015,
+                        xref="x",
+                        yref="y2",
+                        text=f"<b>total: {plot_sumcharge_target_v[-1]:3.2f} mC</b>",
+                        showarrow=False,
+                        font=dict(
+                            family="Arial, sans-serif",
+                            color=data.target_properties['sums_color'][t],
+                            size=16),
+                        bgcolor="#FFFFFF"
+                    )
 
 
 
@@ -353,24 +366,30 @@ def main(argv=None):
             #                name="Luminosity Live"),
             #     secondary_y=True)
 
-            for targ in data.target_dens:
+            # We get the sums per target in two steps. Clumsy, but only way to get the maximum available in second loop
+            plot_sumlumi_target = {}                       # Store sum results.
+            for targ in data.target_properties['sums_color']:
                 selected = plot_runs.target == targ
-                plot_sumlumi_target = np.cumsum(plot_runs.loc[selected, "luminosity"])
+                if len(plot_runs.loc[selected, "luminosity"]) > 0:
+                    plot_sumlumi_target[targ] = np.cumsum(plot_runs.loc[selected, "luminosity"])
+                    max_y_value_sums = max(float(plot_sumlumi_target[targ].max()), max_y_value_sums)  # Store overall max.
+
+            for targ in plot_sumlumi_target.keys():  # data.target_properties['sums_color']:
                 plot_sumlumi_starts = plot_runs.loc[plot_runs["target"] == targ, "start_time"]
                 plot_sumlumi_ends = plot_runs.loc[plot_runs["target"] == targ, "end_time"]
-                if len(plot_sumlumi_target) > 1:
+                if len(plot_sumlumi_target[targ]) > 1:
                     plot_sumlumi_target_t = [plot_sumlumi_starts.iloc[0], plot_sumlumi_ends.iloc[0]]
-                    plot_sumlumi_target_v = [0, plot_sumlumi_target.iloc[0]]
-                    for i in range(1, len(plot_sumlumi_target)):
+                    plot_sumlumi_target_v = [0, plot_sumlumi_target[targ].iloc[0]]
+                    for i in range(1, len(plot_sumlumi_target[targ])):
                         plot_sumlumi_target_t.append(plot_sumlumi_starts.iloc[i])
                         plot_sumlumi_target_t.append(plot_sumlumi_ends.iloc[i])
-                        plot_sumlumi_target_v.append(plot_sumlumi_target.iloc[i - 1])
-                        plot_sumlumi_target_v.append(plot_sumlumi_target.iloc[i])
+                        plot_sumlumi_target_v.append(plot_sumlumi_target[targ].iloc[i - 1])
+                        plot_sumlumi_target_v.append(plot_sumlumi_target[targ].iloc[i])
 
                     fig.add_trace(
                         go.Scatter(x=plot_sumlumi_target_t,
                                    y=plot_sumlumi_target_v,
-                                   line=dict(color=data.target_properties['color_charge'][targ], width=3),
+                                   line=dict(color=data.target_properties['sums_color'][targ], width=3),
                                    name=f"Sum luminosity on {targ}"),
                         secondary_y=True)
 
@@ -378,7 +397,7 @@ def main(argv=None):
                         go.Scatter(x=[plot_sumlumi_target_t[-1]],
                                    y=[plot_sumlumi_target_v[-1]],
                                    marker=dict(
-                                       color=data.target_properties['color_charge'][targ],
+                                       color=data.target_properties['sums_color'][targ],
                                        size=6
                                        ),
                                    showlegend=False
@@ -389,14 +408,14 @@ def main(argv=None):
 
                     fig.add_annotation(
                         x=plot_sumlumi_target_t[-1],
-                        y=plot_sumlumi_target_v[-1]+0.25,
+                        y=plot_sumlumi_target_v[-1] + max_y_value_sums*0.015,
                         xref="x",
                         yref="y2",
                         text=f"<b>total: {plot_sumlumi_target_v[-1]:3.2f} 1/fb</b>",
                         showarrow=False,
                         font=dict(
                             family="Arial, sans-serif",
-                            color=data.target_properties['color_charge'][targ],
+                            color=data.target_properties['sums_color'][targ],
                             size=16),
                         bgcolor="#FFFFFF"
                     )
@@ -433,14 +452,14 @@ def main(argv=None):
         if args.charge:
             fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>",
                              titlefont=dict(size=22),
-                             range=[0, 5],  # proposed_charge
+                             range=[0, 1.05*max_y_value_sums],
                              secondary_y=True,
                              tickfont=dict(size=18)
                              )
         else:
             fig.update_yaxes(title_text="<b>Integrated Luminosity (1/fb)</b>",
                              titlefont=dict(size=22),
-                             range=[0, 1.05*np.max(plot_sumlumi_target_v)],  # proposed_lumi[-1]
+                             range=[0, 1.05*max_y_value_sums],
                              secondary_y=True,
                              tickfont=dict(size=18)
                              )
@@ -481,5 +500,6 @@ if __name__ == "__main__":
     sys.exit(main())
 else:
     print("Imported the RGM2021 info. Setting up data.")
-    data = RunData(cache_file="RGM_2021.sqlite3", sqlcache=True, i_am_at_jlab=False) #
+    data = RunData(cache_file="RGM_2021.sqlite3", sqlcache=True, i_am_at_jlab=False)
+    data.debug = 10
     setup_rundata_structures(data)
