@@ -294,10 +294,12 @@ class RunData:
                         print("WARNING: Run with is_valid_run_end not set is withing last 8 hours,"
                               " not adding to cache.")
                     # We drop the run from the table, so it will not go into the cache.
-                    self.All_Runs.drop(self.All_Runs.index[-1], inplace=True)
-                    num_runs -= 1
+ #                   self.All_Runs.drop(self.All_Runs.index[-1], inplace=True)
+ #                   num_runs -= 1
                     if len(self.All_Runs[(self.All_Runs["start_time"] > start) &
-                                         (self.All_Runs["end_time"] < end)]) <= 1:  # there is no run left.
+                                         (self.All_Runs["end_time"] < end) &
+                                         (self.All_Runs["is_valid_run_end"])]
+                           ) <= 1:  # there is no run left.
                         if self.debug:
                             print("No runs left to add.")
                         last_2_runs = self._db.session.query(Run).order_by(Run.start_time.desc()).limit(2)
@@ -307,11 +309,12 @@ class RunData:
                         end = last_2_runs[1].end_time
                         if self.debug:
                             print("Set the end to:", end)
-                        return 0, end
+                        return num_runs, end
 
             # Get the end of the last run:
             end_of_last_run = self.All_Runs[(self.All_Runs["start_time"] > start) &
-                                            (self.All_Runs["end_time"] < end)].iloc[-1].end_time
+                                            (self.All_Runs["end_time"] < end) &
+                                            (self.All_Runs["is_valid_run_end"])].iloc[-1].end_time
 
             if end_of_last_run is None or type(end_of_last_run) is not pd.Timestamp:
                 # This seems to be really, really rare.
