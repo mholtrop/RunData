@@ -877,36 +877,30 @@ class RunData:
         for k in sum_charge_per_target:
             sum_charge_per_target[k] = 0.
 
-        if 'norm' in self.target_dens:
-            cumsum_charge_norm = 0.
-            for run in selected:
-                target = runs.loc[run, "target"]
-                if target in self.target_dens:
+        cumsum_charge_norm = 0.
+        for run in selected:
+            target = runs.loc[run, "target"]
+            if target in self.target_dens:
+                target_norm = 1.
+                if 'norm' in self.target_dens:
                     if (type(self.target_dens[target]) is float) or (type(self.target_dens[target]) is int):
                         target_norm = self.target_dens[target]/self.target_dens['norm']
                     else:
                         target_norm = self.target_dens[target][0]/self.target_dens['norm'][0]
 
-                    if not np.isnan(runs.loc[run, "charge"]):
-                        sum_charge_per_target[runs.loc[run, "target"]] += runs.loc[run, "charge"]
-                        runs.loc[run, "sum_charge_targ"] = sum_charge_per_target[
-                            runs.loc[run, "target"]]
-                        cumsum_charge_norm += runs.loc[run, "charge"] * target_norm
-                        runs.loc[run, "sum_charge_norm"] = cumsum_charge_norm
+                if not np.isnan(runs.loc[run, "charge"]):
+                    sum_charge_per_target[runs.loc[run, "target"]] += runs.loc[run, "charge"]
+                    runs.loc[run, "sum_charge_targ"] = sum_charge_per_target[
+                        runs.loc[run, "target"]]
+                    cumsum_charge_norm += runs.loc[run, "charge"] * target_norm
+                    runs.loc[run, "sum_charge_norm"] = cumsum_charge_norm
 
-            if len(runs.loc[selected]):
-                return (runs.loc[selected, "sum_charge"].iloc[-1],
-                        runs.loc[selected, "sum_charge_norm"].iloc[-1],
-                        runs.loc[selected, "sum_event_count"].iloc[-1])
-            else:
-                return 0, 0, 0
+        if len(runs.loc[selected]):
+            return (runs.loc[selected, "sum_charge"].iloc[-1],
+                    runs.loc[selected, "sum_charge_norm"].iloc[-1],
+                    runs.loc[selected, "sum_event_count"].iloc[-1])
         else:
-            if len(runs.loc[selected]):
-                return (runs.loc[selected, "sum_charge"].iloc[-1],
-                        runs.loc[selected, "sum_charge"].iloc[-1],
-                        runs.loc[selected, "sum_event_count"].iloc[-1])
-            else:
-                return 0, 0, 0
+            return 0, 0, 0
 
 def attennuations_with_targ_thickness():
     """ During the run we have observed that the beam attenuation depends on the target thickness too.
