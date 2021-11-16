@@ -153,7 +153,7 @@ def setup_rundata_structures(data):
     data.Current_Channel = "IPM2C21A"  # "scaler_calc1b"
     data.LiveTime_Channel = "B_DAQ:livetime"
 
-    min_event_count = 1000000  # Runs with at least 1M events.
+    min_event_count = 500000  # Runs with at least 200k events.
     start_time = datetime(2021, 11, 10, 8, 0)  # Start of run.
 #    end_time = datetime(2022, 01, 31, 8, 11)
     end_time = datetime.now()
