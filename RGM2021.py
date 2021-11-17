@@ -446,7 +446,7 @@ def main(argv=None):
             titlefont=dict(size=22),
             secondary_y=False,
             tickfont=dict(size=18),
-            range=[0, 1.05*max(25., plot_runs.loc[runs, 'event_rate'].max())]
+            range=[0, 1.05*max(15., plot_runs.loc[runs, 'event_rate'].max())]
         )
 
         if args.charge:
