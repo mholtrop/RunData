@@ -294,8 +294,8 @@ class RunData:
                         print("WARNING: Run with is_valid_run_end not set is withing last 8 hours,"
                               " not adding to cache.")
                     # We drop the run from the table, so it will not go into the cache.
- #                   self.All_Runs.drop(self.All_Runs.index[-1], inplace=True)
- #                   num_runs -= 1
+                    self.All_Runs.drop(self.All_Runs.index[-1], inplace=True)
+                    num_runs -= 1
                     if len(self.All_Runs[(self.All_Runs["start_time"] > start) &
                                          (self.All_Runs["end_time"] < end) &
                                          (self.All_Runs["is_valid_run_end"])]
