@@ -234,10 +234,11 @@ def main(argv=None):
 
     if args.excel:
         print("Write new Excel table.")
-        data.All_Runs.to_excel("HPSRun2021_progress.xlsx",
-                               columns=['start_time', 'end_time', 'target', 'run_config', 'selected', 'event_count',
-                                        'sum_event_count', 'charge', 'sum_charge', 'luminosity', 'sum_lumi',
-                                        'operators', 'user_comment'])
+        output = plot_runs.append(calib_runs).sort_index()
+        output.to_excel("RGM2021_progress.xlsx",
+                        columns=['start_time', 'end_time', 'target', 'run_config', 'selected', 'event_count',
+                                 'sum_event_count', 'charge', 'sum_charge', 'luminosity', 'sum_lumi',
+                                 'evio_files_count', 'megabyte_count', 'operators', 'user_comment'])
 
     #    print(data.All_Runs.to_string(columns=['start_time','end_time','target','run_config','selected','event_count','charge','user_comment']))
     #    data.All_Runs.to_latex("hps_run_table.latex",columns=['start_time','end_time','target','run_config','selected','event_count','charge','operators','user_comment'])
