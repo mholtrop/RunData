@@ -316,6 +316,7 @@ def main(argv=None):
                     fig.add_trace(
                         go.Scatter(x=plot_sumcharge_target_t,
                                    y=plot_sumcharge_target_v,
+                                   mode="lines",
                                    line=dict(color=data.target_properties['sums_color'][t], width=3),
                                    name=f"Total Charge on {t}"),
                         secondary_y=True)
@@ -390,6 +391,7 @@ def main(argv=None):
                     fig.add_trace(
                         go.Scatter(x=plot_sumlumi_target_t,
                                    y=plot_sumlumi_target_v,
+                                   mode="lines",
                                    line=dict(color=data.target_properties['sums_color'][targ], width=3),
                                    name=f"Sum luminosity on {targ}"),
                         secondary_y=True)
