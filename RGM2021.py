@@ -68,6 +68,19 @@ def rgm_2021_target_properties():
             'Sn (x4)': 0.205,
             'LAr': 0.698
         },
+        'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
+            'empty': 0,
+            # 'norm': 0.335,
+            'LH2': 45,
+            'LD2': 50,
+            'L4He': 60,
+            '40Ca': 0,
+            '48Ca': 0,
+            'C': 0,
+            'C (x4)': 90.,
+            'Sn (x4)': 0.,
+            'LAr': 0.
+        },
         'attenuation': {     # Units: number
             'empty': 1,
             'LH2':  1,
@@ -85,12 +98,12 @@ def rgm_2021_target_properties():
             'LH2':  'rgba(0, 120, 150, 0.8)',
             'LD2': 'rgba(20, 80, 255, 0.8)',
             'L4He': 'rgba(120, 120, 80, 0.8)',
-            '40Ca': 'rgba(0, 80, 0, 0.8)',
-            '48Ca': 'rgba(0, 150, 0, 0.8)',
+            '40Ca': 'rgba(200, 120, 120, 0.8)',
+            '48Ca': 'rgba(240, 150, 100, 0.8)',
             'C': 'rgba(120, 120, 200, 0.8)',
-            'C(x4)': 'rgba(120, 120, 120, 0.8)',
-            'Sn (x4)': 'rgba(120, 0, 200, 0.8)',
-            'LAr': 'rgba(120, 120, 0, 0.8)'
+            'C (x4)': 'rgba(120, 120, 200, 0.8)',
+            'Sn (x4)': 'rgba(120, 200, 200, 0.8)',
+            'LAr': 'rgba(200, 200, 120, 0.8)'
         },
         'sums_color': {  # Plot color: r,g,b,a
             # 'empty': 'rgba(255, 200, 200, 0.8)',
@@ -250,10 +263,11 @@ def main(argv=None):
         print("Build Plots.")
         fig = make_subplots(specs=[[{"secondary_y": True}]])
 
+        last_targ = None
         for targ in data.target_properties['color']:
             if args.debug:
                 print(f"Processing plot for target {targ}")
-            runs = plot_runs.target.str.contains(targ)
+            runs = plot_runs.target.str.fullmatch(targ.replace('(', r"\(").replace(')', r'\)'))
             fig.add_trace(
                 go.Bar(x=plot_runs.loc[runs, 'center'],
                        y=plot_runs.loc[runs, 'event_rate'],
@@ -263,6 +277,8 @@ def main(argv=None):
                        marker=dict(color=data.target_properties['color'][targ])
                        ),
                 secondary_y=False, )
+            if np.count_nonzero(runs) > 1:
+                last_targ = targ    # Store the last target name with data for later use.
 
         fig.add_trace(
              go.Bar(x=calib_runs['center'],
@@ -287,10 +303,10 @@ def main(argv=None):
                 plot_sumcharge_v.append(sumcharge.iloc[i - 1])
                 plot_sumcharge_v.append(sumcharge.iloc[i])
 
-            for t in data.target_properties['sums_color']:
-                sumch = plot_runs.loc[plot_runs["target"] == t, "sum_charge_targ"]
-                st = plot_runs.loc[plot_runs["target"] == t, "start_time"]
-                en = plot_runs.loc[plot_runs["target"] == t, "end_time"]
+            for targ in data.target_properties['sums_color']:
+                sumch = plot_runs.loc[plot_runs["target"] == targ, "sum_charge_targ"]
+                st = plot_runs.loc[plot_runs["target"] == targ, "start_time"]
+                en = plot_runs.loc[plot_runs["target"] == targ, "end_time"]
 
                 if len(sumch) > 3:
                     plot_sumcharge_target_t = [st.iloc[0], en.iloc[0]]
@@ -317,19 +333,20 @@ def main(argv=None):
                         go.Scatter(x=plot_sumcharge_target_t,
                                    y=plot_sumcharge_target_v,
                                    mode="lines",
-                                   line=dict(color=data.target_properties['sums_color'][t], width=3),
-                                   name=f"Total Charge on {t}"),
+                                   line=dict(color=data.target_properties['sums_color'][targ], width=3),
+                                   name=f"Total Charge on {targ}"),
                         secondary_y=True)
 
                     # Decorative: add a dot at the end of the curve.
                     fig.add_trace(
                         go.Scatter(x=[plot_sumcharge_target_t[-1]],
                                    y=[plot_sumcharge_target_v[-1]],
-                                   marker=dict(color=data.target_properties['sums_color'][t],
+                                   marker=dict(color=data.target_properties['sums_color'][targ],
                                                size=6),
                                    showlegend=False),
                         secondary_y=True)
 
+                    # Decorative: add a box with an annotation of the total charge on this target.
                     fig.add_annotation(
                         x=plot_sumcharge_target_t[-1],
                         y=plot_sumcharge_target_v[-1] + max_y_value_sums*0.015,
@@ -339,10 +356,25 @@ def main(argv=None):
                         showarrow=False,
                         font=dict(
                             family="Arial, sans-serif",
-                            color=data.target_properties['sums_color'][t],
+                            color=data.target_properties['sums_color'][targ],
                             size=16),
                         bgcolor="#FFFFFF"
                     )
+
+                    # Annotate - add a curve for the expected charge at 50% efficiency.
+                    if data.target_properties['current'][targ] > 0.:
+                        expected_charge = (plot_sumcharge_target_t[-1] - plot_sumcharge_target_t[0]).total_seconds() * \
+                                          data.target_properties['current'][targ] * 1e-6 * 0.5  # charge in mC.
+                        fig.add_trace(
+                            go.Scatter(x=[plot_sumcharge_target_t[0],plot_sumcharge_target_t[-1]],
+                                       y=[0, expected_charge],
+                                       mode='lines',
+                                       line=dict(color='rgba(90, 180, 88, 0.6)', width=4),
+                                       name=f"Expected charge at 50% up",
+                                       showlegend=True if targ == last_targ else False  # Only one legend at the end.
+                                       ),
+                            secondary_y=True
+                        )
 
 
 
@@ -422,7 +454,6 @@ def main(argv=None):
                             size=16),
                         bgcolor="#FFFFFF"
                     )
-
 
         # Set x-axis title
         fig.update_layout(
