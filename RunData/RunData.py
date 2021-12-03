@@ -907,23 +907,6 @@ class RunData:
         else:
             return 0, 0, 0
 
-def attennuations_with_targ_thickness():
-    """ During the run we have observed that the beam attenuation depends on the target thickness too.
-    So this dictionary provides target<->attenuation dictionary """
-
-    attenuations = {
-        'Empty': 29.24555,
-        'empty': 29.24555,
-        'Unknown': 29.24555,
-        '4 um W': 28.40418,
-        '8 um W': 27.56255,
-        '15 um W': 26.16205,
-        '20 um W': 25.38535
-    }
-
-    return attenuations
-
-
 if __name__ == "__main__":
     import argparse
 
