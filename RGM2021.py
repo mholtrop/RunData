@@ -78,7 +78,7 @@ def rgm_2021_target_properties():
             '48Ca': 0,
             'C': 0,
             'C (x4)': 90.,
-            'Sn (x4)': 0.,
+            'Sn (x4)': 90.,
             'LAr': 0.
         },
         'attenuation': {     # Units: number
