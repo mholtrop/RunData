@@ -159,7 +159,7 @@ def setup_rundata_structures(data):
     """Setup the data structures for parsing the databases."""
     data.Good_triggers, data.Calibration_triggers = used_triggers()
 
-    data.Production_run_type = ["PROD66", "PROD66_PIN", "PROD66_noVTPread"]
+    data.Production_run_type = "PROD.*" # ["PROD66", "PROD66_PIN", "PROD66_noVTPread", "PROD67_noVTPread"]
     data.target_properties = rgm_2021_target_properties()
     data.target_dens = data.target_properties['density']
     data.atten_dict = None
