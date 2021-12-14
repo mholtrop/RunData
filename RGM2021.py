@@ -74,7 +74,7 @@ def rgm_2021_target_properties():
             'LH2': 45,
             'LD2': 50,
             'L4He': 60,
-            '40Ca': 80,
+            '40Ca': 150,
             '48Ca': 80,
             'C': 0,
             'C (x4)': 90.,
