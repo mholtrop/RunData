@@ -159,12 +159,13 @@ def setup_rundata_structures(data):
     """Setup the data structures for parsing the databases."""
     data.Good_triggers, data.Calibration_triggers = used_triggers()
 
-    data.Production_run_type = "PROD.*" # ["PROD66", "PROD66_PIN", "PROD66_noVTPread", "PROD67_noVTPread"]
+    data.Production_run_type = "PROD.*"  # ["PROD66", "PROD66_PIN", "PROD66_noVTPread", "PROD67_noVTPread"]
     data.target_properties = rgm_2021_target_properties()
     data.target_dens = data.target_properties['density']
     data.atten_dict = None
     data.Current_Channel = "IPM2C21A"  # "scaler_calc1b"
     data.LiveTime_Channel = "B_DAQ:livetime"
+    data.Useful_conditions.append('beam_energy')  # This run will have multiple beam energies.
 
     min_event_count = 500000  # Runs with at least 200k events.
     start_time = datetime(2021, 11, 10, 8, 0)  # Start of run.
@@ -249,8 +250,8 @@ def main(argv=None):
         print("Write new Excel table.")
         output = plot_runs.append(calib_runs).sort_index()
         output.to_excel("RGM2021_progress.xlsx",
-                        columns=['start_time', 'end_time', 'target', 'run_config', 'selected', 'event_count',
-                                 'sum_event_count', 'charge', 'sum_charge', 'luminosity', 'sum_lumi',
+                        columns=['start_time', 'end_time', 'target','beam_energy', 'run_config', 'selected',
+                                 'event_count', 'sum_event_count', 'charge', 'sum_charge', 'luminosity', 'sum_lumi',
                                  'evio_files_count', 'megabyte_count', 'operators', 'user_comment'])
 
     #    print(data.All_Runs.to_string(columns=['start_time','end_time','target','run_config','selected','event_count','charge','user_comment']))
@@ -309,13 +310,74 @@ def main(argv=None):
                 en = plot_runs.loc[plot_runs["target"] == targ, "end_time"]
 
                 if len(sumch) > 3:
+                    # Complication: When a target was taken out and then later put back in there is an interruption
+                    # that should not count for the expected charge.
+
                     plot_sumcharge_target_t = [st.iloc[0], en.iloc[0]]
                     plot_sumcharge_target_v = [0, sumch.iloc[0]]
+                    if data.target_properties['current'][targ] > 0.:
+                        plot_expected_charge_t = [st.iloc[0]]
+                        plot_expected_charge_v = [0]
+
                     for i in range(1, len(sumch)):
+                        # Detect if there is a run number gap and also
+                        # check if all the intermediate runs have the same target. If so, these were calibration
+                        # or junk runs and we continue normally. If there were other targets, we make a break in the
+                        # line.
+                        if sumch.keys()[i] - sumch.keys()[i - 1] > 1 and \
+                                not np.all(data.All_Runs.loc[sumch.keys()[i-1]:sumch.keys()[i]].target == targ):
+                            plot_sumcharge_target_t.append(st.iloc[i])
+                            plot_sumcharge_target_v.append(None)        # None causes line break.
+
+                            fig.add_trace(
+                                go.Scatter(x=[en.iloc[i-1],st.iloc[i]],
+                                           y=[plot_sumcharge_target_v[-2],plot_sumcharge_target_v[-2]],
+                                           mode="lines",
+                                           line=dict(color=data.target_properties['sums_color'][targ], width=1,
+                                                     dash="dot"),
+                                           name=f"Continuation line {targ}",
+                                           showlegend=False),
+                                secondary_y=True)
+
+                            if data.target_properties['current'][targ] > 0.:
+                                plot_expected_charge_t.append(en.iloc[i-1])
+                                current_expected_sum_charge = (en.iloc[i-1] - plot_expected_charge_t[-2]).\
+                                    total_seconds() * data.target_properties['current'][targ] * 1e-6 * 0.5
+                                plot_expected_charge_v.append(current_expected_sum_charge)
+                                # Current is in nA, Charge is in mC, at 50% efficiency.
+                                plot_expected_charge_t.append(en.iloc[i-1])
+                                plot_expected_charge_v.append(None)
+
+                                if i+1 < len(sumch):  # Add the start of the next line segment
+                                    plot_expected_charge_t.append(st.iloc[i])
+                                    plot_expected_charge_v.append(current_expected_sum_charge)
+                                    fig.add_trace(
+                                        go.Scatter(x=plot_expected_charge_t[-2:],
+                                                   y=[current_expected_sum_charge, current_expected_sum_charge],
+                                                   mode='lines',
+                                                   line=dict(color='rgba(90, 180, 88, 0.6)', width=2, dash="dot"),
+                                                   name=f"Continuation line",
+                                                   showlegend=False
+                                                   # Only one legend at the end.
+                                                   ),
+                                        secondary_y=True
+                                    )
+
+                            #
+                            # TODO: Possible extension - insert a dotted line connecting the different groupings.
+                            #
+
                         plot_sumcharge_target_t.append(st.iloc[i])
                         plot_sumcharge_target_t.append(en.iloc[i])
                         plot_sumcharge_target_v.append(sumch.iloc[i - 1])
                         plot_sumcharge_target_v.append(sumch.iloc[i])
+
+                    if data.target_properties['current'][targ] > 0.:
+                        plot_expected_charge_t.append(plot_sumcharge_target_t[-1])
+                        current_expected_sum_charge = plot_expected_charge_v[-1]
+                        current_expected_sum_charge += (plot_sumcharge_target_t[-1] - plot_expected_charge_t[-2]).\
+                            total_seconds() * data.target_properties['current'][targ] * 1e-6 * 0.5
+                        plot_expected_charge_v.append(current_expected_sum_charge)
 
             # The lines below would draw a horizontal line to the end of the graph for each target.
             #                plot_sumcharge_target_t[t].append(ends.iloc[-1])
@@ -361,13 +423,11 @@ def main(argv=None):
                         bgcolor="#FFFFFF"
                     )
 
-                    # Annotate - add a curve for the expected charge at 50% efficiency.
+                    # # Annotate - add a curve for the expected charge at 50% efficiency.
                     if data.target_properties['current'][targ] > 0.:
-                        expected_charge = (plot_sumcharge_target_t[-1] - plot_sumcharge_target_t[0]).total_seconds() * \
-                                          data.target_properties['current'][targ] * 1e-6 * 0.5  # charge in mC.
                         fig.add_trace(
-                            go.Scatter(x=[plot_sumcharge_target_t[0],plot_sumcharge_target_t[-1]],
-                                       y=[0, expected_charge],
+                            go.Scatter(x=plot_expected_charge_t,
+                                       y=plot_expected_charge_v,
                                        mode='lines',
                                        line=dict(color='rgba(90, 180, 88, 0.6)', width=4),
                                        name=f"Expected charge at 50% up",
