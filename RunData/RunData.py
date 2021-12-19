@@ -152,6 +152,7 @@ class RunData:
             self._db = RCDBProvider(connection_string)
         except:
             print("WARNING: Cannot connect to the RCDB. Will try with data from Cache only.")
+            self._db = None
 
     def start_cache(self, connector_string=True):
         """Start up the cache backend according to connector_string.
@@ -239,7 +240,7 @@ class RunData:
 
         num_runs = self.get_runs_from_rcdb(start, end, min_event)  # Get the new data from the RCDB.
 
-        if num_runs == 0:
+        if num_runs == 0 and self._db is not None:
             # We still need to adjust the "end" time, so we don't end up in a endless loop.
             # Now data.All_Runs is likely empty, so use RCDB to get end of last run.
             rcdb_runs = self._db.session.query(Run).order_by(Run.start_time.desc()).limit(20)  # Set a limit to speedup
@@ -454,6 +455,9 @@ class RunData:
 
         num_runs_cache = self._cache_get_runs(start, end, min_event)  # Get whatever we have in the cache already.
 
+        if self._db is None:  # No DB so we are done
+            return len(self.All_Runs)
+
         # Check for overlaps of request with cache.
         cache_overlaps, cache_extend_before, cache_extend_after = self._check_for_cache_hits(start, end)
 
@@ -590,9 +594,12 @@ class RunData:
         if self.debug:
             print("Getting runs from RCDB: {} - {} minevt: {}".format(start_time, end_time, min_event_count))
 
-        q = self._db.session.query(Run).join(Run.conditions).join(Condition.type) \
-            .filter(Run.start_time > start_time).filter(Run.start_time < end_time) \
-            .filter((ConditionType.name == "event_count") & (Condition.int_value > min_event_count))
+        if self._db is not None:
+            q = self._db.session.query(Run).join(Run.conditions).join(Condition.type) \
+                .filter(Run.start_time > start_time).filter(Run.start_time < end_time) \
+                .filter((ConditionType.name == "event_count") & (Condition.int_value > min_event_count))
+        else:
+            return 0
 
         if self.debug:
             print("Found {} runs.\n".format(q.count()))
