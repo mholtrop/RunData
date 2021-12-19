@@ -374,9 +374,13 @@ def main(argv=None):
 
                     if data.target_properties['current'][targ] > 0.:
                         plot_expected_charge_t.append(plot_sumcharge_target_t[-1])
-                        current_expected_sum_charge = plot_expected_charge_v[-1]
-                        current_expected_sum_charge += (plot_sumcharge_target_t[-1] - plot_expected_charge_t[-2]).\
-                            total_seconds() * data.target_properties['current'][targ] * 1e-6 * 0.5
+                        i = len(plot_expected_charge_v)-1
+                        while plot_expected_charge_v[i] is None and i>0:
+                            i -= 1
+                        current_expected_sum_charge = plot_expected_charge_v[i]
+                        current_expected_sum_charge += \
+                            (plot_sumcharge_target_t[-1] - plot_expected_charge_t[-2]).total_seconds() * \
+                            data.target_properties['current'][targ] * 1e-6 * 0.5
                         plot_expected_charge_v.append(current_expected_sum_charge)
 
             # The lines below would draw a horizontal line to the end of the graph for each target.
