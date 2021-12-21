@@ -56,7 +56,6 @@ def rgm_2021_target_properties():
             'Liquid Argon': 'LAr'
         },
         'density': {     # Units: g/cm^2
-            'empty': 0,
             # 'norm': 0.335,
             'LH2': 0.335,
             'LD2': 0.820,
@@ -66,10 +65,10 @@ def rgm_2021_target_properties():
             'C': 0.440,
             'C (x4)': 0.440,
             'Sn (x4)': 0.205,
-            'LAr': 0.698
+            'LAr': 0.698,
+            'empty': 0
         },
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
-            'empty': 0,
             # 'norm': 0.335,
             'LH2': 45,
             'LD2': 50,
@@ -79,10 +78,10 @@ def rgm_2021_target_properties():
             'C': 0,
             'C (x4)': 90.,
             'Sn (x4)': 90.,
-            'LAr': 0.
+            'LAr': 0.,
+            'empty': 0,
         },
         'attenuation': {     # Units: number
-            'empty': 1,
             'LH2':  1,
             'LD2': 1,
             'L4He': 1,
@@ -91,10 +90,10 @@ def rgm_2021_target_properties():
             'C': 1,
             'C (x4)': 1,
             'Sn (x4)': 1,
-            'LAr': 1
+            'LAr': 1,
+            'empty': 1,
         },
         'color': {  # Plot color: r,g,b,a
-            'empty': 'rgba(220, 220, 220, 0.8)',
             'LH2':  'rgba(0, 120, 150, 0.8)',
             'LD2': 'rgba(20, 80, 255, 0.8)',
             'L4He': 'rgba(120, 120, 80, 0.8)',
@@ -103,7 +102,8 @@ def rgm_2021_target_properties():
             'C': 'rgba(120, 120, 200, 0.8)',
             'C (x4)': 'rgba(120, 120, 200, 0.8)',
             'Sn (x4)': 'rgba(120, 200, 200, 0.8)',
-            'LAr': 'rgba(200, 200, 120, 0.8)'
+            'LAr': 'rgba(200, 200, 120, 0.8)',
+            'empty': 'rgba(220, 220, 220, 0.8)'
         },
         'sums_color': {  # Plot color: r,g,b,a
             # 'empty': 'rgba(255, 200, 200, 0.8)',
@@ -275,7 +275,8 @@ def main(argv=None):
                        width=plot_runs.loc[runs, 'dt'],
                        hovertext=plot_runs.loc[runs, 'hover'],
                        name="run with " + targ,
-                       marker=dict(color=data.target_properties['color'][targ])
+                       marker=dict(color=data.target_properties['color'][targ]),
+                       legendgroup="group1",
                        ),
                 secondary_y=False, )
             if np.count_nonzero(runs) > 1:
@@ -287,7 +288,8 @@ def main(argv=None):
                     width=calib_runs['dt'],
                     hovertext=calib_runs['hover'],
                     name="Calibration runs",
-                    marker=dict(color='rgba(150,150,150,0.5)')
+                    marker=dict(color='rgba(150,150,150,0.5)'),
+                    legendgroup="group1",
                     ),
              secondary_y=False, )
 
@@ -400,7 +402,9 @@ def main(argv=None):
                                    y=plot_sumcharge_target_v,
                                    mode="lines",
                                    line=dict(color=data.target_properties['sums_color'][targ], width=3),
-                                   name=f"Total Charge on {targ}"),
+                                   name=f"Total Charge on {targ}",
+                                   legendgroup="group2",
+                                   ),
                         secondary_y=True)
 
                     # Decorative: add a dot at the end of the curve.
@@ -435,7 +439,8 @@ def main(argv=None):
                                        mode='lines',
                                        line=dict(color='rgba(90, 180, 88, 0.6)', width=4),
                                        name=f"Expected charge at 50% up",
-                                       showlegend=True if targ == last_targ else False  # Only one legend at the end.
+                                       showlegend=True if targ == last_targ else False,  # Only one legend at the end.
+                                       legendgroup="group2",
                                        ),
                             secondary_y=True
                         )
@@ -490,6 +495,7 @@ def main(argv=None):
                                    mode="lines",
                                    line=dict(color=data.target_properties['sums_color'][targ], width=3),
                                    name=f"Sum luminosity on {targ}"),
+                                   legendgroup="group2",
                         secondary_y=True)
 
                     fig.add_trace(
@@ -535,6 +541,7 @@ def main(argv=None):
                 font=dict(
                     size=14
                 ),
+                orientation='h'
             )
         )
 
