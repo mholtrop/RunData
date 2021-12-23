@@ -123,12 +123,12 @@ def rgm_2021_target_properties():
     return target_props
 
 
-def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data=None):
+def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data_loc=None):
     """This function selects the runs from data according to the target, run_configuration and date"""
     # print("Compute data for plots.")
 
-    runs = data.All_Runs.loc[data.list_selected_runs(targets=targets, run_config=run_config,
-                                                     date_min=date_min, date_max=date_max)]
+    runs = data_loc.All_Runs.loc[data_loc.list_selected_runs(targets=targets, run_config=run_config,
+                                                             date_min=date_min, date_max=date_max)]
 
     starts = runs["start_time"]
     ends = runs["end_time"]
@@ -148,24 +148,26 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data=No
 
     return runs
 
+
 def used_triggers():
+    """Setup the triggers used."""
+    good_triggers = '.*'
+    calibration_triggers = ['None', 'RNDM']
 
-    Good_triggers = '.*'
-    Calibration_triggers = ['None', 'RNDM']
+    return good_triggers, calibration_triggers
 
-    return Good_triggers, Calibration_triggers
 
-def setup_rundata_structures(data):
+def setup_rundata_structures(data_loc):
     """Setup the data structures for parsing the databases."""
-    data.Good_triggers, data.Calibration_triggers = used_triggers()
+    data_loc.Good_triggers, data_loc.Calibration_triggers = used_triggers()
 
-    data.Production_run_type = "PROD.*"  # ["PROD66", "PROD66_PIN", "PROD66_noVTPread", "PROD67_noVTPread"]
-    data.target_properties = rgm_2021_target_properties()
-    data.target_dens = data.target_properties['density']
-    data.atten_dict = None
-    data.Current_Channel = "IPM2C21A"  # "scaler_calc1b"
-    data.LiveTime_Channel = "B_DAQ:livetime"
-    data.Useful_conditions.append('beam_energy')  # This run will have multiple beam energies.
+    data_loc.Production_run_type = "PROD.*"  # ["PROD66", "PROD66_PIN", "PROD66_noVTPread", "PROD67_noVTPread"]
+    data_loc.target_properties = rgm_2021_target_properties()
+    data_loc.target_dens = data_loc.target_properties['density']
+    data_loc.atten_dict = None
+    data_loc.Current_Channel = "IPM2C21A"  # "scaler_calc1b"
+    data_loc.LiveTime_Channel = "B_DAQ:livetime"
+    data_loc.Useful_conditions.append('beam_energy')  # This run will have multiple beam energies.
 
     min_event_count = 500000  # Runs with at least 200k events.
     start_time = datetime(2021, 11, 10, 8, 0)  # Start of run.
@@ -173,13 +175,16 @@ def setup_rundata_structures(data):
     end_time = datetime.now()
     end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
     print("Fetching the data from {} to {}".format(start_time, end_time))
-    data.get_runs(start_time, end_time, min_event_count)
-    data.select_good_runs()
+    data_loc.get_runs(start_time, end_time, min_event_count)
+    data_loc.select_good_runs()
+
+
+data = None
 
 
 def main(argv=None):
     import argparse
-
+    global data
     if argv is None:
         argv = sys.argv
     else:
@@ -213,7 +218,6 @@ def main(argv=None):
     else:
         at_jlab = False
 
-    data = None
     if not args.nocache:
         data = RunData(cache_file="RGM_2021.sqlite3", i_am_at_jlab=at_jlab)
     else:
@@ -227,7 +231,7 @@ def main(argv=None):
     targets = '.*'
 
     # Select runs into the different categories.
-    plot_runs = compute_plot_runs(targets=targets, run_config=data.Good_triggers, data=data)
+    plot_runs = compute_plot_runs(targets=targets, run_config=data.Good_triggers, data_loc=data)
 
     calib_run_numbers = data.list_selected_runs(targets='.*', run_config=data.Calibration_triggers)
 
@@ -250,7 +254,7 @@ def main(argv=None):
         print("Write new Excel table.")
         output = plot_runs.append(calib_runs).sort_index()
         output.to_excel("RGM2021_progress.xlsx",
-                        columns=['start_time', 'end_time', 'target','beam_energy', 'run_config', 'selected',
+                        columns=['start_time', 'end_time', 'target', 'beam_energy', 'run_config', 'selected',
                                  'event_count', 'sum_event_count', 'charge', 'sum_charge', 'luminosity', 'sum_lumi',
                                  'evio_files_count', 'megabyte_count', 'operators', 'user_comment'])
 
@@ -332,8 +336,8 @@ def main(argv=None):
                             plot_sumcharge_target_v.append(None)        # None causes line break.
 
                             fig.add_trace(
-                                go.Scatter(x=[en.iloc[i-1],st.iloc[i]],
-                                           y=[plot_sumcharge_target_v[-2],plot_sumcharge_target_v[-2]],
+                                go.Scatter(x=[en.iloc[i-1], st.iloc[i]],
+                                           y=[plot_sumcharge_target_v[-2], plot_sumcharge_target_v[-2]],
                                            mode="lines",
                                            line=dict(color=data.target_properties['sums_color'][targ], width=1,
                                                      dash="dot"),
@@ -365,10 +369,6 @@ def main(argv=None):
                                         secondary_y=True
                                     )
 
-                            #
-                            # TODO: Possible extension - insert a dotted line connecting the different groupings.
-                            #
-
                         plot_sumcharge_target_t.append(st.iloc[i])
                         plot_sumcharge_target_t.append(en.iloc[i])
                         plot_sumcharge_target_v.append(sumch.iloc[i - 1])
@@ -377,7 +377,7 @@ def main(argv=None):
                     if data.target_properties['current'][targ] > 0.:
                         plot_expected_charge_t.append(plot_sumcharge_target_t[-1])
                         i = len(plot_expected_charge_v)-1
-                        while plot_expected_charge_v[i] is None and i>0:
+                        while plot_expected_charge_v[i] is None and i > 0:
                             i -= 1
                         current_expected_sum_charge = plot_expected_charge_v[i]
                         current_expected_sum_charge += \
@@ -446,7 +446,6 @@ def main(argv=None):
                         )
 
 
-
 #################################################################################################################
 #                     Luminosity
 #################################################################################################################
@@ -475,7 +474,8 @@ def main(argv=None):
                 selected = plot_runs.target == targ
                 if len(plot_runs.loc[selected, "luminosity"]) > 0:
                     plot_sumlumi_target[targ] = np.cumsum(plot_runs.loc[selected, "luminosity"])
-                    max_y_value_sums = max(float(plot_sumlumi_target[targ].max()), max_y_value_sums)  # Store overall max.
+                    # Store overall max.
+                    max_y_value_sums = max(float(plot_sumlumi_target[targ].max()), max_y_value_sums)
 
             for targ in plot_sumlumi_target.keys():  # data.target_properties['sums_color']:
                 plot_sumlumi_starts = plot_runs.loc[plot_runs["target"] == targ, "start_time"]
@@ -484,6 +484,23 @@ def main(argv=None):
                     plot_sumlumi_target_t = [plot_sumlumi_starts.iloc[0], plot_sumlumi_ends.iloc[0]]
                     plot_sumlumi_target_v = [0, plot_sumlumi_target[targ].iloc[0]]
                     for i in range(1, len(plot_sumlumi_target[targ])):
+                        if plot_sumlumi_target[targ].keys()[i] - plot_sumlumi_target[targ].keys()[i - 1] > 1 and \
+                                not np.all(data.All_Runs.loc[plot_sumlumi_target[targ].keys()[i-1]:
+                                           plot_sumlumi_target[targ].keys()[i]].target == targ):
+                            plot_sumlumi_target_t.append(plot_sumlumi_starts.iloc[i])
+                            plot_sumlumi_target_v.append(None)
+
+                            fig.add_trace(
+                                go.Scatter(x=[plot_sumlumi_starts.iloc[i-1], plot_sumlumi_starts.iloc[i]],
+                                           y=[plot_sumlumi_target_v[-2], plot_sumlumi_target_v[-2]],
+                                           mode="lines",
+                                           line=dict(color=data.target_properties['sums_color'][targ], width=1,
+                                                     dash="dot"),
+                                           name=f"Continuation line {targ}",
+                                           legendgroup="group2",
+                                           ),
+                                secondary_y=True)
+
                         plot_sumlumi_target_t.append(plot_sumlumi_starts.iloc[i])
                         plot_sumlumi_target_t.append(plot_sumlumi_ends.iloc[i])
                         plot_sumlumi_target_v.append(plot_sumlumi_target[targ].iloc[i - 1])
@@ -494,8 +511,9 @@ def main(argv=None):
                                    y=plot_sumlumi_target_v,
                                    mode="lines",
                                    line=dict(color=data.target_properties['sums_color'][targ], width=3),
-                                   name=f"Sum luminosity on {targ}"),
+                                   name=f"Sum luminosity on {targ}",
                                    legendgroup="group2",
+                                   ),
                         secondary_y=True)
 
                     fig.add_trace(
@@ -509,7 +527,6 @@ def main(argv=None):
                                    ),
                         secondary_y=True
                     )
-
 
                     fig.add_annotation(
                         x=plot_sumlumi_target_t[-1],
@@ -568,7 +585,6 @@ def main(argv=None):
                              secondary_y=True,
                              tickfont=dict(size=18)
                              )
-
 
         fig.update_xaxes(
             title_text="Date",
