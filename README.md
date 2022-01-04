@@ -17,9 +17,19 @@ This package contains two useful classes:
 ## Important Notes: Cache
 
 WARNING: In order to make the data retrieval manageable, the RunData class includes a caching feature
-that will store the data locally. The very much speeds up the second time you run a program
+that will store the data locally. This very much speeds up the second time you run a program
 that retrieves the same data, however, this cache is not yet super smart. It can detect
 that a new run is now available and then add it, or that you are requesting a different 
 time range. It **cannot** detect that on a second run you are asking for different Mya 
 variables, or the contents of the RCDB changed. In such situations, just delete the
 cache and re-run, or use the scripts with the cache disabled.
+
+# Usage for Run Information Graphics
+
+There are several scripts included here that show how to use this package to plot information about 
+a run period. The scrips `HPSRun2021.py` and `HPSRun2019.py` show the run data information for two 
+of the HPS runs, and `RGM2021.py` and `RGM2022.py` show the graphs for Run Group M. If you would like
+add a script for a particular run group, please contact me.
+
+![Image for the HPS 2021 run.](HPSRun2021_progress.png)
+![Image for the RGM 2021 run.](RGM2021_progress.png)
