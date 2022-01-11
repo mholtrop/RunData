@@ -26,7 +26,7 @@ except ImportError:
     sys.exit(1)
 
 
-def rgm_2021_target_properties():
+def rgm_2022_target_properties():
     """ Returns the dictionary of dictionaries for target properties. """
     target_props = {
         'names': {     # Translation table for long name to short name.
@@ -162,7 +162,7 @@ def setup_rundata_structures(data_loc):
     data_loc.Good_triggers, data_loc.Calibration_triggers = used_triggers()
 
     data_loc.Production_run_type = "PROD.*"  # ["PROD66", "PROD66_PIN", "PROD66_noVTPread", "PROD67_noVTPread"]
-    data_loc.target_properties = rgm_2021_target_properties()
+    data_loc.target_properties = rgm_2022_target_properties()
     data_loc.target_dens = data_loc.target_properties['density']
     data_loc.atten_dict = None
     data_loc.Current_Channel = "IPM2C21A"  # "scaler_calc1b"
@@ -170,10 +170,10 @@ def setup_rundata_structures(data_loc):
     data_loc.Useful_conditions.append('beam_energy')  # This run will have multiple beam energies.
 
     min_event_count = 500000  # Runs with at least 200k events.
-    start_time = datetime(2021, 11, 10, 8, 0)  # Start of run.
-    end_time = datetime(2021, 12, 21, 8, 0)    # End of first run period.
-#    end_time = datetime.now()
-#    end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
+    start_time = datetime(2022, 1, 11, 8, 0)  # Start of run.
+#    end_time = datetime(2022, 01, 31, 8, 11)
+    end_time = datetime.now()
+    end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
     print("Fetching the data from {} to {}".format(start_time, end_time))
     data_loc.get_runs(start_time, end_time, min_event_count)
     data_loc.select_good_runs()
@@ -219,7 +219,7 @@ def main(argv=None):
         at_jlab = False
 
     if not args.nocache:
-        data = RunData(cache_file="RGM_2021.sqlite3", i_am_at_jlab=at_jlab)
+        data = RunData(cache_file="RGM_2022.sqlite3", i_am_at_jlab=at_jlab)
     else:
         data = RunData(cache_file="", sqlcache=False, i_am_at_jlab=at_jlab)
     # data._cache_engine=None   # Turn OFF cache?
@@ -240,7 +240,7 @@ def main(argv=None):
     calib_ends = calib_runs["end_time"]
 
     plot_runs = plot_runs.loc[~plot_runs.index.isin(calib_run_numbers)]  # Take the calibration runs out.
-    plot_runs = plot_runs.loc[~plot_runs.index.isin([1506, 1507, 1508, 1509])]  # Take error numbers out.
+#    plot_runs = plot_runs.loc[~plot_runs.index.isin([1506, 1507, 1508, 1509])]  # Take error numbers out.
     starts = plot_runs["start_time"]
     ends = plot_runs["end_time"]
 
@@ -253,7 +253,7 @@ def main(argv=None):
     if args.excel:
         print("Write new Excel table.")
         output = plot_runs.append(calib_runs).sort_index()
-        output.to_excel("RGM2021_progress.xlsx",
+        output.to_excel("RGM2022_progress.xlsx",
                         columns=['start_time', 'end_time', 'target', 'beam_energy', 'run_config', 'selected',
                                  'event_count', 'sum_event_count', 'charge', 'sum_charge', 'luminosity', 'sum_lumi',
                                  'evio_files_count', 'megabyte_count', 'operators', 'user_comment'])
@@ -545,7 +545,7 @@ def main(argv=None):
         # Set x-axis title
         fig.update_layout(
             title=go.layout.Title(
-                text="RGM 2021 Progress",
+                text="RGM 2022 Progress",
                 yanchor="top",
                 y=0.95,
                 xanchor="left",
@@ -608,11 +608,11 @@ def main(argv=None):
             )
 
         print("Show plots.")
-        fig.write_image("RGM2021_progress.pdf", width=2048, height=900)
-        fig.write_image("RGM2021_progress.png", width=2048, height=900)
-        fig.write_html("RGM2021_progress.html")
+        fig.write_image("RGM2022_progress.pdf", width=2048, height=900)
+        fig.write_image("RGM2022_progress.png", width=2048, height=900)
+        fig.write_html("RGM2022_progress.html")
         if args.chart:
-            charts.plot(fig, filename='RGM2021_edit', width=2048, height=900, auto_open=True)
+            charts.plot(fig, filename='RGM2022_edit', width=2048, height=900, auto_open=True)
         if args.live:
             fig.show(width=2048, height=900)  # width=1024,height=768
 
@@ -620,7 +620,7 @@ def main(argv=None):
 if __name__ == "__main__":
     sys.exit(main())
 else:
-    print("Imported the RGM2021 info. Setting up data.")
-    data = RunData(cache_file="RGM_2021.sqlite3", sqlcache=True, i_am_at_jlab=False)
+    print("Imported the RGM2022 info. Setting up data.")
+    data = RunData(cache_file="RGM_2022.sqlite3", sqlcache=True, i_am_at_jlab=False)
     data.debug = 10
     setup_rundata_structures(data)
