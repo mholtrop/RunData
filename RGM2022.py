@@ -70,14 +70,14 @@ def rgm_2022_target_properties():
         },
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             # 'norm': 0.335,
-            'LH2': 45,
-            'LD2': 50,
-            'L4He': 60,
-            '40Ca': 150,
-            '48Ca': 80,
+            'LH2': 5,
+            'LD2': 5,
+            'L4He': 6,
+            '40Ca': 15,
+            '48Ca': 8,
             'C': 0,
-            'C (x4)': 90.,
-            'Sn (x4)': 90.,
+            'C (x4)': 9.,
+            'Sn (x4)': 9.,
             'LAr': 0.,
             'empty': 0,
         },
@@ -303,6 +303,7 @@ def main(argv=None):
 
             plot_sumcharge_t = [starts.iloc[0], ends.iloc[0]]
             plot_sumcharge_v = [0, sumcharge.iloc[0]]
+            max_expected_charge = []
 
             for i in range(1, len(sumcharge)):
                 plot_sumcharge_t.append(starts.iloc[i])
@@ -368,6 +369,7 @@ def main(argv=None):
                                                    ),
                                         secondary_y=True
                                     )
+
 
                         plot_sumcharge_target_t.append(st.iloc[i])
                         plot_sumcharge_target_t.append(en.iloc[i])
@@ -444,6 +446,8 @@ def main(argv=None):
                                        ),
                             secondary_y=True
                         )
+                        max_expected_charge.append(plot_expected_charge_v[-1])
+                        print(f"max_expected_charge = {max_expected_charge}")
 
 
 #################################################################################################################
@@ -568,13 +572,17 @@ def main(argv=None):
             titlefont=dict(size=22),
             secondary_y=False,
             tickfont=dict(size=18),
-            range=[0, 1.05*max(15., plot_runs.loc[runs, 'event_rate'].max())]
+            range=[0, 1.05*max(25., plot_runs.loc[runs, 'event_rate'].max())]
         )
 
         if args.charge:
+            max_expected_charge.append(max_y_value_sums)
+            print(max_expected_charge)
+            max_y_2nd_scale = 1.05*np.max(max_expected_charge)
+            print(f"max_y_2nd_scale = {max_y_2nd_scale}")
             fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>",
                              titlefont=dict(size=22),
-                             range=[0, 1.05*max_y_value_sums],
+                             range=[0, max_y_2nd_scale],
                              secondary_y=True,
                              tickfont=dict(size=18)
                              )
