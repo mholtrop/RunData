@@ -75,8 +75,8 @@ def rgm_2022_target_properties():
             'L4He': 2.,
             '40Ca': 15.,
             '48Ca': 8.,
-            'C': 0,
-            'C (x4)': 9.,
+            'C': 6.,
+            'C (x4)': 1.5,
             'Sn (x4)': 9.,
             'LAr': 0.,
             'empty': 0,
@@ -447,7 +447,7 @@ def main(argv=None):
                             secondary_y=True
                         )
                         max_expected_charge.append(plot_expected_charge_v[-1])
-                        print(f"max_expected_charge = {max_expected_charge}")
+                        # print(f"max_expected_charge = {max_expected_charge}")
 
 
 #################################################################################################################
@@ -577,9 +577,9 @@ def main(argv=None):
 
         if args.charge:
             max_expected_charge.append(max_y_value_sums)
-            print(max_expected_charge)
+            # print(max_expected_charge)
             max_y_2nd_scale = 1.05*np.max(max_expected_charge)
-            print(f"max_y_2nd_scale = {max_y_2nd_scale}")
+            # print(f"max_y_2nd_scale = {max_y_2nd_scale}")
             fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>",
                              titlefont=dict(size=22),
                              range=[0, max_y_2nd_scale],
