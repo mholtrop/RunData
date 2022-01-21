@@ -78,7 +78,7 @@ def rgm_2022_target_properties():
             'C': 6.,
             'C (x4)': 1.5,
             'Sn (x4)': 9.,
-            'LAr': 0.,
+            'LAr': 2.5,
             'empty': 0,
         },
         'attenuation': {     # Units: number
