@@ -139,6 +139,10 @@ class RunData:
         out = str(self.All_Runs.loc[:, ["start_time", "end_time", "target", "run_config", "event_count"]])
         return out
 
+    def clear(self):
+        """Reset the run tables only. Done by setting self.All_Runs = None"""
+        self.All_Runs = None
+
     def start_rcdb(self):
         """Setup a connection to the RCDB
         return: an RCDB handle"""
