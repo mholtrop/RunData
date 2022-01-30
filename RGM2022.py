@@ -47,6 +47,7 @@ def rgm_2022_target_properties():
             '40Ca': '40Ca',
             '48Ca': '48Ca',
             'C': 'C',
+            'C12': 'C',
             'Carbon target 2 mm': 'C',
             'C (x4)': 'C (x4)',
             'Carbon target 2 mm (4x)': 'C (4x)',
