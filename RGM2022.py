@@ -72,16 +72,16 @@ def rgm_2022_target_properties():
         },
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             ## list of currents for each beam energy period.
-            'LH2': [5., 10.],
-            'LD2': [3.5, 7.],
-            'L4He': [2., 4.],
-            '40Ca': [15., 30.],
-            '48Ca': [8., 16.],
-            'C': [6., 90.],
-            'C (x4)': [1.5, 22.5],
-            'Sn (x4)': [9., 18.],
-            'LAr': [2.5, 22.],
-            'empty': [0., 0.]
+            'LH2': [5., 10., 10.],
+            'LD2': [3.5, 7., 7.],
+            'L4He': [2., 4., 4,],
+            '40Ca': [15., 30., 30.],
+            '48Ca': [8., 16., 16.],
+            'C': [6., 90., 90.],
+            'C (x4)': [1.5, 22.5, 22.5],
+            'Sn (x4)': [9., 18., 18.],
+            'LAr': [2.5, 22., 25.],
+            'empty': [0., 0., 0.]
         },
         'attenuation': {     # Units: number
             'LH2':  1,
@@ -226,8 +226,13 @@ def main(argv=None):
     # data._cache_engine=None   # Turn OFF cache?
     data.debug = args.debug
 
-    run_sub_periods = [(datetime(2022, 1, 11, 8, 0), datetime(2022, 1, 24, 11, 0)),
-                       (datetime(2022, 1, 27, 11, 0), datetime.now())]
+    run_sub_periods = [(datetime(2022, 1, 11,  8, 0), datetime(2022, 1, 24, 11, 0)),
+                       (datetime(2022, 1, 27, 11, 0), datetime(2022, 1, 31, 9, 0)),
+                       (datetime(2022, 1, 31, 15, 0), datetime.now())]
+
+    run_sub_energy = [2.07, 4.03, 5.99]
+    run_sub_y_placement = [0.85, 0.85, 0.85]
+
 
     if args.plot:
         max_y_value_sums = 0.
@@ -237,8 +242,6 @@ def main(argv=None):
     if args.excel:
         excel_output = pd.DataFrame()
 
-    run_sub_energy = [2.07, 4.03]
-    run_sub_yplacement = [0.85, 0.85]
 #   Loop over the different run sub-periods.
     for sub_i in range(len(run_sub_periods)):
 
@@ -326,7 +329,7 @@ def main(argv=None):
                     st = plot_runs.loc[plot_runs["target"] == targ, "start_time"]
                     en = plot_runs.loc[plot_runs["target"] == targ, "end_time"]
 
-                    if len(sumch) > 3:
+                    if len(sumch) > 2:
                         # Complication: When a target was taken out and then later put back in there is an interruption
                         # that should not count for the expected charge.
 
@@ -561,7 +564,7 @@ def main(argv=None):
             x=mid_time,
             xanchor="center",
             xref="x",
-            y=run_sub_yplacement[sub_i],
+            y=run_sub_y_placement[sub_i],
             yanchor="middle",
             yref="paper",
             text=f"<b>E<sub>b</sub> = {run_sub_energy[sub_i]} GeV</b>",
@@ -606,9 +609,10 @@ def main(argv=None):
 
         if args.charge:
             max_expected_charge.append(max_y_value_sums)
-            # print(max_expected_charge)
-            max_y_2nd_scale = 1.05*np.max(max_expected_charge)
-            # print(f"max_y_2nd_scale = {max_y_2nd_scale}")
+            print(max_expected_charge)
+            # max_y_2nd_scale = 1.05*np.max(max_expected_charge)
+            max_y_2nd_scale = 7.
+            print(f"max_y_2nd_scale = {max_y_2nd_scale}")
             fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>",
                              titlefont=dict(size=22),
                              range=[0, max_y_2nd_scale],

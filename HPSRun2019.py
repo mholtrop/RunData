@@ -37,6 +37,45 @@ def hps_2019_run_target_thickness():
     return targets
 
 
+def hps_2019_target_properties():
+    """ Returns the dictionary of dictionaries for target properties. """
+    target_props = {
+        'density': {     # Units: g/cm^2 = rho * thickness/ molar mass
+            # rho = 19.3 g/cm^3 for Tungsten.
+            # mmass = 183.84*u.gram/u.mol for Tungsten.
+            'norm':     20.e-4*19.3/183.84,  # Value to normalize to.
+            '4 um W':   4.e-4* 19.3 / 183.84,
+            '8 um W':   8.e-4*19.3/183.84,
+            '15 um W': 15.e-4*19.3/183.84,
+            '20 um W': 20.e-4*19.3/183.84
+        },
+        # 'attenuation': {
+        # 'Empty': 36.556800,
+        # 'empty': 36.556800,
+        # 'Unknown': 36.556800,
+        # '8 um W':  32.860550,
+        # '20 um W': 27.330850
+        #  },
+        'attenuation': {     # Units: number
+            'Empty': [10000, 10448, 29.24555],
+            'empty': [10000, 10448, 29.24555],
+            'Unknown': [10000, 10448, 29.24555],
+            '4 um W': [10000, 10448, 28.40418],
+            '8 um W': [10000, 10448, 27.56255],
+            '15 um W': [10000, 10448,26.16205],
+            '20 um W': [10000, 10448, 25.38535]
+        },
+        'color': {  # Plot color: r,g,b,a
+            '4 um W': 'rgba(255,100,255,0.8)',
+            '8 um W': 'rgba(20,80,255,0.8)',
+            '15 um W': 'rgba(0,255,255,0.8)',
+            '20 um W': 'rgba(0,120,150,0.8)'
+        },
+    }
+
+    return target_props
+
+
 def attennuations_with_targ_thickness():
     """ During the run we have observed that the beam attenuation depends on the target thickness too.
     So this dictionary provides target<->attenuation dictionary """
@@ -52,6 +91,32 @@ def attennuations_with_targ_thickness():
     }
 
     return attenuations
+
+
+def setup_data(data):
+    """Setup the data structures for the 2019 HPS Run"""
+    data.target_properties = hps_2019_target_properties()
+    data.target_dens = data.target_properties['density']
+    data.Good_triggers = r'hps_v..?_?.?\.cnf'
+    data.Production_run_type = ["PROD66", "PROD67"]
+    data.atten_dict = data.target_properties['attenuation']
+    data.Current_Channel = "scaler_calc1b"
+
+    min_event_count = 10000000  # Runs with at least 10M events.
+    #    start_time = datatime(2019, 7, 17, 0, 0)  # Very start of run
+    start_time = datetime(2019, 7, 25, 0, 0)  # SVT back in correct position
+    end_time = datetime(2019, 9, 10, 0, 0)
+    # end_time = datetime.now()
+    end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
+
+    print("Fetching the data from {} to {}".format(start_time, end_time))
+    data.get_runs(start_time, end_time, min_event_count)
+    data.select_good_runs()
+    #    data.add_current_data_to_runs()
+    targets = '.*um W *'
+    print("Compute cumulative charge.")
+    data.compute_cumulative_charge(targets)  # Only the tungsten targets count.
+    return targets
 
 
 def main(argv=None):
@@ -92,30 +157,11 @@ def main(argv=None):
     #                     'hps_v9_2.cnf','hps_v10.cnf',
     #                     'hps_v11_1.cnf','hps_v11_2.cnf','hps_v11_3.cnf','hps_v11_4.cnf',
     #                     'hps_v11_5.cnf','hps_v11_6.cnf','hps_v12_1.cnf']
-    data.Good_triggers = r'hps_v..?_?.?\.cnf'
-    data.Production_run_type = ["PROD66", "PROD67"]
-    data.target_dict = hps_2019_run_target_thickness()
-    data.atten_dict = attennuations_with_targ_thickness()
-    data.Current_Channel = "scaler_calc1b"
-
-    min_event_count = 10000000  # Runs with at least 10M events.
-    #    start_time = datatime(2019, 7, 17, 0, 0)  # Very start of run
-    start_time = datetime(2019, 7, 25, 0, 0)  # SVT back in correct position
-    end_time = datetime(2019, 9, 10, 0, 0)
-    # end_time = datetime.now()
-    end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
-
-    print("Fetching the data from {} to {}".format(start_time, end_time))
-    data.get_runs(start_time, end_time, min_event_count)
-    data.select_good_runs()
-    #    data.add_current_data_to_runs()
-    targets = '.*um W *'
-    print("Compute cumulative charge.")
-    data.compute_cumulative_charge(targets)  # Only the tungsten targets count.
+    targets = setup_data(data)
 
     if args.excel:
         print("Write new Excel table.")
-        data.All_Runs.to_excel("hps_run_table.xlsx",
+        data.All_Runs.to_excel("HPSRun2019_progress.xlsx",
                                columns=['start_time', 'end_time', 'target', 'run_config', 'selected', 'event_count',
                                         'sum_event_count', 'charge', 'sum_charge', 'operators', 'user_comment'])
 
@@ -158,7 +204,7 @@ def main(argv=None):
         plot_sumcharge_target_t = {}
         plot_sumcharge_target_v = {}
 
-        for t in data.target_dict:
+        for t in data.target_dens:
             sumch = plot_runs.loc[plot_runs["target"] == t, "sum_charge_targ"]
             st = plot_runs.loc[plot_runs["target"] == t, "start_time"]
             en = plot_runs.loc[plot_runs["target"] == t, "end_time"]
@@ -177,12 +223,7 @@ def main(argv=None):
         print("Build Plots.")
         fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-        targ_cols = {
-            '4 um W ': 'rgba(255,100,255,0.8)',
-            '8 um W ': 'rgba(20,80,255,0.8)',
-            '15 um W ': 'rgba(0,255,255,0.8)',
-            '20 um W ': 'rgba(0,120,150,0.8)'
-        }
+        targ_cols = data.target_properties['color']
 
         for targ in targ_cols:
             runs = plot_runs.target.str.contains(targ)
@@ -210,7 +251,7 @@ def main(argv=None):
                        name="Tot Charge * targ thick/8 µm"),
             secondary_y=True)
 
-        t = '8 um W '
+        t = '8 um W'
         fig.add_trace(
             go.Scatter(x=plot_sumcharge_target_t[t],
                        y=plot_sumcharge_target_v[t],
@@ -218,7 +259,7 @@ def main(argv=None):
                        name="Charge on 8 µm W"),
             secondary_y=True)
 
-        t = '20 um W '
+        t = '20 um W'
         fig.add_trace(
             go.Scatter(x=plot_sumcharge_target_t[t],
                        y=plot_sumcharge_target_v[t],
@@ -378,3 +419,8 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+else:
+    print("Imported the HPSRun2019 package. Setting up data.")
+    data = RunData(cache_file="HPS_run_cache.sqlite3", i_am_at_jlab=False)
+    data.debug = 10
+    targets = setup_data(data)

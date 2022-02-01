@@ -134,8 +134,8 @@ def setup_rundata_structures(data, date_from=None, date_to=None):
     data.Good_triggers, data.Calibration_triggers = used_triggers()
 
     data.Production_run_type = ["PROD77", "PROD77_PIN"]
-    target_props = hps_2021_target_properties()
-    data.target_dens = target_props['density']
+    data.target_properties = hps_2021_target_properties()
+    data.target_dens = data.target_properties['density']
     data.atten_dict = None #  target_props['attenuation']  # The corrections are already taken into account.
     data.Current_Channel = "scaler_calc1b"
 
@@ -222,7 +222,7 @@ def main(argv=None):
 
     data = None
     if not args.nocache:
-        data = RunData(cache_file="HPS_run_2021.sqlite3", i_am_at_jlab=at_jlab)
+        data = RunData(cache_file="HPS_run_cache.sqlite3", i_am_at_jlab=at_jlab)
     else:
         data = RunData(cache_file="", sqlcache=False, i_am_at_jlab=at_jlab)
 

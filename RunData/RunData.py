@@ -912,9 +912,16 @@ class RunData:
                     runs.loc[run, "sum_charge_norm"] = cumsum_charge_norm
 
         if len(runs.loc[selected]):
-            return (runs.loc[selected, "sum_charge"].iloc[-1],
-                    runs.loc[selected, "sum_charge_norm"].iloc[-1],
-                    runs.loc[selected, "sum_event_count"].iloc[-1])
+            if "sum_charge_norm" in runs.keys():
+                return (runs.loc[selected, "sum_charge"].iloc[-1],
+                        runs.loc[selected, "sum_charge_norm"].iloc[-1],
+                        runs.loc[selected, "sum_event_count"].iloc[-1])
+            else:
+                return (runs.loc[selected, "sum_charge"].iloc[-1],
+                        None,
+                        runs.loc[selected, "sum_event_count"].iloc[-1])
+
+
         else:
             return 0, 0, 0
 
