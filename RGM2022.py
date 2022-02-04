@@ -51,6 +51,7 @@ def rgm_2022_target_properties():
             'Carbon target 2 mm': 'C',
             'C (x4)': 'C (x4)',
             'Carbon target 2 mm (4x)': 'C (4x)',
+            'Sn':  'Sn (x4)',
             'Sn (x4)': 'Sn (x4)',
             '300 um Sn': 'Sn (x4)',
             'LAr': 'LAr',
@@ -76,10 +77,10 @@ def rgm_2022_target_properties():
             'LD2': [3.5, 7., 7.],
             'L4He': [2., 4., 4,],
             '40Ca': [15., 30., 30.],
-            '48Ca': [8., 16., 16.],
+            '48Ca': [8., 16., 95.],
             'C': [6., 90., 90.],
             'C (x4)': [1.5, 22.5, 22.5],
-            'Sn (x4)': [9., 18., 18.],
+            'Sn (x4)': [9., 18., 90.],
             'LAr': [2.5, 22., 25.],
             'empty': [0., 0., 0.]
         },
@@ -609,10 +610,10 @@ def main(argv=None):
 
         if args.charge:
             max_expected_charge.append(max_y_value_sums)
-            print(max_expected_charge)
+            # print(max_expected_charge)
             # max_y_2nd_scale = 1.05*np.max(max_expected_charge)
             max_y_2nd_scale = 7.
-            print(f"max_y_2nd_scale = {max_y_2nd_scale}")
+            # print(f"max_y_2nd_scale = {max_y_2nd_scale}")
             fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>",
                              titlefont=dict(size=22),
                              range=[0, max_y_2nd_scale],
@@ -671,4 +672,4 @@ else:
     print("Imported the RGM2022 info. Setting up data.")
     data = RunData(cache_file="RGM_2022.sqlite3", sqlcache=True, i_am_at_jlab=False)
     data.debug = 10
-    print("setup_rundata_structures(data,(datetime(2022, 1, 27, 8, 0), datetime.now()))")
+    print("setup_rundata_structures(data,(datetime(2022, 1, 31, 15, 0), datetime.now()))")
