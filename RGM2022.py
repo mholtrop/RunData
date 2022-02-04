@@ -577,6 +577,20 @@ def main(argv=None):
             bgcolor="#FFEEEE"
         )
 
+    fig.add_annotation(
+        x=0.85,
+        xanchor="left",
+        xref="paper",
+        y=-0.1,
+        yanchor="bottom",
+        yref="paper",
+        text="Graph:<i>Maurik Holtrop, UNH</i>",
+        showarrow=False,
+        font=dict(
+            family="Arial",
+            color="rgba(170,150,200,0.4)",
+            size=12)
+       )
     # End sub run period loop.
     if args.plot:
         # Set x-axis title
