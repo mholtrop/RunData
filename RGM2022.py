@@ -474,7 +474,8 @@ def main(argv=None):
 
                         # # Annotate - add a curve for the expected charge at 50% efficiency.
                         showlegend = True if targ == last_targ and sub_i == 2 else False
-                        print(f"last_targ = {last_targ}  targ: {targ}, sub_i = {sub_i}, showlegend = {showlegend}")
+                        if args.debug:
+                            print(f"last_targ = {last_targ}  targ: {targ}, sub_i = {sub_i}, showlegend = {showlegend}")
                         if data.target_properties['current'][targ][sub_i] > 0.:
                             fig.add_trace(
                                 go.Scatter(x=plot_expected_charge_t,
@@ -653,10 +654,12 @@ def main(argv=None):
 
         if args.charge:
             max_expected_charge.append(max_y_value_sums)
-            print(max_expected_charge)
+            if args.debug:
+              print(f"max_expected_charge: {max_expected_charge}")
             max_y_2nd_scale = 1.1*np.max(max_expected_charge)
             # max_y_2nd_scale = 7.
-            # print(f"max_y_2nd_scale = {max_y_2nd_scale}")
+            if args.debug:
+                print(f"max_y_2nd_scale = {max_y_2nd_scale}")
             fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>",
                              titlefont=dict(size=22),
                              range=[0, max_y_2nd_scale],
