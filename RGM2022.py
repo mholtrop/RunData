@@ -73,9 +73,10 @@ def rgm_2022_target_properties():
         },
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             ## list of currents for each beam energy period.
-            'LH2': [5., 10., 10.],
+            'scale': [10, 2, 1],     # Special entry. Multiply sum charge by this factor,
+            'LH2': [5., 10., 10.],   # for plotting with multiple beam energies, where charge rates vary a lot.
             'LD2': [3.5, 7., 7.],
-            'L4He': [2., 4., 4,],
+            'L4He': [2., 4., 4],
             '40Ca': [15., 30., 30.],
             '48Ca': [8., 16., 95.],
             'C': [6., 90., 90.],
@@ -232,7 +233,7 @@ def main(argv=None):
                        (datetime(2022, 1, 31, 15, 0), datetime.now())]
 
     run_sub_energy = [2.07, 4.03, 5.99]
-    run_sub_y_placement = [0.85, 0.85, 0.85]
+    run_sub_y_placement = [0.79, 0.99, 0.99]
 
 
     if args.plot:
@@ -243,7 +244,10 @@ def main(argv=None):
     if args.excel:
         excel_output = pd.DataFrame()
 
-#   Loop over the different run sub-periods.
+    legends_data = []  # To keep track of which targets already have a legend shown.
+    legends_shown = []  # To keep track of which target has the charge sum legend shown.
+    #   Loop over the different run sub-periods.
+
     for sub_i in range(len(run_sub_periods)):
 
         data.clear()
@@ -285,9 +289,21 @@ def main(argv=None):
 
             last_targ = None
             for targ in data.target_properties['color']:
+
                 if args.debug:
                     print(f"Processing plot for target {targ}")
                 runs = plot_runs.target.str.fullmatch(targ.replace('(', r"\(").replace(')', r'\)'))
+
+                if np.count_nonzero(runs) > 1 and sub_i == len(run_sub_periods) - 1 and \
+                        targ in data.target_properties['sums_color']:
+                    last_targ = targ    # Store the last target name with data for later use.
+
+                if targ in legends_data or np.count_nonzero(runs) <= 1:  # Do we show this legend?
+                    show_data_legend = False                             # This avoids the same legend shown twice.
+                else:
+                    show_data_legend = True
+                    legends_data.append(targ)
+
                 fig.add_trace(
                     go.Bar(x=plot_runs.loc[runs, 'center'],
                            y=plot_runs.loc[runs, 'event_rate'],
@@ -296,10 +312,9 @@ def main(argv=None):
                            name="run with " + targ,
                            marker=dict(color=data.target_properties['color'][targ]),
                            legendgroup="group1",
+                           showlegend=show_data_legend
                            ),
                     secondary_y=False, )
-                if np.count_nonzero(runs) > 1:
-                    last_targ = targ    # Store the last target name with data for later use.
 
             fig.add_trace(
                  go.Bar(x=calib_runs['center'],
@@ -313,8 +328,9 @@ def main(argv=None):
                  secondary_y=False, )
 
             if args.charge:
-                sumcharge = plot_runs.loc[:, "sum_charge"]
-                max_y_value_sums = plot_runs.sum_charge_targ.max()
+                current_plotting_scale = data.target_properties['current']['scale'][sub_i]
+                sumcharge = plot_runs.loc[:, "sum_charge"] * current_plotting_scale
+                max_y_value_sums = plot_runs.sum_charge_targ.max() * current_plotting_scale
 
                 plot_sumcharge_t = [starts.iloc[0], ends.iloc[0]]
                 plot_sumcharge_v = [0, sumcharge.iloc[0]]
@@ -326,11 +342,11 @@ def main(argv=None):
                     plot_sumcharge_v.append(sumcharge.iloc[i])
 
                 for targ in data.target_properties['sums_color']:
-                    sumch = plot_runs.loc[plot_runs["target"] == targ, "sum_charge_targ"]
+                    sumch = plot_runs.loc[plot_runs["target"] == targ, "sum_charge_targ"]*current_plotting_scale
                     st = plot_runs.loc[plot_runs["target"] == targ, "start_time"]
                     en = plot_runs.loc[plot_runs["target"] == targ, "end_time"]
 
-                    if len(sumch) > 2:
+                    if len(sumch) > 1:
                         # Complication: When a target was taken out and then later put back in there is an interruption
                         # that should not count for the expected charge.
 
@@ -399,7 +415,7 @@ def main(argv=None):
                             current_expected_sum_charge += \
                                 (plot_sumcharge_target_t[-1] - plot_expected_charge_t[-2]).total_seconds() * \
                                 data.target_properties['current'][targ][sub_i] * 1e-6 * 0.5
-                            plot_expected_charge_v.append(current_expected_sum_charge)
+                            plot_expected_charge_v.append(current_expected_sum_charge*current_plotting_scale)
 
                 # The lines below would draw a horizontal line to the end of the graph for each target.
                 #                plot_sumcharge_target_t[t].append(ends.iloc[-1])
@@ -413,6 +429,13 @@ def main(argv=None):
                 #                name="Total Charge Live"),
                 #     secondary_y=True)
 
+                        if targ in legends_shown:
+                            show_legend_ok = False
+                        else:
+                            show_legend_ok = True
+                            legends_shown.append(targ)
+
+
                         fig.add_trace(
                             go.Scatter(x=plot_sumcharge_target_t,
                                        y=plot_sumcharge_target_v,
@@ -420,6 +443,7 @@ def main(argv=None):
                                        line=dict(color=data.target_properties['sums_color'][targ], width=3),
                                        name=f"Total Charge on {targ}",
                                        legendgroup="group2",
+                                       showlegend=show_legend_ok
                                        ),
                             secondary_y=True)
 
@@ -433,12 +457,13 @@ def main(argv=None):
                             secondary_y=True)
 
                         # Decorative: add a box with an annotation of the total charge on this target.
+                        actual_charge = plot_sumcharge_target_v[-1]/current_plotting_scale
                         fig.add_annotation(
                             x=plot_sumcharge_target_t[-1],
                             y=plot_sumcharge_target_v[-1] + max_y_value_sums*0.015,
                             xref="x",
                             yref="y2",
-                            text=f"<b>total: {plot_sumcharge_target_v[-1]:3.2f} mC</b>",
+                            text=f"<b>total: {actual_charge:3.2f} mC</b>",
                             showarrow=False,
                             font=dict(
                                 family="Arial, sans-serif",
@@ -448,6 +473,8 @@ def main(argv=None):
                         )
 
                         # # Annotate - add a curve for the expected charge at 50% efficiency.
+                        showlegend = True if targ == last_targ and sub_i == 2 else False
+                        print(f"last_targ = {last_targ}  targ: {targ}, sub_i = {sub_i}, showlegend = {showlegend}")
                         if data.target_properties['current'][targ][sub_i] > 0.:
                             fig.add_trace(
                                 go.Scatter(x=plot_expected_charge_t,
@@ -455,7 +482,8 @@ def main(argv=None):
                                            mode='lines',
                                            line=dict(color='rgba(90, 180, 88, 0.6)', width=4),
                                            name=f"Expected charge at 50% up",
-                                           showlegend=True if targ == last_targ else False,  # Only one legend at the end.
+                                           showlegend=True if targ == last_targ and sub_i == 2 else False,
+                                           # Only one legend at the end.
                                            legendgroup="group2",
                                            ),
                                 secondary_y=True
@@ -568,7 +596,8 @@ def main(argv=None):
             y=run_sub_y_placement[sub_i],
             yanchor="middle",
             yref="paper",
-            text=f"<b>E<sub>b</sub> = {run_sub_energy[sub_i]} GeV</b>",
+            text=f"<b>E<sub>b</sub> = {run_sub_energy[sub_i]} GeV</b><br>"
+            f"Current scaled {data.target_properties['current']['scale'][sub_i]}x",
             showarrow=False,
             font=dict(
                 family="Times",
@@ -624,9 +653,9 @@ def main(argv=None):
 
         if args.charge:
             max_expected_charge.append(max_y_value_sums)
-            # print(max_expected_charge)
-            # max_y_2nd_scale = 1.05*np.max(max_expected_charge)
-            max_y_2nd_scale = 7.
+            print(max_expected_charge)
+            max_y_2nd_scale = 1.1*np.max(max_expected_charge)
+            # max_y_2nd_scale = 7.
             # print(f"max_y_2nd_scale = {max_y_2nd_scale}")
             fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>",
                              titlefont=dict(size=22),
