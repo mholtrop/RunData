@@ -49,17 +49,17 @@ import os
 import re
 
 try:
-    from rcdb.model import Run, ConditionType, Condition, all_value_types
-    from rcdb.provider import RCDBProvider
+    import sqlalchemy
 except ImportError:
-    print("Please set your PYTHONPATH to a copy of the rcd Python libraries.\n")
+    print("We need the sqlalchemy installed for the database, but I could not find it in:")
     print("sys.path: ", sys.path)
     sys.exit(1)
 
 try:
-    import sqlalchemy
+    from rcdb.model import Run, ConditionType, Condition, all_value_types
+    from rcdb.provider import RCDBProvider
 except ImportError:
-    print("We need the sqlalchemy installed for the database, but I could not find it in:")
+    print("Please set your PYTHONPATH to a copy of the rcdb Python libraries.\n")
     print("sys.path: ", sys.path)
     sys.exit(1)
 
@@ -119,7 +119,7 @@ class RunData:
         self.atten_dict = {}
         self.at_jlab = i_am_at_jlab
         self.All_Runs = None
-        self.debug = 0
+        self._debug = 0
 
         self.Current_Channel = "scaler_calc1b"  # Mya Channel for the current from FCUP.
         self.LiveTime_Channel = "B_DAQ_HPS:TS:livetime"  # Mya Channel for the livetime.
@@ -133,6 +133,15 @@ class RunData:
         self.start_rcdb()
         self.Mya = MyaData(i_am_at_jlab, username=username, password=password)
         self.start_cache(sqlcache)
+
+    @property
+    def debug(self):
+        return self._debug
+
+    @debug.setter
+    def debug(self, debug_level):
+        self._debug = debug_level
+        self.Mya.debug = debug_level
 
     def __str__(self):
         """Return a table with some of the information, to see what is in the All_Runs conveniently. """
@@ -178,7 +187,7 @@ class RunData:
         # This complicates caching, because the next request may be incorporated
         # in a timerange, but have a different (lower) event cut.
         # The Known_Data_Range table tries to help with this.
-        if not self._cache_engine.dialect.has_table(self._cache_engine, "Known_Data_Ranges"):
+        if not sqlalchemy.inspect(self._cache_engine).has_table("Known_Data_Ranges"):
             print("Creating the run data cache.")
             # sql='''CREATE TABLE IF NOT EXISTS "Runs_Table" (
             #   "index"  INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -334,9 +343,14 @@ class RunData:
             end = end_of_last_run
 
         # Now update the chache times table with the new entry from "start" to "end"
-        self._cache_known_data = self._cache_known_data.append({"start_time": start,
-                                                                "end_time": end, "min_event_count": 1},
-                                                               ignore_index=True, sort=False)
+        if len(self._cache_known_data) == 0:
+            self.cache_known_data = pd.DataFrame({"index": [0], "start_time": [start],
+                                                  "end_time": [end], "min_event_count": [1]})
+        else:
+            cache_known_data_add = pd.DataFrame({"index": self._cache_known_data["index"].max()+1,
+                                                "start_time": start, "end_time": end, "min_event_count": 1})
+            self._cache_known_data = pd.concat([self._cache_known_data, cache_known_data_add],
+                                               ignore_index=True, sort=False)
         self._cache_known_data = self._cache_known_data.sort_values("start_time")
 
         if self.debug > 2:
@@ -361,7 +375,7 @@ class RunData:
         return the number of runs added."""
         # All the data is available in the cache, so just get it.
 
-        if not self._cache_engine.dialect.has_table(self._cache_engine, "Runs_Table"):
+        if not sqlalchemy.inspect(self._cache_engine).has_table("Runs_Table"):
             #
             # Table is not there, so cache was not initialized, just return so data will be fetched
             # from RCDB.
@@ -393,7 +407,7 @@ class RunData:
             if self.debug > 1:
                 print("Number of runs that will be appended: {}".format(len(new_runs)))
             if len(new_runs) > 0:
-                self.All_Runs = self.All_Runs.append(new_runs)
+                self.All_Runs = pd.concat([self.All_Runs, new_runs])
                 self.All_Runs.sort_index(inplace=True)
                 if np.any(self.All_Runs.duplicated()):
                     print("ARGGGGG: we have duplicates in All_Runs")
@@ -460,7 +474,10 @@ class RunData:
         num_runs_cache = self._cache_get_runs(start, end, min_event)  # Get whatever we have in the cache already.
 
         if self._db is None:  # No DB so we are done
-            return len(self.All_Runs)
+            if self.All_Runs:
+                return len(self.All_Runs)
+            else:
+                return 0
 
         # Check for overlaps of request with cache.
         cache_overlaps, cache_extend_before, cache_extend_after = self._check_for_cache_hits(start, end)
@@ -672,9 +689,12 @@ class RunData:
         live_time = self.Mya.get(self.LiveTime_Channel,
                                  self.All_Runs.loc[runnumber, "start_time"],
                                  self.All_Runs.loc[runnumber, "end_time"])
-        live_time.fillna(0, inplace=True)  # Replace Nan or None with 0
         # If there is bad data in the live_time, None or nan, then set those to zero.
-        live_time.loc[live_time.value.isna(), 'value'] = 0
+        if len(live_time) < 3:
+            live_time.fillna(1., inplace=True)  # Replace Nan or None with 1 - no data returned.
+        else:
+            live_time.fillna(0, inplace=True)  # Replace Nan or None with 0
+            live_time.loc[live_time.value.isna(), 'value'] = 0
 
         if self.Current_Channel == "scaler_calc1b":
             # Getting the target thickness dependend FCup charge correction
