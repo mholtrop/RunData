@@ -8,7 +8,7 @@ import re
 import logging
 import sys
 from time import mktime
-from collections import MutableSequence
+from collections.abc import MutableSequence
 
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError, ProgrammingError
