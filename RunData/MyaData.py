@@ -3,7 +3,7 @@
 
 import numpy as np
 import pandas as pd
-# from datetime import datetime, timedelta
+from datetime import datetime, timedelta
 
 import sys
 import os
@@ -34,7 +34,7 @@ class MyaData:
         Sets up the session handle for the requests"""
 
         self.at_jlab = i_am_at_jlab
-        self.debug = 0
+        self._debug = 0
         self._session = requests.session()
 
     #
@@ -76,6 +76,15 @@ class MyaData:
                 print("Session connecting to epicsweb.jlab.org failed. ")
                 self._session = None
 
+    @property
+    def debug(self):
+        return self._debug
+
+    @debug.setter
+    def debug(self, debug_level):
+        print(f"MyaData:: Setting the debug level to {debug_level}")
+        self._debug = debug_level
+
     def get(self, channel, start, end, do_not_clean=False):
         """Get a series of Mya data with a myQuery call for channel, from start to end time.
         Returns a Pandas data frame with index, and keys: "ms", "value" and "time". Where "ms" is the
@@ -88,18 +97,27 @@ class MyaData:
         if self._session is None:
             return None
 
+        data_age = (datetime.now() - start).days
+        if data_age > 2*365:   # More than two years old, get from history deployment.
+            deployment = 'history'
+        else:
+            deployment = 'ops'
+
         params = {
             'c': channel,
             'b': start,
             'e': end,
+            'm': deployment,
             't': 'event',
             'u': 'on',  # u = on - Return the values in "ms" timestamp format.
             'a': 'on'}  # a = on - Adjust the ms timestamp to the server timezone.
 
-        if self.debug:
+        if self.debug > 1:
             print("Fetching channel '{}'".format(channel))
 
         try:
+            if self.debug > 5:
+                print(f"Asking for data: {self._url_head} params={params}")
             my_dat = self._session.get(self._url_head, verify=False, params=params)
         except ConnectionError:
             print("Could not connect to the Mya myQuery website. Was the password correctly entered? ")
@@ -112,6 +130,10 @@ class MyaData:
             raise ConnectionError("Could not connect to ", self._url_head)
 
         dat_len = len(my_dat.json()['data'])
+
+        if self.debug > 5:
+            print(f"Number of data points returned = {dat_len}")
+
         if dat_len == 0:                                           # EPICS sparsified the data?
             return pd.DataFrame({'ms': [start.timestamp() * 1000, end.timestamp() * 1000], 'value': [None, None],
                                  'time': [start, end]})
