@@ -131,8 +131,8 @@ class RunData:
         self._cache_file_name = cache_file
 
         self.start_rcdb()
-        self.Mya = MyaData(i_am_at_jlab, username=username, password=password)
         self.start_cache(sqlcache)
+        self.Mya = MyaData(i_am_at_jlab, username=username, password=password, cache = self._cache_engine)
 
     @property
     def debug(self):
@@ -344,7 +344,7 @@ class RunData:
 
         # Now update the chache times table with the new entry from "start" to "end"
         if len(self._cache_known_data) == 0:
-            self.cache_known_data = pd.DataFrame({"index": [0], "start_time": [start],
+            self._cache_known_data = pd.DataFrame({"index": [0], "start_time": [start],
                                                   "end_time": [end], "min_event_count": [1]})
         else:
             cache_known_data_add = pd.DataFrame({"index": self._cache_known_data["index"].max()+1,
@@ -684,11 +684,13 @@ class RunData:
 
         current = self.Mya.get(self.Current_Channel,
                                self.All_Runs.loc[runnumber, "start_time"],
-                               self.All_Runs.loc[runnumber, "end_time"])
+                               self.All_Runs.loc[runnumber, "end_time"],
+                               run_number=runnumber)
         current.fillna(0, inplace=True)     # Replace Nan or None with 0
         live_time = self.Mya.get(self.LiveTime_Channel,
                                  self.All_Runs.loc[runnumber, "start_time"],
-                                 self.All_Runs.loc[runnumber, "end_time"])
+                                 self.All_Runs.loc[runnumber, "end_time"],
+                                 run_number=runnumber)
         # If there is bad data in the live_time, None or nan, then set those to zero.
         if len(live_time) < 3:
             live_time.fillna(1., inplace=True)  # Replace Nan or None with 1 - no data returned.
