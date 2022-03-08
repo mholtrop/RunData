@@ -77,10 +77,10 @@ except ImportError:
     sys.exit(1)
 
 import numpy as np
+from .MyaData import MyaData
+
 import warnings
 warnings.filterwarnings("ignore", 'This pattern has match groups')   # Turn off the warning for regex with () in it.
-
-from .MyaData import MyaData
 
 #
 # Some global configuration settings.
@@ -132,7 +132,7 @@ class RunData:
 
         self.start_rcdb()
         self.start_cache(sqlcache)
-        self.Mya = MyaData(i_am_at_jlab, username=username, password=password, cache = self._cache_engine)
+        self.Mya = MyaData(i_am_at_jlab, username=username, password=password, cache=self._cache_engine)
 
     @property
     def debug(self):
@@ -518,7 +518,8 @@ class RunData:
                 if num_runs == 0:
                     self.All_Runs = save_all_runs
                 else:
-                    self.All_Runs = self.All_Runs.append(save_all_runs, sort=True)  # Append the saved runs.
+                    #  self.All_Runs = self.All_Runs.append(save_all_runs, sort=True)  # Append the saved runs.
+                    self.All_Runs = pd.concat([self.All_Runs, save_all_runs], sort=True)
             else:
                 # The earliest overlap is in extend_after, so "start" is inside this overlap period.
                 # We need to extend out to the earliest of "end" or the "start" of the next period.
@@ -596,7 +597,7 @@ class RunData:
                     if self.debug > 3:
                         print(f"Using a beam attenuation correction of {corr} for run {run}")
             else:
-                corr = self.atten_dict[targ_name_no_spaces]/ self.atten_dict['Empty']
+                corr = self.atten_dict[targ_name_no_spaces] / self.atten_dict['Empty']
                 if self.debug > 3:
                     print(f"Using a beam attenuation correction of {corr}")
         # print ('Corr is ' + str(corr))
@@ -764,8 +765,8 @@ class RunData:
         return
 
     def add_current_data_to_runs(self, targets=None, run_config=None):
-        '''Add the mya data for beam current to all the runs with selected flag set.
-        You can select other runs by specifying 'targets' and 'run_config' similarly to list_selected_runs()'''
+        """Add the mya data for beam current to all the runs with selected flag set.
+        You can select other runs by specifying 'targets' and 'run_config' similarly to list_selected_runs()"""
         # We want to sort the data by target type.
         # We also want to veto runs that do not have the correct configuration,
         # such as pulser runs, FEE runs, etc.
@@ -877,7 +878,7 @@ class RunData:
 
         test_date_min = None
         if date_min is None:
-            test_date_min = np.array([True]* len(runs))
+            test_date_min = np.array([True] * len(runs))
         elif type(date_min) is datetime:
             test_date_min = (date_min < runs.start_time)
 
@@ -885,7 +886,7 @@ class RunData:
         if date_max is None:
             test_date_max = np.array([True] * len(runs))
         elif type(date_max) is datetime:
-            test_date_max = ( runs.end_time < date_max)
+            test_date_max = (runs.end_time < date_max)
 
         return runs.index[test_run_config & test_target & test_date_min & test_date_max]
 
@@ -942,10 +943,9 @@ class RunData:
                 return (runs.loc[selected, "sum_charge"].iloc[-1],
                         None,
                         runs.loc[selected, "sum_event_count"].iloc[-1])
-
-
         else:
             return 0, 0, 0
+
 
 if __name__ == "__main__":
     import argparse
