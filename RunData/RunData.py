@@ -347,8 +347,8 @@ class RunData:
             self._cache_known_data = pd.DataFrame({"index": [0], "start_time": [start],
                                                   "end_time": [end], "min_event_count": [1]})
         else:
-            cache_known_data_add = pd.DataFrame({"index": self._cache_known_data["index"].max()+1,
-                                                "start_time": start, "end_time": end, "min_event_count": 1})
+            cache_known_data_add = pd.DataFrame({"index": [self._cache_known_data["index"].max()+1],
+                                                "start_time": [start], "end_time": [end], "min_event_count": [1]})
             self._cache_known_data = pd.concat([self._cache_known_data, cache_known_data_add],
                                                ignore_index=True, sort=False)
         self._cache_known_data = self._cache_known_data.sort_values("start_time")
@@ -667,28 +667,35 @@ class RunData:
         self.All_Runs.set_index('number', inplace=True)
         return num_runs
 
-    def add_current_cor(self, runnumber, override=False):
+    def add_current_cor(self, runnumber, override=False, current_channel=None, livetime_channel=None):
         """Add the livetime corrected charge and luminosity for a run to the pandas DataFrame.
         for that run.
         arguments:
              runnumber  - The run number for which you want to fetch the data.
              override   - Set to true if data should be fetched even if it seems it was already.
+             current_channel  - Override the RunData.Current_Channel with this channel.
+             livetime_channel - Override the RunData.LiveTime_Channel with this channel.
         """
 
+        if current_channel is None:
+            current_channel = self.Current_Channel
+        if livetime_channel is None:
+            livetime_channel = self.LiveTime_Channel
+
         if not override and \
-                ("charge" in self.All_Runs.keys()) and \
-                not np.isnan(self.All_Runs.loc[runnumber, "charge"]):
+                (current_channel in self.All_Runs.keys()) and \
+                not np.isnan(self.All_Runs.loc[runnumber, current_channel]):
             return
 
         if self.debug > 4:
             print("add_current_cor, run= {:5d}".format(runnumber))
 
-        current = self.Mya.get(self.Current_Channel,
+        current = self.Mya.get(current_channel,
                                self.All_Runs.loc[runnumber, "start_time"],
                                self.All_Runs.loc[runnumber, "end_time"],
                                run_number=runnumber)
         current.fillna(0, inplace=True)     # Replace Nan or None with 0
-        live_time = self.Mya.get(self.LiveTime_Channel,
+        live_time = self.Mya.get(livetime_channel,
                                  self.All_Runs.loc[runnumber, "start_time"],
                                  self.All_Runs.loc[runnumber, "end_time"],
                                  run_number=runnumber)
@@ -699,7 +706,7 @@ class RunData:
             live_time.fillna(0, inplace=True)  # Replace Nan or None with 0
             live_time.loc[live_time.value.isna(), 'value'] = 0
 
-        if self.Current_Channel == "scaler_calc1b":
+        if current_channel == "scaler_calc1b":
             # Getting the target thickness dependend FCup charge correction
             curr_correction = self.beam_aten_corr(runnumber)
             # Applying the correction
@@ -732,9 +739,10 @@ class RunData:
         # If we want mC instead of Coulombs, the factor is 1e-12*1e3 = 1e-9
         #
 
-        self.All_Runs.loc[runnumber, self.Current_Channel] = np.trapz(current.value, current.ms)
-        self.All_Runs.loc[runnumber, "live_time"] = np.trapz(live_time.value, live_time.ms)
-        self.All_Runs.loc[runnumber, "charge"] = np.trapz(current_corr, current.ms) * 1e-9  # mC
+        self.All_Runs.loc[runnumber, current_channel] = np.trapz(current.value, current.ms)
+        self.All_Runs.loc[runnumber, livetime_channel] = np.trapz(live_time.value, live_time.ms)
+        self.All_Runs.loc[runnumber, current_channel+"_corr"] = np.trapz(current_corr, current.ms) * 1e-9  # mC
+        self.All_Runs.loc[runnumber, "charge"] = self.All_Runs.loc[runnumber, current_channel+"_corr"]
         # self._Mya_cache[runnumber] = pd.DataFrame({"time":current.time,"current":current.value,
         #          "live_time":live_time_corr,"current_cor":current_corr})
         #
@@ -761,10 +769,12 @@ class RunData:
         #    (1*u.mC/(1*u.elementary_charge))).to('1/fb') =
         # 6.241509074460763e+15 * 6.02214076e-16 = 3.758724620122004
         lumi = 3758.724620122003 * charge * target_dens   # In 1/pb
+        self.All_Runs.loc[runnumber, current_channel+"_lumi"] = lumi
         self.All_Runs.loc[runnumber, "luminosity"] = lumi
         return
 
-    def add_current_data_to_runs(self, targets=None, run_config=None):
+    def add_current_data_to_runs(self, targets=None, run_config=None,
+                                 override=False, current_channel=None, livetime_channel=None):
         """Add the mya data for beam current to all the runs with selected flag set.
         You can select other runs by specifying 'targets' and 'run_config' similarly to list_selected_runs()"""
         # We want to sort the data by target type.
@@ -776,7 +786,8 @@ class RunData:
             print(good_runs)
         if len(good_runs) > 0:
             for rnum in self.list_selected_runs(targets, run_config):
-                self.add_current_cor(rnum)
+                self.add_current_cor(rnum, override=override,
+                                     current_channel=current_channel, livetime_channel=livetime_channel)
         else:
             # Even if there are no good runs, make sure that the "charge" column is in the table!
             # This ensure that when you write to DB the charge column exsists.
