@@ -49,17 +49,17 @@ import os
 import re
 
 try:
-    from rcdb.model import Run, ConditionType, Condition, all_value_types
-    from rcdb.provider import RCDBProvider
+    import sqlalchemy
 except ImportError:
-    print("Please set your PYTHONPATH to a copy of the rcd Python libraries.\n")
+    print("We need the sqlalchemy installed for the database, but I could not find it in:")
     print("sys.path: ", sys.path)
     sys.exit(1)
 
 try:
-    import sqlalchemy
+    from rcdb.model import Run, ConditionType, Condition, all_value_types
+    from rcdb.provider import RCDBProvider
 except ImportError:
-    print("We need the sqlalchemy installed for the database, but I could not find it in:")
+    print("Please set your PYTHONPATH to a copy of the rcdb Python libraries.\n")
     print("sys.path: ", sys.path)
     sys.exit(1)
 
@@ -77,10 +77,10 @@ except ImportError:
     sys.exit(1)
 
 import numpy as np
+from .MyaData import MyaData
+
 import warnings
 warnings.filterwarnings("ignore", 'This pattern has match groups')   # Turn off the warning for regex with () in it.
-
-from .MyaData import MyaData
 
 #
 # Some global configuration settings.
@@ -119,7 +119,7 @@ class RunData:
         self.atten_dict = {}
         self.at_jlab = i_am_at_jlab
         self.All_Runs = None
-        self.debug = 0
+        self._debug = 0
 
         self.Current_Channel = "scaler_calc1b"  # Mya Channel for the current from FCUP.
         self.LiveTime_Channel = "B_DAQ_HPS:TS:livetime"  # Mya Channel for the livetime.
@@ -131,8 +131,17 @@ class RunData:
         self._cache_file_name = cache_file
 
         self.start_rcdb()
-        self.Mya = MyaData(i_am_at_jlab, username=username, password=password)
         self.start_cache(sqlcache)
+        self.Mya = MyaData(i_am_at_jlab, username=username, password=password, cache=self._cache_engine)
+
+    @property
+    def debug(self):
+        return self._debug
+
+    @debug.setter
+    def debug(self, debug_level):
+        self._debug = debug_level
+        self.Mya.debug = debug_level
 
     def __str__(self):
         """Return a table with some of the information, to see what is in the All_Runs conveniently. """
@@ -178,7 +187,7 @@ class RunData:
         # This complicates caching, because the next request may be incorporated
         # in a timerange, but have a different (lower) event cut.
         # The Known_Data_Range table tries to help with this.
-        if not self._cache_engine.dialect.has_table(self._cache_engine, "Known_Data_Ranges"):
+        if not sqlalchemy.inspect(self._cache_engine).has_table("Known_Data_Ranges"):
             print("Creating the run data cache.")
             # sql='''CREATE TABLE IF NOT EXISTS "Runs_Table" (
             #   "index"  INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
@@ -334,9 +343,14 @@ class RunData:
             end = end_of_last_run
 
         # Now update the chache times table with the new entry from "start" to "end"
-        self._cache_known_data = self._cache_known_data.append({"start_time": start,
-                                                                "end_time": end, "min_event_count": 1},
-                                                               ignore_index=True, sort=False)
+        if len(self._cache_known_data) == 0:
+            self._cache_known_data = pd.DataFrame({"index": [0], "start_time": [start],
+                                                  "end_time": [end], "min_event_count": [1]})
+        else:
+            cache_known_data_add = pd.DataFrame({"index": [self._cache_known_data["index"].max()+1],
+                                                "start_time": [start], "end_time": [end], "min_event_count": [1]})
+            self._cache_known_data = pd.concat([self._cache_known_data, cache_known_data_add],
+                                               ignore_index=True, sort=False)
         self._cache_known_data = self._cache_known_data.sort_values("start_time")
 
         if self.debug > 2:
@@ -361,7 +375,7 @@ class RunData:
         return the number of runs added."""
         # All the data is available in the cache, so just get it.
 
-        if not self._cache_engine.dialect.has_table(self._cache_engine, "Runs_Table"):
+        if not sqlalchemy.inspect(self._cache_engine).has_table("Runs_Table"):
             #
             # Table is not there, so cache was not initialized, just return so data will be fetched
             # from RCDB.
@@ -393,7 +407,7 @@ class RunData:
             if self.debug > 1:
                 print("Number of runs that will be appended: {}".format(len(new_runs)))
             if len(new_runs) > 0:
-                self.All_Runs = self.All_Runs.append(new_runs)
+                self.All_Runs = pd.concat([self.All_Runs, new_runs])
                 self.All_Runs.sort_index(inplace=True)
                 if np.any(self.All_Runs.duplicated()):
                     print("ARGGGGG: we have duplicates in All_Runs")
@@ -460,7 +474,10 @@ class RunData:
         num_runs_cache = self._cache_get_runs(start, end, min_event)  # Get whatever we have in the cache already.
 
         if self._db is None:  # No DB so we are done
-            return len(self.All_Runs)
+            if self.All_Runs:
+                return len(self.All_Runs)
+            else:
+                return 0
 
         # Check for overlaps of request with cache.
         cache_overlaps, cache_extend_before, cache_extend_after = self._check_for_cache_hits(start, end)
@@ -501,7 +518,8 @@ class RunData:
                 if num_runs == 0:
                     self.All_Runs = save_all_runs
                 else:
-                    self.All_Runs = self.All_Runs.append(save_all_runs, sort=True)  # Append the saved runs.
+                    #  self.All_Runs = self.All_Runs.append(save_all_runs, sort=True)  # Append the saved runs.
+                    self.All_Runs = pd.concat([self.All_Runs, save_all_runs], sort=True)
             else:
                 # The earliest overlap is in extend_after, so "start" is inside this overlap period.
                 # We need to extend out to the earliest of "end" or the "start" of the next period.
@@ -579,7 +597,7 @@ class RunData:
                     if self.debug > 3:
                         print(f"Using a beam attenuation correction of {corr} for run {run}")
             else:
-                corr = self.atten_dict[targ_name_no_spaces]/ self.atten_dict['Empty']
+                corr = self.atten_dict[targ_name_no_spaces] / self.atten_dict['Empty']
                 if self.debug > 3:
                     print(f"Using a beam attenuation correction of {corr}")
         # print ('Corr is ' + str(corr))
@@ -649,34 +667,46 @@ class RunData:
         self.All_Runs.set_index('number', inplace=True)
         return num_runs
 
-    def add_current_cor(self, runnumber, override=False):
+    def add_current_cor(self, runnumber, override=False, current_channel=None, livetime_channel=None):
         """Add the livetime corrected charge and luminosity for a run to the pandas DataFrame.
         for that run.
         arguments:
              runnumber  - The run number for which you want to fetch the data.
              override   - Set to true if data should be fetched even if it seems it was already.
+             current_channel  - Override the RunData.Current_Channel with this channel.
+             livetime_channel - Override the RunData.LiveTime_Channel with this channel.
         """
 
+        if current_channel is None:
+            current_channel = self.Current_Channel
+        if livetime_channel is None:
+            livetime_channel = self.LiveTime_Channel
+
         if not override and \
-                ("charge" in self.All_Runs.keys()) and \
-                not np.isnan(self.All_Runs.loc[runnumber, "charge"]):
+                (current_channel in self.All_Runs.keys()) and \
+                not np.isnan(self.All_Runs.loc[runnumber, current_channel]):
             return
 
         if self.debug > 4:
             print("add_current_cor, run= {:5d}".format(runnumber))
 
-        current = self.Mya.get(self.Current_Channel,
+        current = self.Mya.get(current_channel,
                                self.All_Runs.loc[runnumber, "start_time"],
-                               self.All_Runs.loc[runnumber, "end_time"])
+                               self.All_Runs.loc[runnumber, "end_time"],
+                               run_number=runnumber)
         current.fillna(0, inplace=True)     # Replace Nan or None with 0
-        live_time = self.Mya.get(self.LiveTime_Channel,
+        live_time = self.Mya.get(livetime_channel,
                                  self.All_Runs.loc[runnumber, "start_time"],
-                                 self.All_Runs.loc[runnumber, "end_time"])
-        live_time.fillna(0, inplace=True)  # Replace Nan or None with 0
+                                 self.All_Runs.loc[runnumber, "end_time"],
+                                 run_number=runnumber)
         # If there is bad data in the live_time, None or nan, then set those to zero.
-        live_time.loc[live_time.value.isna(), 'value'] = 0
+        if len(live_time) < 3:
+            live_time.fillna(1., inplace=True)  # Replace Nan or None with 1 - no data returned.
+        else:
+            live_time.fillna(0, inplace=True)  # Replace Nan or None with 0
+            live_time.loc[live_time.value.isna(), 'value'] = 0
 
-        if self.Current_Channel == "scaler_calc1b":
+        if current_channel == "scaler_calc1b":
             # Getting the target thickness dependend FCup charge correction
             curr_correction = self.beam_aten_corr(runnumber)
             # Applying the correction
@@ -709,9 +739,10 @@ class RunData:
         # If we want mC instead of Coulombs, the factor is 1e-12*1e3 = 1e-9
         #
 
-        self.All_Runs.loc[runnumber, self.Current_Channel] = np.trapz(current.value, current.ms)
-        self.All_Runs.loc[runnumber, "live_time"] = np.trapz(live_time.value, live_time.ms)
-        self.All_Runs.loc[runnumber, "charge"] = np.trapz(current_corr, current.ms) * 1e-9  # mC
+        self.All_Runs.loc[runnumber, current_channel] = np.trapz(current.value, current.ms)
+        self.All_Runs.loc[runnumber, livetime_channel] = np.trapz(live_time.value, live_time.ms)
+        self.All_Runs.loc[runnumber, current_channel+"_corr"] = np.trapz(current_corr, current.ms) * 1e-9  # mC
+        self.All_Runs.loc[runnumber, "charge"] = self.All_Runs.loc[runnumber, current_channel+"_corr"]
         # self._Mya_cache[runnumber] = pd.DataFrame({"time":current.time,"current":current.value,
         #          "live_time":live_time_corr,"current_cor":current_corr})
         #
@@ -738,12 +769,14 @@ class RunData:
         #    (1*u.mC/(1*u.elementary_charge))).to('1/fb') =
         # 6.241509074460763e+15 * 6.02214076e-16 = 3.758724620122004
         lumi = 3758.724620122003 * charge * target_dens   # In 1/pb
+        self.All_Runs.loc[runnumber, current_channel+"_lumi"] = lumi
         self.All_Runs.loc[runnumber, "luminosity"] = lumi
         return
 
-    def add_current_data_to_runs(self, targets=None, run_config=None):
-        '''Add the mya data for beam current to all the runs with selected flag set.
-        You can select other runs by specifying 'targets' and 'run_config' similarly to list_selected_runs()'''
+    def add_current_data_to_runs(self, targets=None, run_config=None,
+                                 override=False, current_channel=None, livetime_channel=None):
+        """Add the mya data for beam current to all the runs with selected flag set.
+        You can select other runs by specifying 'targets' and 'run_config' similarly to list_selected_runs()"""
         # We want to sort the data by target type.
         # We also want to veto runs that do not have the correct configuration,
         # such as pulser runs, FEE runs, etc.
@@ -753,7 +786,8 @@ class RunData:
             print(good_runs)
         if len(good_runs) > 0:
             for rnum in self.list_selected_runs(targets, run_config):
-                self.add_current_cor(rnum)
+                self.add_current_cor(rnum, override=override,
+                                     current_channel=current_channel, livetime_channel=livetime_channel)
         else:
             # Even if there are no good runs, make sure that the "charge" column is in the table!
             # This ensure that when you write to DB the charge column exsists.
@@ -855,7 +889,7 @@ class RunData:
 
         test_date_min = None
         if date_min is None:
-            test_date_min = np.array([True]* len(runs))
+            test_date_min = np.array([True] * len(runs))
         elif type(date_min) is datetime:
             test_date_min = (date_min < runs.start_time)
 
@@ -863,7 +897,7 @@ class RunData:
         if date_max is None:
             test_date_max = np.array([True] * len(runs))
         elif type(date_max) is datetime:
-            test_date_max = ( runs.end_time < date_max)
+            test_date_max = (runs.end_time < date_max)
 
         return runs.index[test_run_config & test_target & test_date_min & test_date_max]
 
@@ -920,10 +954,9 @@ class RunData:
                 return (runs.loc[selected, "sum_charge"].iloc[-1],
                         None,
                         runs.loc[selected, "sum_event_count"].iloc[-1])
-
-
         else:
             return 0, 0, 0
+
 
 if __name__ == "__main__":
     import argparse
