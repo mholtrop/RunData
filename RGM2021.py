@@ -179,12 +179,12 @@ def setup_rundata_structures(data_loc):
     data_loc.select_good_runs()
 
 
-data = None
+dat = None
 
 
 def main(argv=None):
     import argparse
-    global data
+    global dat
     if argv is None:
         argv = sys.argv
     else:
@@ -621,6 +621,6 @@ if __name__ == "__main__":
     sys.exit(main())
 else:
     print("Imported the RGM2021 info. Setting up data.")
-    data = RunData(cache_file="RGM_2021.sqlite3", sqlcache=True, i_am_at_jlab=False)
-    data.debug = 10
-    setup_rundata_structures(data)
+    dat = RunData(cache_file="RGM_2021.sqlite3", sqlcache=True, i_am_at_jlab=False)
+    dat.debug = 10
+    setup_rundata_structures(dat)

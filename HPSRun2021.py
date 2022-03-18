@@ -547,5 +547,5 @@ if __name__ == "__main__":
     sys.exit(main())
 else:
     print("HPSRun2021.py is being imported, not executed.")
-    data = RunData(cache_file="HPS_run_2021.sqlite3", i_am_at_jlab=False)
-    setup_rundata_structures(data)
+    dat = RunData(cache_file="HPS_run_2021.sqlite3", i_am_at_jlab=False)
+    setup_rundata_structures(dat)
