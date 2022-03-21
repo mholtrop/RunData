@@ -196,7 +196,9 @@ def use_once_sparsified_fcup_offset(periods, data):
                     scalers2b[(scalers2b.time < row.start_time)].index, inplace=True)
             # Next: Get an index for the fcup_offset at each time for the scalerS2b
             # where there is beam: value>1000, finding the previous fcup_offset value.
-            if scalers2b.iloc[0].time < data.fcup_offset_time.iloc[0].name:  # fcup_offset_time doesn't have a value!
+            if scalers2b.iloc[0].time < data.fcup_offset_time.iloc[0].name or \
+                    scalers2b.value.max() < 1000 or (len(scalers2b) < 3 and np.any(np.isnan(scalers2b.value))):
+                # fcup_offset_time doesn't have a value or there never was any beam for the run!
                 scaler_local_mean = scalers2b[(scalers2b.value < 1000)].value.mean()
                 fcup_offset_sparse_run = pd.DataFrame(data={'ms': [scalers2b.iloc[0].ms],
                                                             'index': [0],
@@ -229,7 +231,14 @@ def use_once_sparsified_fcup_offset(periods, data):
                          ])
                     fcup_offset_sparse_run.reset_index(inplace=True)   # Make 'time' a column again.
                 else:
-                    print(f"No fcup_offset for run {run_num}.")
+                    print(f"No fcup_offset for run {run_num}. Probably no beam? "
+                          f"scaler2b.value.max={scalers2b.value.max()} -- We should never get here!! ERROR.")
+                    fcup_offset_sparse_run = pd.DataFrame(data={'ms': [scalers2b.iloc[0].ms],
+                                                                'index': [0],
+                                                                'value': [0],
+                                                                'time': [scalers2b.iloc[0].time]
+                                                                }
+                                                          )
 
             fcup_offset_sparse_time.append(fcup_offset_sparse_run)
 
@@ -242,6 +251,14 @@ def use_once_sparsified_fcup_offset(periods, data):
             fcup_offset_sparse_run["run_num"] = run_num
             data.Mya.add_to_mya_data_range("fcup_offset_sparse", start=row.start_time, end=row.end_time,
                                            run_number=run_num, data_length=len(fcup_offset_sparse_run))
+
+            if "index" in fcup_offset_sparse_run.columns:
+                fcup_offset_sparse_run.drop(columns=['index'], inplace=True)
+                # We dropped the not useful "index" column to the to_sql can write the index as "index".
+
+            if data.debug > 6:
+                print(f"fcup_offset_sparse_run: columns: {fcup_offset_sparse_run.columns}")
+
             fcup_offset_sparse_run.to_sql("fcup_offset_sparse", mya_cache, if_exists="append")
 
         else:  # The data is in the cache.
@@ -256,13 +273,14 @@ def use_once_sparsified_fcup_offset(periods, data):
         t["orig_index"] = t.index      # To save the original index when concat these dataframes.
 
     fcup_offset_sparse = pd.concat(fcup_offset_sparse_time, ignore_index=True)
-    if data.debug>0:
-        print("fcup_offset_sparse.columns: ", fcup_offset_sparse.columns)
     if "index" in fcup_offset_sparse.columns:
         fcup_offset_sparse.drop(columns=['index'], inplace=True)   # Drop the not useful "index" column
 
     fcup_offset_sparse.set_index(['time'], inplace=True)
-    return beam_stop_atten_time, fcup_offset_sparse
+
+    data.fcup_offset_time = fcup_offset_sparse
+
+    return data.beam_stop_atten_time, fcup_offset_sparse
 
 
 def initialize_fcup_param(periods, data,
@@ -399,12 +417,15 @@ def compute_fcup_current_livetime_correction(runnumber, current, data, livetime_
     if livetime_channel is None:
         livetime_channel = data.LiveTime_Channel
 
-    live_time = data.Mya.get(livetime_channel,
-                             data.All_Runs.loc[runnumber, "start_time"],
-                             data.All_Runs.loc[runnumber, "end_time"],
-                             run_number=runnumber)
+    start = data.All_Runs.loc[runnumber, "start_time"]
+    end = data.All_Runs.loc[runnumber, "end_time"]
+    live_time = data.Mya.get(livetime_channel, start, end, run_number=runnumber)
     if len(live_time) < 2:
-        print(f"compute_fcup_current_livetime_correction: Issue with live_time for run {runnumber} - len<2 ")
+        if data.debug > 1:
+            print(f"compute_fcup_current_livetime_correction: Issue with live_time for run {runnumber} - len<2 ")
+        live_time = pd.DataFrame({'ms': [start.timestamp() * 1000, end.timestamp() * 1000],
+                      'value': [100., 100.],
+                      'time': [start, end]})
     elif len(live_time) < 3:
         live_time.fillna(100., inplace=True)  # Replace Nan or None with 1 - no data returned.
     else:
@@ -476,7 +497,6 @@ def add_computed_fcup_data_to_runs(data, dates=None, targets=None, run_config=No
                 compute_fcup_current_livetime_correction(rnum, current, data=data,
                                                          livetime_channel=livetime_channel)
 
-
     else:
         # Even if there are no good runs, make sure that the "charge" column is in the table!
         # This ensure that when you write to DB the charge column exists.
@@ -486,11 +506,6 @@ def add_computed_fcup_data_to_runs(data, dates=None, targets=None, run_config=No
 def main(argv=None):
     import argparse
     import os.path as p
-
-    global dat
-    global beam_stop_atten_time
-    global fcup_offset_time
-
 
     if argv is None:
         argv = sys.argv
@@ -575,15 +590,15 @@ def main(argv=None):
         run_data_hdf = HDFStore('RGA_RunData.h5')
 
     for sub_i in range(len(run_sub_periods)):
+        dat.All_Runs = None   # Delete the content of the previous period, if any.
         setup_rundata_structures(dat, run_sub_periods[sub_i])
 
         dat.All_Runs['luminosity'] *= 1E-3   # Rescale luminosity from 1/pb to 1/fb
 
-        #    data.add_current_data_to_runs()
+        dat.add_current_data_to_runs()
         targets = '.*'
 
         print("Adding additional current channels.")
-        # livetime_channel="B_DAQ:livetime_pulser" -- gives no data.
         dat.add_current_data_to_runs(current_channel="IPM2C24A")
         dat.add_current_data_to_runs(current_channel="scaler_calc1b")
 
@@ -599,20 +614,20 @@ def main(argv=None):
         print("Compute cumulative charge.")
         dat.compute_cumulative_charge(targets, runs=plot_runs)
 
+        # Copy the computed columns over to All_Runs so they show up in the spread sheet.
+        dat.All_Runs.loc[plot_runs.index, "sum_charge"] = plot_runs["sum_charge"]
+        dat.All_Runs.loc[plot_runs.index, "sum_charge_targ"] = plot_runs["sum_charge_targ"]
+
         print("Computing beam_stop_atten*(scalerS2b - fcup_offset)/906.2")
         add_computed_fcup_data_to_runs(data=dat)
+        # Copy the computed columns over to All_Runs so they show up in the spread sheet.
+        plot_runs["Fcup_charge"] = dat.All_Runs.loc[plot_runs.index, "Fcup_charge"]
+        plot_runs["Fcup_charge_cor"] = dat.All_Runs.loc[plot_runs.index, "Fcup_charge_cor"]
+
+
 
         if args.excel:
             excel_output = pd.concat([excel_output, plot_runs, calib_runs], sort=True)
-
-        if args.hdf5:
-            fix_columns = ['user_comment', 'run_type', 'target', 'beam_current_request',
-                           'operators', 'run_config', 'run_start_time', 'run_end_time',
-                           'selected']
-            all_runs_copy = dat.All_Runs.copy()
-            all_runs_copy = all_runs_copy[fix_columns].applymap(str)
-            data_key = f"run_period_{sub_i}/"
-            run_data_hdf.put(data_key +"All_Runs", all_runs_copy)
 
         if args.plot:
 
@@ -695,8 +710,8 @@ def main(argv=None):
                             #
                             # We also need to detect if there is a run number gap.
                             # Check if all the intermediate runs have the same target. If so, these were calibration
-                            # or junk runs, and we continue normally. If there were other targets, we make a break in the
-                            # line.
+                            # or junk runs, and we continue normally. If there were other targets,
+                            # we make a break in the line.
                             if sumch.keys()[i] - sumch.keys()[i - 1] > 1 and \
                                     not np.all(dat.All_Runs.loc[sumch.keys()[i - 1]:sumch.keys()[i]].target == targ):
                                 # There is a break in the run numbers (.keys()) and a target change occurred.
@@ -816,7 +831,6 @@ def main(argv=None):
                             max_expected_charge.append(plot_expected_charge_v[-1])
                             # print(f"max_expected_charge = {max_expected_charge}")
 
-
     #################################################################################################################
     #                     Luminosity
     #################################################################################################################
@@ -839,7 +853,8 @@ def main(argv=None):
                 #                name="Luminosity Live"),
                 #     secondary_y=True)
 
-                # We get the sums per target in two steps. Clumsy, but only way to get the maximum available in second loop
+                # We get the sums per target in two steps.
+                # Clumsy, but only way to get the maximum available in second loop
                 plot_sumlumi_target = {}                       # Store sum results.
                 for targ in dat.target_properties['sums_color']:
                     selected = plot_runs.target == targ
@@ -913,17 +928,31 @@ def main(argv=None):
                             bgcolor="#FFFFFF"
                         )
 
+        if args.hdf5:
+            sub_dir = f"period_x{sub_i}/"
+            run_data_hdf.put(sub_dir + "All_Runs", dat.All_Runs)
+
+
     if args.excel:
         print("Write new Excel table.")
         all_columns = excel_output.columns.drop(['hover', 'center', 'run_start_time', 'run_end_time'])
-        ordered_columns = ['start_time', 'end_time', 'target', 'beam_energy', 'run_config', 'selected',
-                           'event_count', 'sum_event_count', 'evio_files_count', 'megabyte_count'
+        ordered_columns = ['start_time', 'end_time', 'target', 'beam_energy', 'beam_current_request', 'run_config',
+                           'selected', 'event_count', 'sum_event_count', 'event_rate', 'evio_files_count',
+                           'megabyte_count', 'is_valid_run_end',
+                           'B_DAQ:livetime_pulser',	'Fcup_charge', 'Fcup_charge_cor', 'IPM2C21A', 'IPM2C21A_corr',
+                           'IPM2C24A', 'IPM2C24A_corr', 'scaler_calc1b', 'scaler_calc1b_corr',
+                           'sum_charge', 'sum_charge_targ',
+                           'operators', 'user_comment'
                            ]
-        excel_output.to_excel("RGA_progress.xlsx",
-                              #columns=['start_time', 'end_time', 'target', 'beam_energy', 'run_config', 'selected',
-                              #         'event_count', 'sum_event_count', 'charge', 'sum_charge', 'luminosity',
-                              #         'sum_lumi', 'evio_files_count', 'megabyte_count', 'operators', 'user_comment']
-                              )
+        ordered_columns_copy = ordered_columns.copy()
+        for c in ordered_columns_copy:
+            if c not in excel_output.columns:
+                print(f"Excel output, column {c} removed.")
+                ordered_columns.remove(c)
+        # print(f"ordered_columns = {ordered_columns}")
+        # print(f"excel_output.columns = {excel_output.columns}")
+
+        excel_output.to_excel("RGA_progress.xlsx", columns=ordered_columns)
 
         # End sub run period loop.
     if args.plot:
@@ -1026,7 +1055,8 @@ def main(argv=None):
 if __name__ == "__main__":
     sys.exit(main())
 else:
-    print("Imported the RGA info. Setting up 'dat'.")
-    dat = RunData(cache_file="RGA.sqlite3", sqlcache=True)
-    dat.debug = 10
+    print("Imported the RGA info.")
+    print("Setup 'data' with: data = RunData(cache_file='RGA.sqlite3', sqlcache=True)")
+#    data = RunData(cache_file="RGA.sqlite3", sqlcache=True)
+#    data.debug = 10
 
