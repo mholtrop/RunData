@@ -157,10 +157,14 @@ class MyaData:
 
         return False
 
-    def get_channel_from_cache(self, channel, start=None, end=None):
-        """Get a channel from the cache from start to end, or all of it if None. Do not check for run number"""
+    def get_channel_from_cache(self, channel, start=None, end=None,
+                               data_values='"index", ms, value, time', index_col="index"):
+        """Get a channel from the cache from start to end, or all of it if None. Do not check for run number.
+        Options: data_values  - The values to get from the cache.
+        Standard, the cache will contain \"index\", ms, value, time. We do not want the index, so
+        default data_values is set to 'ms, value, time' """
 
-        sql = f"select * from '{channel}' "
+        sql = f"select {data_values} from '{channel}' "
         if (start is not None) or (end is not None):
             sql += " where "
         if start is not None:
@@ -174,7 +178,7 @@ class MyaData:
 
         if self._debug > 2:
             print(f"Getting the data from cache. \nSQL={sql}")
-        pd_frame = pd.read_sql(sql, self._cache_engine, parse_dates=["time"])
+        pd_frame = pd.read_sql(sql, self._cache_engine, parse_dates=["time"], index_col=index_col)
         return pd_frame
 
     def get(self, channel, start, end, do_not_clean=False, run_number=None, no_cache=False):
