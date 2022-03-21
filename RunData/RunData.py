@@ -701,11 +701,13 @@ class RunData:
                                  run_number=runnumber)
         # If there is bad data in the live_time, None or nan, then set those to zero.
         if len(live_time) < 2:
+            start = self.All_Runs.loc[runnumber, 'start_time']
+            end = self.All_Runs.loc[runnumber, 'end_time']
             print(f"RunData: live_time < 2. This should not be possible -- Cache Corrupted?"
-                  f" run number:{runnumber}"
-                  f" start:{self.All_Runs.loc[runnumber, 'start_time']} "
-                  f" end:{self.All_Runs.loc[runnumber, 'end_time']} ")
-            return
+                  f" run number:{runnumber}  start:{start} end:{end} ")
+            live_time = pd.DataFrame({'ms': [start.timestamp() * 1000, end.timestamp() * 1000],
+                                      'value': [100., 100.],
+                                      'time': [start, end]})
 
         if len(live_time) < 3:
             live_time.fillna(1., inplace=True)  # Replace Nan or None with 1 - no data returned.
