@@ -3,7 +3,7 @@
 
 import numpy as np
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import sys
 import os
@@ -100,6 +100,12 @@ class MyaData:
     def debug(self, debug_level):
         self._debug = debug_level
 
+    @property
+    def cache_engine(self):
+        """Return the cache engine in use.
+        This allows you to do direct manipulations on the sqlalchemy object. This is read only."""
+        return self._cache_engine
+
     def start_cache_engine(self, cache):
         """Setup and/or check the cache database."""
 
@@ -116,17 +122,24 @@ class MyaData:
 
             self._cache_engine = sqlalchemy.create_engine(connector_string)
 
-        if not sqlalchemy.inspect(self._cache_engine).has_table("Mya_Data_Ranges"):
+        if not self.check_if_table_is_in_cache("Mya_Data_Ranges"):
             meta = sqlalchemy.MetaData()
             sqlalchemy.Table('Mya_Data_Ranges', meta,
                              sqlalchemy.Column('index', sqlalchemy.Integer, primary_key=True),
                              sqlalchemy.Column('run_number', sqlalchemy.Integer),
                              sqlalchemy.Column('start_time', sqlalchemy.DateTime),
                              sqlalchemy.Column('end_time', sqlalchemy.DateTime),
-                             sqlalchemy.Column('channel', sqlalchemy.String))
+                             sqlalchemy.Column('channel', sqlalchemy.String),
+                             sqlalchemy.Column('data_length', sqlalchemy.Integer))
             meta.create_all(self._cache_engine)
 
+    def check_if_table_is_in_cache(self, table_name):
+        """Check if the table for channel 'table_name' is in the cache."""
+        return sqlalchemy.inspect(self._cache_engine).has_table(table_name)
+
     def check_if_data_is_in_cache(self, channel, start, end, run_number):
+        """Check if the Mya_Data_Ranges table in the cache has an entry for channel and run_number, and
+        check that start and end are within the limits for this data."""
         sql = f'select * from Mya_Data_Ranges where run_number = {run_number} and channel = "{channel}";'
         run_data_mya = pd.read_sql(sql, self._cache_engine, index_col="run_number",
                                    parse_dates=["start_time", "end_time"])
@@ -143,6 +156,30 @@ class MyaData:
             print(f"MyaData Cache corruption: Multiple entries found for {run_number} {channel} ")
 
         return False
+
+    def get_channel_from_cache(self, channel, start=None, end=None,
+                               data_values='"index", ms, value, time', index_col="index"):
+        """Get a channel from the cache from start to end, or all of it if None. Do not check for run number.
+        Options: data_values  - The values to get from the cache.
+        Standard, the cache will contain \"index\", ms, value, time. We do not want the index, so
+        default data_values is set to 'ms, value, time' """
+
+        sql = f"select {data_values} from '{channel}' "
+        if (start is not None) or (end is not None):
+            sql += " where "
+        if start is not None:
+            sql = sql + f"time >= '{start}' "
+            if end is not None:
+                sql = sql + "and "
+        if end is not None:
+            # For database reasons, add a fraction of a second so end is included.
+            end = end + timedelta(seconds=0.0001)
+            sql = sql + f"time <= '{end}'"
+
+        if self._debug > 2:
+            print(f"Getting the data from cache. \nSQL={sql}")
+        pd_frame = pd.read_sql(sql, self._cache_engine, parse_dates=["time"], index_col=index_col)
+        return pd_frame
 
     def get(self, channel, start, end, do_not_clean=False, run_number=None, no_cache=False):
         """Get a series of Mya data with a myQuery call for channel, from start to end time.
@@ -162,20 +199,7 @@ class MyaData:
 
         if run_number is not None and not no_cache:
             if self.check_if_data_is_in_cache(channel, start, end, run_number):  # Data is available.
-                sql = f"select * from '{channel}' "
-                if (start is not None) or (end is not None):
-                    sql += " where "
-                if start is not None:
-                    sql = sql + f"time >= '{start}' "
-                    if end is not None:
-                        sql = sql + "and "
-                if end is not None:
-                    sql = sql + f"time <= '{end}'"
-
-                if self._debug > 1:
-                    print(f"Getting the data from cache. \nSQL={sql}")
-                pd_frame = pd.read_sql(sql, self._cache_engine, parse_dates=["time"])
-                return pd_frame
+                return self.get_channel_from_cache(channel, start=start, end=end)
 
         if (start is None) or (end is None):
             print("MyaData.get():: ERROR = If data is not in cache, you *must* suply a start and end time.")
@@ -221,54 +245,67 @@ class MyaData:
         if dat_len == 0:                                           # EPICS sparsified the data?
             if self._debug > 0:
                 print(f"run {run_number} - No data received for channel: {channel} between {start} and {end}.")
-            return pd.DataFrame({'ms': [start.timestamp() * 1000, end.timestamp() * 1000], 'value': [None, None],
-                                 'time': [start, end]})
+            pd_frame = pd.DataFrame({'ms': [start.timestamp() * 1000, end.timestamp() * 1000],
+                                     'value': [np.nan, np.nan],
+                                     'time': [start, end]})
+        else:
+            pd_frame = pd.DataFrame(my_dat.json()['data'])
+            if len(pd_frame.columns) > 2 and not do_not_clean:
+                # If there are issues with time stamps, 2 extra columns are added: 't' and 'x'
+                if self.debug > 3:
+                    print(f"There is trouble with the Mya data for channel {channel} in the time period {start} - {end}")
+                    print(pd_frame.columns)
+                try:
+                    pd_frame.drop(pd_frame.loc[pd.isna(pd_frame['v'])].index, inplace=True)
+                    if 'x' in pd_frame.columns:
+                        pd_frame.drop(['x'], axis=1, inplace=True)
+                    if 't' in pd_frame.columns:
+                        pd_frame.drop(['t'], axis=1, inplace=True)
+                except Exception as e:
+                    print("Could not fix the issue.")
+                    print(e)
+                    raise
 
-        pd_frame = pd.DataFrame(my_dat.json()['data'])
+            pd_frame.rename(columns={"d": "ms", "v": "value"}, inplace=True)         # Rename the columns
+            pd_frame.sort_values('ms', inplace=True)  # Rare, but sometimes Mya does not give a sorted list, so sort it.
+            #
+            # Convert the ms timestamp to a datetime in the correct time zone.
+            #
+            pd_frame.loc[:, 'time'] = [np.datetime64(x, 'ms') for x in pd_frame.ms]
 
-        if len(pd_frame.columns) > 2 and not do_not_clean:
-            # If there are issues with time stamps, 2 extra columns are added: 't' and 'x'
-            if self.debug > 3:
-                print(f"There is trouble with the Mya data for channel {channel} in the time period {start} - {end}")
-                print(pd_frame.columns)
-            try:
-                pd_frame.drop(pd_frame.loc[pd.isna(pd_frame['v'])].index, inplace=True)
-            except Exception as e:
-                print("Could not fix the issue.")
-                print(e)
-                sys.exit(1)
-
-        pd_frame.rename(columns={"d": "ms", "v": "value"}, inplace=True)                         # Rename the columns
-        pd_frame.sort_values('ms', inplace=True)      # Rare, but sometimes Mya does not give a sorted list, so sort it.
-        #
-        # Convert the ms timestamp to a datetime in the correct time zone.
-        #
-        pd_frame.loc[:, 'time'] = [np.datetime64(x, 'ms') for x in pd_frame.ms]
-
-        # If you want with encoded timezone, you can do:
-        # pd.Series(pd.to_datetime([ datetime.fromtimestamp(x/1000) for x in pd_frame.ms]) \
-        #   .tz_localize("US/Eastern"),dtype=object)
-        # or
-        #pd.Series(pd.to_datetime(pd_frame.loc[:,'ms'],unit='ms',utc=True).dt.tz_convert("US/Eastern"),dtype=object)
-        #
-        # But these are quite a bit slower.
-        #
+            # If you want with encoded timezone, you can do:
+            # pd.Series(pd.to_datetime([ datetime.fromtimestamp(x/1000) for x in pd_frame.ms]) \
+            #   .tz_localize("US/Eastern"),dtype=object)
+            # or
+            #pd.Series(pd.to_datetime(pd_frame.loc[:,'ms'],unit='ms',utc=True).dt.tz_convert("US/Eastern"),dtype=object)
+            #
+            # But these are quite a bit slower.
+            #
 
         if self._cache_engine is not None and run_number is not None:
             # We want to now store the data to the cache.
             # We use the pd.DataFrame functionality to do so.
+            self.add_to_mya_data_range(channel, start, end, run_number, dat_len)
+            pd_frame.to_sql(channel, self._cache_engine, if_exists="append")
+
+        return pd_frame
+
+    def add_to_mya_data_range(self, channel, start, end, run_number, data_length):
+        """Add an entry to the Mya_Data_Ranges table in the cache, so you can lookup
+        the data by run number as well as by time slot. This is mostly an internal method."""
+        if self._cache_engine is not None and run_number is not None:
             result = self._cache_engine.execute('select max("index") from Mya_Data_Ranges;')
             result_fetch = result.fetchall()
             if result_fetch[0][0] is not None:
                 max_index = result_fetch[0][0] + 1
             else:
                 max_index = 0
-            data_range_add = pd.DataFrame({"run_number": run_number, "start_time": start, "end_time": end,
-                                           "channel": channel}, index=[max_index])
+            data_range_add = pd.DataFrame({"run_number": [run_number], "start_time": [start], "end_time": [end],
+                                           "channel": [channel], "data_length": [data_length]}, index=[max_index])
             data_range_add.to_sql("Mya_Data_Ranges", self._cache_engine, if_exists="append")
-            pd_frame.to_sql(channel, self._cache_engine, if_exists="append")
-
-        return pd_frame
+            return data_range_add
+        else:
+            return None
 
     def get_multi(self, channels, start, end):
         """Get multiple channels in the list 'channels' into a single dataframe and return.

@@ -700,6 +700,15 @@ class RunData:
                                  self.All_Runs.loc[runnumber, "end_time"],
                                  run_number=runnumber)
         # If there is bad data in the live_time, None or nan, then set those to zero.
+        if len(live_time) < 2:
+            start = self.All_Runs.loc[runnumber, 'start_time']
+            end = self.All_Runs.loc[runnumber, 'end_time']
+            print(f"RunData: live_time < 2. This should not be possible -- Cache Corrupted?"
+                  f" run number:{runnumber}  start:{start} end:{end} ")
+            live_time = pd.DataFrame({'ms': [start.timestamp() * 1000, end.timestamp() * 1000],
+                                      'value': [100., 100.],
+                                      'time': [start, end]})
+
         if len(live_time) < 3:
             live_time.fillna(1., inplace=True)  # Replace Nan or None with 1 - no data returned.
         else:
@@ -719,8 +728,9 @@ class RunData:
         try:
             live_time_corr = np.interp(current.ms, live_time.ms, live_time.value) / 100.  # convert to fraction from %
         except Exception as e:
-            print("There is a problem with the data for run {}".format(runnumber))
+            print(f"RunData(live_time_corr) There is a problem with the data for run {runnumber}")
             print(e)
+            return
 
         #
         # Now we can just multiply the live_time_corr with the current.
@@ -728,8 +738,9 @@ class RunData:
         try:
             current_corr = current.value * live_time_corr
         except Exception as e:
-            print("There is a problem with the data for run {}".format(runnumber))
+            print(f"RunData(current_corr) There is a problem with the data for run {runnumber}")
             print(e)
+            return
 
         #
         # We need to do a proper trapezoidal integration over the current data points.
@@ -739,7 +750,7 @@ class RunData:
         # If we want mC instead of Coulombs, the factor is 1e-12*1e3 = 1e-9
         #
 
-        self.All_Runs.loc[runnumber, current_channel] = np.trapz(current.value, current.ms)
+        self.All_Runs.loc[runnumber, current_channel] = np.trapz(current.value, current.ms) * 1e-9  # mC
         self.All_Runs.loc[runnumber, livetime_channel] = np.trapz(live_time.value, live_time.ms)
         self.All_Runs.loc[runnumber, current_channel+"_corr"] = np.trapz(current_corr, current.ms) * 1e-9  # mC
         self.All_Runs.loc[runnumber, "charge"] = self.All_Runs.loc[runnumber, current_channel+"_corr"]
@@ -799,7 +810,7 @@ class RunData:
         self.Production_run_type and self.Good_triggers can be either a list of strings to match
         or a regular expression to match. Use '.*' to match everything. """
 
-        if self.debug > 10:
+        if self.debug > 5:
             print("select_good_runs: Production_run_type = ", self.Production_run_type)
         good_runs = []
         for rnum in self.All_Runs.index:
@@ -809,7 +820,7 @@ class RunData:
             elif type(self.Production_run_type) is list:
                 test1 = self.All_Runs.loc[rnum, "run_type"] in self.Production_run_type
             elif type(self.Production_run_type) is str:
-                if self.debug > 10:
+                if self.debug > 5:
                     print(f"select_good_runs: rnum={rnum:6d} run_type: '{self.All_Runs.loc[rnum, 'run_type']}'")
                 if self.All_Runs.loc[rnum, "run_type"] is not None and \
                         re.match(self.Production_run_type, self.All_Runs.loc[rnum, "run_type"]):

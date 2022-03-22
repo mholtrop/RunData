@@ -421,6 +421,6 @@ if __name__ == "__main__":
     sys.exit(main())
 else:
     print("Imported the HPSRun2019 package. Setting up data.")
-    data = RunData(cache_file="HPS_run_cache.sqlite3", i_am_at_jlab=False)
-    data.debug = 10
-    targets = setup_data(data)
+    dat = RunData(cache_file="HPS_run_cache.sqlite3", i_am_at_jlab=False)
+    dat.debug = 10
+    targets = setup_data(dat)
