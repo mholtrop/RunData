@@ -461,7 +461,7 @@ def compute_fcup_current_livetime_correction(runnumber, current, data, livetime_
     #
 
     data.All_Runs.loc[runnumber, "Fcup_charge"] = np.trapz(current.value, current.ms) * 1e-9  # mC
-    data.All_Runs.loc[runnumber, "Fcup_charge_cor"] = np.trapz(current_corr, current.ms) * 1e-9  # mC
+    data.All_Runs.loc[runnumber, "Fcup_charge_corr"] = np.trapz(current_corr, current.ms) * 1e-9  # mC
 
     return current_corr
 
@@ -500,7 +500,8 @@ def add_computed_fcup_data_to_runs(data, dates=None, targets=None, run_config=No
     else:
         # Even if there are no good runs, make sure that the "charge" column is in the table!
         # This ensure that when you write to DB the charge column exists.
-        data.All_Runs.loc[:, "charge"] = np.NaN
+        data.All_Runs.loc[:, "Fcup_charge"] = np.NaN
+        data.All_Runs.loc[:, "Fcup_charge_corr"] = np.NaN
 
 
 def main(argv=None):
@@ -622,7 +623,7 @@ def main(argv=None):
         add_computed_fcup_data_to_runs(data=dat)
         # Copy the computed columns over to All_Runs so they show up in the spread sheet.
         plot_runs["Fcup_charge"] = dat.All_Runs.loc[plot_runs.index, "Fcup_charge"]
-        plot_runs["Fcup_charge_cor"] = dat.All_Runs.loc[plot_runs.index, "Fcup_charge_cor"]
+        plot_runs["Fcup_charge_corr"] = dat.All_Runs.loc[plot_runs.index, "Fcup_charge_corr"]
 
 
 
@@ -939,7 +940,7 @@ def main(argv=None):
         ordered_columns = ['start_time', 'end_time', 'target', 'beam_energy', 'beam_current_request', 'run_config',
                            'selected', 'event_count', 'sum_event_count', 'event_rate', 'evio_files_count',
                            'megabyte_count', 'is_valid_run_end',
-                           'B_DAQ:livetime_pulser',	'Fcup_charge', 'Fcup_charge_cor', 'IPM2C21A', 'IPM2C21A_corr',
+                           'B_DAQ:livetime_pulser',	'Fcup_charge', 'Fcup_charge_corr', 'IPM2C21A', 'IPM2C21A_corr',
                            'IPM2C24A', 'IPM2C24A_corr', 'scaler_calc1b', 'scaler_calc1b_corr',
                            'sum_charge', 'sum_charge_targ',
                            'operators', 'user_comment'
