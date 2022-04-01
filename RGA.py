@@ -118,6 +118,18 @@ def used_triggers():
 
     return good_triggers, calibration_triggers
 
+def read_rafo_start_end_times():
+    """Read the run start and end times that Rafo extracted from the data and return in a DataFrame."""
+    rafo_times1 = pd.read_csv("RunSummaryinfo_F18_Inb_Earlyruns.dat",
+                              names=["run_number", "charge", "t_start", "t_end"], index_col=0)
+    rafo_times2 = pd.read_csv("RunSummaryinfo_F18inbend.dat", names=["run_number", "charge", "t_start", "t_end"],
+                              index_col=0)
+    rafo_times1["start_time"] = rafo_times1.t_start.map(datetime.fromtimestamp)
+    rafo_times1["end_time"] = rafo_times1.t_end.map(datetime.fromtimestamp)
+    rafo_times2["start_time"] = rafo_times2.t_start.map(datetime.fromtimestamp)
+    rafo_times2["end_time"] = rafo_times2.t_end.map(datetime.fromtimestamp)
+    rafo_times = pd.concat([rafo_times1, rafo_times2])
+    return(rafo_times)
 
 def setup_rundata_structures(data, dates):
     """Setup the data structures for parsing the databases."""
@@ -136,7 +148,15 @@ def setup_rundata_structures(data, dates):
     min_event_count = 500000  # Runs with at least 200k events.
     end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
     print("Fetching the data from {} to {}".format(start_time, end_time))
+    data.fix_bad_rcdb_start_times = True
     data.get_runs(start_time, end_time, min_event_count)
+
+    # We need to check the runs that have missing start_time or end_time.
+    # If start or end time is missing, use the data tables from Rafo.
+    rafo_times = read_rafo_start_end_times()
+
+
+
     if 5381 in data.All_Runs.index and 5382 in data.All_Runs.index:
         # This run seems to have a bad start time from the RCDB database. If so, we fix it here.
         if data.All_Runs.loc[5382].start_time < data.All_Runs.loc[5381].end_time:
@@ -616,8 +636,10 @@ def main(argv=None):
         dat.compute_cumulative_charge(targets, runs=plot_runs)
 
         # Copy the computed columns over to All_Runs so they show up in the spread sheet.
-        dat.All_Runs.loc[plot_runs.index, "sum_charge"] = plot_runs["sum_charge"]
-        dat.All_Runs.loc[plot_runs.index, "sum_charge_targ"] = plot_runs["sum_charge_targ"]
+        if "sum_charge" in plot_runs.columns:
+            dat.All_Runs.loc[plot_runs.index, "sum_charge"] = plot_runs["sum_charge"]
+        if "sum_charge_targ" in plot_runs.columns:
+            dat.All_Runs.loc[plot_runs.index, "sum_charge_targ"] = plot_runs["sum_charge_targ"]
 
         print("Computing beam_stop_atten*(scalerS2b - fcup_offset)/906.2")
         add_computed_fcup_data_to_runs(data=dat)
