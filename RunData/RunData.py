@@ -243,8 +243,7 @@ class RunData:
         return cache_overlaps, cache_extend_before, cache_extend_after
 
     def _cache_fill_runs(self, start, end, min_event):
-        """Fill the cache with runs from start to end.
-        Filter on min_event and leave the rest in All_Runs."""
+        """Fill the cache with runs from start to end and put the result in All_Runs."""
 
         start = start + timedelta(0, 0, -start.microsecond)  # Round down on start
         if end.microsecond != 0:
@@ -271,9 +270,6 @@ class RunData:
             if self.debug > 2:
                 print("Adjusted end for empty rcdb fetch to: ", end)
             return num_runs, end
-
-        good_runs = self.select_good_runs()
-        self.add_current_data_to_runs()  # Fill in the missing current info
 
         # Two scenarios now:
         # 1: The run period we just added is somewhere in the middle of all possible runs. It is thus extremely unlikely
@@ -448,6 +444,13 @@ class RunData:
         self._cache_known_data.to_sql("Known_Data_Ranges", self._cache_engine, if_exists='replace')
 
     def get_runs(self, start, end, min_event):
+        """Get runs with get_runs_only, and then run the select_good_runs and add_current_data_to_runs."""
+        self.get_runs_only(start, end, min_event)
+        good_runs = self.select_good_runs()
+        self.add_current_data_to_runs()
+        return len(self.All_Runs)
+
+    def get_runs_only(self, start, end, min_event):
         """Fetch the runs from start time to end time with at least min_event events.
         Checking local cache if runs have already been fetched (if self._cache_engine is not None)
         If not get them from the rcdb and update the cache (if not None).
@@ -469,8 +472,6 @@ class RunData:
             if self.debug > 2:
                 print("Getting runs bypassing cache, for start={}, end={}, min_event={}".format(start, end, min_event))
             num_runs = self.get_runs_from_rcdb(start, end, min_event)
-            self.select_good_runs()
-            self.add_current_data_to_runs()  # Fill in the missing current info
             return num_runs
 
         num_runs_cache = self._cache_get_runs(start, end, min_event)  # Get whatever we have in the cache already.
@@ -615,7 +616,7 @@ class RunData:
         self.process_runs_from_rcdb(runs)
         # The RCDB is by and large a piece of ..., er, very unreliable. Translate "None" to 0.
         self.All_Runs.loc[(self.All_Runs.event_count == "None"), "event_count"] = 0
-        self.All_Runs = self.All_Runs.loc[self.All_Runs.event_count > min_event_count]  # Filter the low count runs.
+        self.All_Runs = self.All_Runs.loc[self.All_Runs.event_count >= min_event_count]  # Filter the low count runs.
 
         return len(self.All_Runs)
 
@@ -634,8 +635,8 @@ class RunData:
 
         if self._db is not None:
             q = self._db.session.query(Run).join(Run.conditions).join(Condition.type) \
-                .filter(Run.start_time > start_time).filter(Run.start_time < end_time) \
-                .filter((ConditionType.name == "event_count") & (Condition.int_value > min_event_count))
+                .filter(Run.start_time >= start_time).filter(Run.start_time <= end_time) \
+                .filter((ConditionType.name == "event_count") & (Condition.int_value >= min_event_count))
         else:
             return 0
 
@@ -654,6 +655,9 @@ class RunData:
             num_runs = self.get_runs_from_rcdb_by_run_number(first_run_number, last_run_number, min_event_count)
         else:
             num_runs = self.process_runs_from_rcdb(all_runs)
+            # The RCDB is by and large a piece of ..., er, very unreliable. Translate "None" to 0.
+            self.All_Runs.loc[(self.All_Runs.event_count == "None"), "event_count"] = 0
+            self.All_Runs = self.All_Runs.loc[self.All_Runs.event_count >= min_event_count]  # Filter the low count runs.
 
         return num_runs
 
@@ -733,12 +737,19 @@ class RunData:
             return
 
         if self.debug > 4:
-            print("add_current_cor, run= {:5d}".format(runnumber))
+            print(f"add_current_cor, run= {runnumber:5d}  start={self.All_Runs.loc[runnumber,'start_time']} "
+                  f"end={self.All_Runs.loc[runnumber, 'end_time']}")
+
+        if pd.isnull(self.All_Runs.loc[runnumber, "start_time"]) or \
+           pd.isnull(self.All_Runs.loc[runnumber, "end_time"]):
+            # We cannot compute the current if the times are not known.
+            return
 
         current = self.Mya.get(current_channel,
                                self.All_Runs.loc[runnumber, "start_time"],
                                self.All_Runs.loc[runnumber, "end_time"],
                                run_number=runnumber)
+
         current.fillna(0, inplace=True)     # Replace Nan or None with 0
         live_time = self.Mya.get(livetime_channel,
                                  self.All_Runs.loc[runnumber, "start_time"],
