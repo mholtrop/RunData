@@ -157,7 +157,7 @@ class MyaData:
 
         return False
 
-    def get_channel_from_cache(self, channel, start=None, end=None,
+    def get_channel_from_cache(self, channel, start=None, end=None, run_number=None,
                                data_values='"index", ms, value, time', index_col="index"):
         """Get a channel from the cache from start to end, or all of it if None. Do not check for run number.
         Options: data_values  - The values to get from the cache.
@@ -175,7 +175,10 @@ class MyaData:
             # For database reasons, add a fraction of a second so end is included.
             end = end + timedelta(seconds=0.0001)
             sql = sql + f"time <= '{end}'"
-
+        if run_number is not None:
+            if (start is not None) or (end is not None):
+                sql = sql + " and "
+            sql = sql + f"run_number = {run_number}"
         if self._debug > 2:
             print(f"Getting the data from cache. \nSQL={sql}")
         pd_frame = pd.read_sql(sql, self._cache_engine, parse_dates=["time"], index_col=index_col)
@@ -247,7 +250,8 @@ class MyaData:
                 print(f"run {run_number} - No data received for channel: {channel} between {start} and {end}.")
             pd_frame = pd.DataFrame({'ms': [start.timestamp() * 1000, end.timestamp() * 1000],
                                      'value': [np.nan, np.nan],
-                                     'time': [start, end]})
+                                     'time': [start, end],
+                                     'run_number': np.nan})
         else:
             pd_frame = pd.DataFrame(my_dat.json()['data'])
             if len(pd_frame.columns) > 2 and not do_not_clean:
@@ -270,9 +274,11 @@ class MyaData:
             pd_frame.sort_values('ms', inplace=True)  # Rare, but sometimes Mya does not give a sorted list, so sort it.
             #
             # Convert the ms timestamp to a datetime in the correct time zone.
+            # TODO: Replace with map
             #
             pd_frame.loc[:, 'time'] = [np.datetime64(x, 'ms') for x in pd_frame.ms]
 
+            pd_frame['run_number'] = run_number
             # If you want with encoded timezone, you can do:
             # pd.Series(pd.to_datetime([ datetime.fromtimestamp(x/1000) for x in pd_frame.ms]) \
             #   .tz_localize("US/Eastern"),dtype=object)
