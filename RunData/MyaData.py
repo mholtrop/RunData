@@ -135,11 +135,18 @@ class MyaData:
 
     def check_if_table_is_in_cache(self, table_name):
         """Check if the table for channel 'table_name' is in the cache."""
+        if self._cache_engine is None:
+            return False
+
         return sqlalchemy.inspect(self._cache_engine).has_table(table_name)
 
     def check_if_data_is_in_cache(self, channel, start, end, run_number):
         """Check if the Mya_Data_Ranges table in the cache has an entry for channel and run_number, and
         check that start and end are within the limits for this data."""
+
+        if self._cache_engine is None:
+            return False
+
         sql = f'select * from Mya_Data_Ranges where run_number = {run_number} and channel = "{channel}";'
         run_data_mya = pd.read_sql(sql, self._cache_engine, index_col="run_number",
                                    parse_dates=["start_time", "end_time"])
@@ -163,6 +170,9 @@ class MyaData:
         Options: data_values  - The values to get from the cache.
         Standard, the cache will contain \"index\", ms, value, time. We do not want the index, so
         default data_values is set to 'ms, value, time' """
+
+        if self._cache_engine is None:
+            return None
 
         sql = f"select {data_values} from '{channel}' "
         if (start is not None) or (end is not None):

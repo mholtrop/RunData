@@ -1,9 +1,12 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-#
 # Specify encoding so strings can have special characters.
 #
-
+# This script, using the RunData pacakge, makes plots for the Run Group C experiment with CLAS12 in Hall-B.
+# Sorry it is such a mess. This has grown more or less organically, and I never had a chance to clean it up.
+#
+# Author: Maurik Holtrop - UNH - June 2022.
+#
 from __future__ import print_function
 import sys
 import os
@@ -51,8 +54,6 @@ def rgc_2022_target_properties():
         },
         'density': {     # Units: g/cm^2
             # 'norm': 0.335,
-#            'LH2': 0.335,
-#            'LD2': 0.820,
             'C': 0.440,
             'NH3': 3.0,
             'ND3': 3.0,
@@ -61,10 +62,8 @@ def rgc_2022_target_properties():
             'empty': 0
         },
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
-            ## list of currents for each beam energy period.
+            # list of currents for each beam energy period.
             'scale': [1, 1, 1],     # Special entry. Multiply sum charge by this factor,
-#            'LH2': [0., 0., 0.],   # for plotting with multiple beam energies, where charge rates vary a lot.
-#            'LD2': [0., 0., 0.],
             'C': [2.5, 5., 90.],
             'empty': [0., 0., 0.],
             'NH3': [2.5, 5., 1.],
@@ -74,8 +73,6 @@ def rgc_2022_target_properties():
 
         },
         'attenuation': {     # Units: number
-#            'LH2':  1,
-#            'LD2': 1,
             'C': 1,
             'empty': 1,
             'NH3': 1,
@@ -84,8 +81,6 @@ def rgc_2022_target_properties():
             'CD2': 1,
         },
         'color': {  # Plot color: r,g,b,a
-#            'LH2':  'rgba(0, 120, 150, 0.8)',
-#            'LD2': 'rgba(20, 80, 255, 0.8)',
             'C': 'rgba(120, 120, 200, 0.8)',
             'empty': 'rgba(220, 220, 220, 0.8)',
             'NH3': 'rgba(0, 100, 255, 0.8)',
@@ -95,8 +90,6 @@ def rgc_2022_target_properties():
         },
         'sums_color': {  # Plot color: r,g,b,a
             # 'empty': 'rgba(255, 200, 200, 0.8)',
-#            'LH2': 'rgba(255, 120, 150, 0.8)',
-#            'LD2': 'rgba(255, 80, 255, 0.8)',
             'C': 'rgba(255, 120, 200, 0.8)',
             'NH3': 'rgba(255, 0, 100, 0.8)',
             'ND3': 'rgba(255, 0, 100, 0.8)',
@@ -215,7 +208,6 @@ def main(argv=None):
     run_sub_energy = [2.21205, 10.5473]
     run_sub_y_placement = [0.79, 0.99]
 
-
     if args.plot:
         max_y_value_sums = 0.
         fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -258,7 +250,7 @@ def main(argv=None):
         data.compute_cumulative_charge(targets, runs=plot_runs)
 
         if args.excel:
-            excel_output = excel_output.append( plot_runs.append(calib_runs)).sort_index()
+            excel_output = excel_output.append(plot_runs.append(calib_runs)).sort_index()
 
         #    print(data.All_Runs.to_string(columns=['start_time','end_time','target','run_config','selected','event_count','charge','user_comment']))
         #    data.All_Runs.to_latex("hps_run_table.latex",columns=['start_time','end_time','target','run_config','selected','event_count','charge','operators','user_comment'])
@@ -692,6 +684,7 @@ def main(argv=None):
                                        'event_count', 'sum_event_count', 'charge', 'sum_charge', 'luminosity',
                                        'sum_lumi',
                                        'evio_files_count', 'megabyte_count', 'operators', 'user_comment'])
+
 
 if __name__ == "__main__":
     sys.exit(main())
