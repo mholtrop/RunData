@@ -119,12 +119,24 @@ def used_triggers():
     return good_triggers, calibration_triggers
 
 
-def setup_rundata_structures(data, dates):
+def read_rafo_start_end_times():
+    """Read the run start and end times that Rafo extracted from the data and return in a DataFrame."""
+    rafo_times1 = pd.read_csv("RunSummaryinfo_F18_Inb_Earlyruns.dat",
+                              names=["run_number", "charge", "t_start", "t_end"], index_col=0)
+    rafo_times2 = pd.read_csv("RunSummaryinfo_F18inbend.dat", names=["run_number", "charge", "t_start", "t_end"],
+                              index_col=0)
+    rafo_times1["data_start"] = rafo_times1.t_start.map(datetime.fromtimestamp)
+    rafo_times1["data_end"] = rafo_times1.t_end.map(datetime.fromtimestamp)
+    rafo_times2["data_start"] = rafo_times2.t_start.map(datetime.fromtimestamp)
+    rafo_times2["data_end"] = rafo_times2.t_end.map(datetime.fromtimestamp)
+    rafo_times = pd.concat([rafo_times1, rafo_times2])
+    return rafo_times
+
+
+def setup_rundata_structures(data, runs=None):
     """Setup the data structures for parsing the databases."""
 
-    start_time, end_time = dates
     data.Good_triggers, data.Calibration_triggers = used_triggers()
-
     data.Production_run_type = "PROD.*"  # ["PROD66", "PROD66_PIN", "PROD66_noVTPread", "PROD67_noVTPread"]
     data.target_properties = rga_2022_target_properties()
     data.target_dens = data.target_properties['density']
@@ -133,167 +145,59 @@ def setup_rundata_structures(data, dates):
     data.LiveTime_Channel = "B_DAQ:livetime_pulser"
     data.Useful_conditions.append('beam_energy')  # This run will have multiple beam energies.
 
-    min_event_count = 500000  # Runs with at least 200k events.
-    end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
-    print("Fetching the data from {} to {}".format(start_time, end_time))
-    data.get_runs(start_time, end_time, min_event_count)
-    if 5381 in data.All_Runs.index and 5382 in data.All_Runs.index:
-        # This run seems to have a bad start time from the RCDB database. If so, we fix it here.
-        if data.All_Runs.loc[5382].start_time < data.All_Runs.loc[5381].end_time:
-            data.All_Runs.loc[5382, "start_time"] = data.All_Runs.loc[5381, "end_time"] + timedelta(seconds=1)
+    min_event_count = 0  # Get all the runs even with zero counts, because RCDB has bad entries.
 
-    data.select_good_runs()
+    print(f"Getting runs: {runs[0]} to {runs[1]}")
+    data.fix_bad_rcdb_start_times = True
+    data.get_runs_from_rcdb_by_run_number(run_min=runs[0], run_max=runs[1], min_event_count=min_event_count)
 
+    # We need to check the runs that have missing start_time or end_time.
+    # If start or end time is missing, use the data tables from Rafo.
 
-def use_once_sparsified_fcup_offset(periods, data):
-    """Use this once to get a sparsified set of values for the fcup_offset parameter, and also beam_stop_atten.
-    The output is placed in data.beam_stop_atten_time and data.fcup_offset_time    """
+    print("Get the data based start times.")
+    if not hasattr(data, "rafo_times"):
+        data.rafo_times = read_rafo_start_end_times()
 
-    print("Getting the fcup_offset from Mya. This may take some time!")
+    # Add the rafo_times into the All_Runs dataframe
+    data.All_Runs["data_start"] = data.rafo_times["data_start"]
+    data.All_Runs["data_end"] = data.rafo_times["data_end"]
+    data.All_Runs["data_charge"] = data.rafo_times["charge"]
 
-    # We first get the beam_stop_atten and fcup_offset data, if not already available (probably not!)
-    data.beam_stop_atten_time, data.fcup_offset_time = initialize_fcup_param(periods, data=data)
-    run_data = []
-    #
-    # Fill the All_Runs run table for all the run periods.
-    # This will also fill the sqlite3 cache with these runs, and get the data_loc.Current_Channel and
-    # data_loc.LiveTime_Channel
-    # ("IPM2C21A" and "B_DAQ:livetime_pulser").
-    # We request the "IPM2C24A", "scalerS2b" as well for each run below.
-    #
-    for i in range(len(periods)):
-        setup_rundata_structures(data, periods[i])
-        run_data.append(data.All_Runs.copy())
-        data.All_Runs = None
+    # if 5381 in data.All_Runs.index and 5382 in data.All_Runs.index:
+    #     # This run seems to have a bad start time from the RCDB database. If so, we fix it here.
+    #     if data.All_Runs.loc[5382].start_time < data.All_Runs.loc[5381].end_time:
+    #         if data.All_Runs.loc[5382].data_start is not None:
+    #             data.All_Runs.loc[5382, "start_time"] = data.All_Runs.loc[5381, "data_start"]
+    #         else:
+    #             data.All_Runs.loc[5382, "start_time"] = data.All_Runs.loc[5381, "end_time"] + timedelta(seconds=1)
 
-    data.All_Runs = pd.concat(run_data)
+    # Bad time entries from the RCDB
+    for rnum in [4985, 4990, 4991, 4998, 5000, 5001, 5381, 5382]:
+        if rnum in data.All_Runs.index:
+            data.All_Runs.loc[rnum, "start_time"] = data.All_Runs.loc[rnum, "data_start"]
+            data.All_Runs.loc[rnum, "end_time"] = data.All_Runs.loc[rnum, "data_end"]
 
-    mya_cache = data.Mya.cache_engine
-    fcup_offset_sparse_time = []
-    for run_num, row in data.All_Runs.iterrows():
-        # Here we compute the sparse version of the fcup_offset data.
-
-        # Check if this data is already in the cache. If it is, do not write it again.
-        if mya_cache is not None and \
-                not data.Mya.check_if_data_is_in_cache("fcup_offset_sparse",
-                                                       start=row.start_time,
-                                                       end=row.end_time,
-                                                       run_number=run_num):
-
-            if data.debug > 4:
-                print(f"Getting the Mya channels for run {run_num}")
-
-            # First get the scalerS2b (and also IPM2C24A
-            scalers2b = data.Mya.get(channel="scalerS2b", start=row.start_time, end=row.end_time, run_number=run_num)
-            ipm2c24a = data.Mya.get(channel="IPM2C24A", start=row.start_time, end=row.end_time, run_number=run_num)
-
-            if scalers2b.iloc[0].time < row.start_time:
-                # curious error where we get too much data at the start.
-                if data.debug > 0:
-                    print(f"ScalerS2b starts too early for run {run_num}: "
-                          f"start {scalers2b.iloc[0].time} < {row.start_time}")
-                scalers2b.drop(
-                    scalers2b[(scalers2b.time < row.start_time)].index, inplace=True)
-            # Next: Get an index for the fcup_offset at each time for the scalerS2b
-            # where there is beam: value>1000, finding the previous fcup_offset value.
-            if scalers2b.iloc[0].time < data.fcup_offset_time.iloc[0].name or \
-                    scalers2b.value.max() < 1000 or (len(scalers2b) < 3 and np.any(np.isnan(scalers2b.value))):
-                # fcup_offset_time doesn't have a value or there never was any beam for the run!
-                scaler_local_mean = scalers2b[(scalers2b.value < 1000)].value.mean()
-                fcup_offset_sparse_run = pd.DataFrame(data={'ms': [scalers2b.iloc[0].ms],
-                                                            'index': [0],
-                                                            'value': [scaler_local_mean],
-                                                            'time': [scalers2b.iloc[0].time]
-                                                            }
-                                                      )
-            else:
-                if data.debug > 4:
-                    print(f"Sparsifying for run = {run_num}")
-                fcup_offset_indexes = data.fcup_offset_time.index.\
-                    get_indexer(scalers2b[scalers2b.value > 1000].time.to_list(), method="ffill")
-                # Make a new dataframe of all these fcup_offset, dropping ones with duplicate values.
-                if len(fcup_offset_indexes) > 0:
-                    fcup_offset_sparse_tmp = data.fcup_offset_time.iloc[fcup_offset_indexes]
-                    fcup_offset_sparse_first_entry = fcup_offset_sparse_tmp.iloc[0:1]
-                    # Set the time of this entry to the start of the run. This avoids having multiple entries with the
-                    # exact same time.
-
-                    fcup_offset_sparse_first_entry.reset_index(inplace=True)
-                    fcup_offset_sparse_first_entry.iloc[0, fcup_offset_sparse_first_entry.columns.get_loc('time')] = row.start_time
-                    fcup_offset_sparse_first_entry.set_index('time', inplace=True)
-
-                    fcup_offset_sparse_run = pd.concat(
-                        [
-                            fcup_offset_sparse_first_entry,
-                            fcup_offset_sparse_tmp[
-                             ((fcup_offset_sparse_tmp.shift().value - fcup_offset_sparse_tmp.value).abs() > 0.01)
-                            ]
-                         ])
-                    fcup_offset_sparse_run.reset_index(inplace=True)   # Make 'time' a column again.
-                else:
-                    print(f"No fcup_offset for run {run_num}. Probably no beam? "
-                          f"scaler2b.value.max={scalers2b.value.max()} -- We should never get here!! ERROR.")
-                    fcup_offset_sparse_run = pd.DataFrame(data={'ms': [scalers2b.iloc[0].ms],
-                                                                'index': [0],
-                                                                'value': [0],
-                                                                'time': [scalers2b.iloc[0].time]
-                                                                }
-                                                          )
-
-            fcup_offset_sparse_time.append(fcup_offset_sparse_run)
-
-            if len(fcup_offset_sparse_run.columns) > 4:
-                print(f"FCup_offset: {run_num} has too many columns: ", fcup_offset_sparse_run.columns)
-                for c in fcup_offset_sparse_run.columns:
-                    if c not in ['time', 'ms', 'value']:
-                        fcup_offset_sparse_run.drop(labels=[c], axis=1)
-
-            fcup_offset_sparse_run["run_num"] = run_num
-            data.Mya.add_to_mya_data_range("fcup_offset_sparse", start=row.start_time, end=row.end_time,
-                                           run_number=run_num, data_length=len(fcup_offset_sparse_run))
-
-            if "index" in fcup_offset_sparse_run.columns:
-                fcup_offset_sparse_run.drop(columns=['index'], inplace=True)
-                # We dropped the not useful "index" column to the to_sql can write the index as "index".
-
-            if data.debug > 6:
-                print(f"fcup_offset_sparse_run: columns: {fcup_offset_sparse_run.columns}")
-
-            fcup_offset_sparse_run.to_sql("fcup_offset_sparse", mya_cache, if_exists="append")
-
-        else:  # The data is in the cache.
-            fcup_offset_sparse_time.append(
-                data.Mya.get(channel="fcup_offset_sparse",
-                             start=row.start_time,
-                             end=row.end_time,
-                             run_number=run_num)
-            )
-
-    for t in fcup_offset_sparse_time:
-        t["orig_index"] = t.index      # To save the original index when concat these dataframes.
-
-    fcup_offset_sparse = pd.concat(fcup_offset_sparse_time, ignore_index=True)
-    if "index" in fcup_offset_sparse.columns:
-        fcup_offset_sparse.drop(columns=['index'], inplace=True)   # Drop the not useful "index" column
-
-    fcup_offset_sparse.set_index(['time'], inplace=True)
-
-    data.fcup_offset_time = fcup_offset_sparse
-
-    return data.beam_stop_atten_time, fcup_offset_sparse
+    data.All_Runs.loc[data.All_Runs.start_time.isnull(), "start_time"] = data.All_Runs.loc[
+        data.All_Runs.start_time.isnull(), "data_start"]
+    data.All_Runs.loc[data.All_Runs.end_time.isnull(), "end_time"] = data.All_Runs.loc[
+        data.All_Runs.end_time.isnull(), "data_end"]
 
 
-def initialize_fcup_param(periods, data,
-                          no_cache=False, override=False, debug=0):
+def initialize_fcup_param(periods, data, no_cache=False, override=False, debug=0):
     """Initialize the beam_stop_atten_time and fcup_offset_time parameters.
     If beam_stop_atten is already set in data.beam_stop_atten, then keep that unless override is True.
     If fcup_offset_time is already in data.fcup_offset_time, then keep that unless override is True.
-    If fcup_offset_time is not in data, but fcup_offset_sparse is in the cache, then get the sparse version.
-    If it is not in the cache, but fcup_offset is in the cache, then get that version.
     If none of that is the case, then get the data using Mya.get(...), passing no_cache parameter.
     So, override=True and no_cache=True means the data is freshly fetched from epicsweb.
     The obtained values for beam_atten_time and fcup_offset_time are put in data and returned.
     """
+
+    if periods is None:
+        periods = [
+                (datetime(2018, 2,  5, 20, 0), datetime(2018,  2,  8, 6, 0)),
+                (datetime(2018, 9, 27,  1, 0), datetime(2018, 11, 26, 7, 0)),
+                (datetime(2019, 3, 25, 18, 0), datetime(2019,  4, 15, 6, 0))
+                ]
 
     if not hasattr(data, "beam_stop_atten_time"):
         data.beam_stop_atten_time = None
@@ -306,7 +210,7 @@ def initialize_fcup_param(periods, data,
 
     if data.beam_stop_atten_time is None or override or no_cache:  # Need to fill the beam_stop_atten_time dataframe:
         if debug > 1:
-            print("Getting beam_stop_atten.")
+            print("Getting beam_stop_atten from Mya.get() for extended time range.")
 
         data.beam_stop_atten_time = data.Mya.get(channel="beam_stop_atten",
                                                  start=datetime(2018, 1, 1, 0, 0),
@@ -315,29 +219,26 @@ def initialize_fcup_param(periods, data,
         data.beam_stop_atten_time.set_index(['time'], inplace=True)
 
     if data.fcup_offset_time is None or override or no_cache:
-        if data.Mya.check_if_table_is_in_cache("fcup_offset_sparse") and not no_cache:
-            # We have the sparse data in cache... assume it is complete.
-            if debug > 1:
-                print("Getting fcup_offset from fcup_offset_sparse.")
-            data.fcup_offset_time = data.Mya.get_channel_from_cache("fcup_offset_sparse")
-            data.fcup_offset_time.set_index(['time'], inplace=True)
 
+        if debug > 1:
+            print("Getting fcup_offset with Mya.get().")
+
+        fcup_offset_period = []
+        for i in range(len(periods)):
+            fcup_offset = data.Mya.get(channel="fcup_offset",
+                                       start=periods[i][0],
+                                       end=periods[i][1],
+                                       run_number=i+1, no_cache=no_cache)
+
+            if fcup_offset.iloc[0].value is not None:
+                fcup_offset_period.append(fcup_offset.copy())
+
+        if len(fcup_offset_period) > 0:
+            data.fcup_offset_time = pd.concat(fcup_offset_period, ignore_index=True)
+            data.fcup_offset_time.set_index(['time'], inplace=True)
         else:
-            if debug > 1:
-                print("Getting fcup_offset with Mya.get().")
-            fcup_offset_period = []
-            for i in range(len(periods)):
-                fcup_offset = data.Mya.get(channel="fcup_offset",
-                                           start=periods[i][0],
-                                           end=periods[i][1],
-                                           run_number=i+1, no_cache=no_cache)
-                if fcup_offset.iloc[0].value is not None:
-                    fcup_offset_period.append(fcup_offset.copy())
-            if len(fcup_offset_period) > 0:
-                data.fcup_offset_time = pd.concat(fcup_offset_period, ignore_index=True)
-                data.fcup_offset_time.set_index(['time'], inplace=True)
-            else:
-                data.fcup_offset_time = None
+            data.fcup_offset_time = None
+
     return data.beam_stop_atten_time, data.fcup_offset_time
 
 
@@ -362,7 +263,10 @@ def compute_fcup_current(rnum, data, override=False, current_channel="scalerS2b"
 
     start_time = data.All_Runs.loc[rnum, "start_time"]
     end_time = data.All_Runs.loc[rnum, "end_time"]
-    scaler = data.Mya.get(current_channel, start_time, end_time, run_number=rnum)
+    if pd.isnull(start_time) or pd.isnull(end_time):
+        return(None)
+    else:
+        scaler = data.Mya.get(current_channel, start_time, end_time, run_number=rnum)
 
     if len(scaler) <= 2:
         return None
@@ -387,7 +291,7 @@ def compute_fcup_current(rnum, data, override=False, current_channel="scalerS2b"
         current_values = beam_stop_attenuation * (scaler.value - fcup_offset_tmp) / 906.2
     else:
         if not data.fcup_offset_time.index.is_monotonic:
-            print("Check fcup_time: is not monotonic!")
+            print(f"{rnum} -- Check fcup_time: is not monotonic! len = {len(data.fcup_offset_time)}")
             return
         if np.any(np.roll(data.fcup_offset_time.index.values, 1) == data.fcup_offset_time.index.values):
             print("fcup_offset_time still has repeat indexes.")
@@ -543,45 +447,41 @@ def main(argv=None):
     else:
         at_jlab = False
 
-    run_sub_periods_available = [
-            (datetime(2018, 2,  5, 20, 0), datetime(2018,  2,  8, 6, 0)),
-            (datetime(2018, 9, 27,  1, 0), datetime(2018, 11, 26, 7, 0)),
-            (datetime(2019, 3, 25, 18, 0), datetime(2019,  4, 15, 6, 0))
-            ]
+    # run_sub_periods_available = [
+    #         (datetime(2018, 2,  5, 20, 0), datetime(2018,  2,  8, 6, 0)),
+    #         (datetime(2018, 9, 27,  1, 0), datetime(2018, 11, 26, 7, 0)),
+    #         (datetime(2019, 3, 25, 18, 0), datetime(2019,  4, 15, 6, 0))
+    #         ]
+
+    run_sub_periods_run_numbers = [
+        (3018, 3086),
+        (4764, 5666),
+        (6608, 6783)
+        ]
+
+    run_sub_periods_times = [
+        (datetime(2018, 2, 5, 20, 0), datetime(2018, 2, 8, 6, 0)),
+        (datetime(2018, 9, 27, 1, 0), datetime(2018, 11, 26, 7, 0)),
+        (datetime(2019, 3, 25, 18, 0), datetime(2019, 4, 15, 6, 0))
+    ]
 
     if args.run_period == 0:
-        run_sub_periods = run_sub_periods_available
+        run_sub_periods = run_sub_periods_run_numbers
     else:
-        run_sub_periods = [run_sub_periods_available[args.run_period-1]]
+        run_sub_periods = [run_sub_periods_run_numbers[args.run_period-1]]
+        run_sub_periods_times = [run_sub_periods_times[args.run_period-1]]
 
     if not args.nocache:
-        if not p.exists("RGA.sqlite3"):
-            # If the cache file does not exist, we call use_once_sparsified_fcup_offset AFTER initalizeing data.
-            init_data_once = True
-        else:
-            init_data_once = False
         dat = RunData(cache_file="RGA.sqlite3", i_am_at_jlab=at_jlab)
-        dat.debug = args.debug
-        # Assume that if the cache file exists, the cache is already build.
-        if init_data_once:
-            beam_stop_atten_time, fcup_offset_time = use_once_sparsified_fcup_offset(run_sub_periods_available, dat)
-
     else:
         dat = RunData(cache_file="", sqlcache=False, i_am_at_jlab=at_jlab)
-        dat.debug = args.debug
-    # data._cache_engine=None   # Turn OFF cache?
 
-    run_sub_energy = [2.07, 4.03, 5.99]
-    run_sub_y_placement = [0.79, 0.99, 0.99]
+    dat.debug = args.debug
 
-    if args.plot:
-        max_y_value_sums = 0.
-        fig = make_subplots(specs=[[{"secondary_y": True}]])
-        max_expected_charge = []
+    beam_stop_atten_time, fcup_offset_time = initialize_fcup_param(run_sub_periods_times, dat)
 
-    legends_data = []  # To keep track of which targets already have a legend shown.
-    legends_shown = []  # To keep track of which target has the charge sum legend shown.
-    #   Loop over the different run sub-periods.
+#    run_sub_energy = [2.07, 4.03, 5.99]
+#    run_sub_y_placement = [0.79, 0.99, 0.99]
 
     if args.excel:
         excel_output = pd.DataFrame()
@@ -591,356 +491,47 @@ def main(argv=None):
         run_data_hdf = HDFStore('RGA_RunData.h5')
 
     for sub_i in range(len(run_sub_periods)):
+
         dat.All_Runs = None   # Delete the content of the previous period, if any.
-        setup_rundata_structures(dat, run_sub_periods[sub_i])
+        setup_rundata_structures(dat, runs=run_sub_periods[sub_i])
 
-        dat.All_Runs['luminosity'] *= 1E-3   # Rescale luminosity from 1/pb to 1/fb
-
-        dat.add_current_data_to_runs()
         targets = '.*'
 
-        print("Adding additional current channels.")
+        print("Adding current channels.")
+        dat.add_current_data_to_runs(current_channel="IPM2C21A")
         dat.add_current_data_to_runs(current_channel="IPM2C24A")
         dat.add_current_data_to_runs(current_channel="scaler_calc1b")
 
-        # Select runs into the different categories.
-        plot_runs = compute_plot_runs(targets=targets, run_config=dat.Good_triggers, data=dat)
         calib_run_numbers = dat.list_selected_runs(targets='.*', run_config=dat.Calibration_triggers)
-        calib_runs = plot_runs.loc[calib_run_numbers]
+        calib_runs = dat.All_Runs.loc[calib_run_numbers]
 
-        plot_runs = plot_runs.loc[~plot_runs.index.isin(calib_run_numbers)]  # Take the calibration runs out.
-        starts = plot_runs["start_time"]
-        ends = plot_runs["end_time"]
+        starts = dat.All_Runs["start_time"]
+        ends = dat.All_Runs["end_time"]
 
-        print("Compute cumulative charge.")
-        dat.compute_cumulative_charge(targets, runs=plot_runs)
-
-        # Copy the computed columns over to All_Runs so they show up in the spread sheet.
-        dat.All_Runs.loc[plot_runs.index, "sum_charge"] = plot_runs["sum_charge"]
-        dat.All_Runs.loc[plot_runs.index, "sum_charge_targ"] = plot_runs["sum_charge_targ"]
+#        print("Compute cumulative charge.")
+#        dat.compute_cumulative_charge(targets, runs=plot_runs)
 
         print("Computing beam_stop_atten*(scalerS2b - fcup_offset)/906.2")
         add_computed_fcup_data_to_runs(data=dat)
-        # Copy the computed columns over to All_Runs so they show up in the spread sheet.
-        plot_runs["Fcup_charge"] = dat.All_Runs.loc[plot_runs.index, "Fcup_charge"]
-        plot_runs["Fcup_charge_corr"] = dat.All_Runs.loc[plot_runs.index, "Fcup_charge_corr"]
-
-
+        # Copy the computed columns over to plot_runs for plotting later.
 
         if args.excel:
-            excel_output = pd.concat([excel_output, plot_runs, calib_runs], sort=True)
-
-        if args.plot:
-
-            print(f"Build Plots for period {sub_i}")
-
-            last_targ = None
-            for targ in dat.target_properties['color']:
-
-                if args.debug:
-                    print(f"Processing plot for target {targ}")
-                runs = plot_runs.target.str.fullmatch(targ.replace('(', r"\(").replace(')', r'\)'))
-
-                if np.count_nonzero(runs) > 1 and sub_i == len(run_sub_periods) - 1 and \
-                        targ in dat.target_properties['sums_color']:
-                    last_targ = targ    # Store the last target name with data for later use.
-
-                if targ in legends_data or np.count_nonzero(runs) <= 1:  # Do we show this legend?
-                    show_data_legend = False                             # This avoids the same legend shown twice.
-                else:
-                    show_data_legend = True
-                    legends_data.append(targ)
-
-                fig.add_trace(
-                    go.Bar(x=plot_runs.loc[runs, 'center'],
-                           y=plot_runs.loc[runs, 'event_rate'],
-                           width=plot_runs.loc[runs, 'dt']*999/1000,
-                           hovertext=plot_runs.loc[runs, 'hover'],
-                           name="run with " + targ,
-                           marker=dict(color=dat.target_properties['color'][targ]),
-                           legendgroup="group1",
-                           showlegend=show_data_legend
-                           ),
-                    secondary_y=False, )
-
-            fig.add_trace(
-                 go.Bar(x=calib_runs['center'],
-                        y=calib_runs['event_rate'],
-                        width=calib_runs['dt']*999/1000,
-                        hovertext=calib_runs['hover'],
-                        name="Calibration runs",
-                        marker=dict(color='rgba(150,150,150,0.5)'),
-                        legendgroup="group1",
-                        ),
-                 secondary_y=False, )
-
-            if args.charge:
-                current_plotting_scale = dat.target_properties['current']['scale'][sub_i]
-                sumcharge = plot_runs.loc[:, "sum_charge"] * current_plotting_scale
-                max_y_value_sums = plot_runs.sum_charge_targ.max() * current_plotting_scale
-
-                plot_sumcharge_t = [starts.iloc[0], ends.iloc[0]]
-                plot_sumcharge_v = [0, sumcharge.iloc[0]]
-
-                for i in range(1, len(sumcharge)):
-                    plot_sumcharge_t.append(starts.iloc[i])
-                    plot_sumcharge_t.append(ends.iloc[i])
-                    plot_sumcharge_v.append(sumcharge.iloc[i - 1])
-                    plot_sumcharge_v.append(sumcharge.iloc[i])
-
-                for targ in dat.target_properties['sums_color']:
-                    sumch = plot_runs.loc[plot_runs["target"] == targ, "sum_charge_targ"]*current_plotting_scale
-                    st = plot_runs.loc[plot_runs["target"] == targ, "start_time"]
-                    en = plot_runs.loc[plot_runs["target"] == targ, "end_time"]
-
-                    if len(sumch) > 1:
-                        # Complication: When a target was taken out and then later put back in there is an interruption
-                        # that should not count for the expected charge.
-
-                        # Setup this initial entries for the plot lines.
-                        plot_sumcharge_target_t = [st.iloc[0], en.iloc[0]]
-                        plot_sumcharge_target_v = [0, sumch.iloc[0]]
-                        if dat.target_properties['current'][targ][sub_i] > 0.:
-                            plot_expected_charge_t = [st.iloc[0]]
-                            plot_expected_charge_v = [0]
-
-                            current_expected_sum_charge = 0
-
-                        for i in range(1, len(sumch)):
-                            # Step through all the runs for this target that have "sum_charge_targ".
-                            #
-                            # We also need to detect if there is a run number gap.
-                            # Check if all the intermediate runs have the same target. If so, these were calibration
-                            # or junk runs, and we continue normally. If there were other targets,
-                            # we make a break in the line.
-                            if sumch.keys()[i] - sumch.keys()[i - 1] > 1 and \
-                                    not np.all(dat.All_Runs.loc[sumch.keys()[i - 1]:sumch.keys()[i]].target == targ):
-                                # There is a break in the run numbers (.keys()) and a target change occurred.
-                                plot_sumcharge_target_t.append(st.iloc[i])  # Add the last time stamp again.
-                                plot_sumcharge_target_v.append(None)        # None causes the solid line to break.
-
-                                fig.add_trace(                 # Add a horizontal dotted line for the target sum_charge.
-                                    go.Scatter(x=[en.iloc[i-1], st.iloc[i]],
-                                               y=[plot_sumcharge_target_v[-2], plot_sumcharge_target_v[-2]],
-                                               mode="lines",
-                                               line=dict(color=dat.target_properties['sums_color'][targ], width=1,
-                                                         dash="dot"),
-                                               name=f"Continuation line {targ}",
-                                               showlegend=False),
-                                    secondary_y=True)
-
-                                if dat.target_properties['current'][targ][sub_i] > 0.:  # Are we plotting expected charge?
-                                    plot_expected_charge_t.append(en.iloc[i-1])  # Add the time stamp
-                                    current_expected_sum_charge += (en.iloc[i-1] - plot_expected_charge_t[-2]).\
-                                        total_seconds() * dat.target_properties['current'][targ][sub_i] * 1e-6 * 0.5
-                                    plot_expected_charge_v.append(current_expected_sum_charge)
-                                    # Current is in nA, Charge is in mC, at 50% efficiency.
-                                    plot_expected_charge_t.append(en.iloc[i-1])
-                                    plot_expected_charge_v.append(None)
-
-                                    if i+1 < len(sumch):  # Add the start of the next line segment
-                                        plot_expected_charge_t.append(st.iloc[i])
-                                        plot_expected_charge_v.append(current_expected_sum_charge)
-                                        fig.add_trace(
-                                            go.Scatter(x=plot_expected_charge_t[-2:],
-                                                       y=[current_expected_sum_charge, current_expected_sum_charge],
-                                                       mode='lines',
-                                                       line=dict(color='rgba(90, 180, 88, 0.6)', width=2, dash="dot"),
-                                                       name=f"Continuation line",
-                                                       showlegend=False
-                                                       # Only one legend at the end.
-                                                       ),
-                                            secondary_y=True
-                                        )
-
-
-                            plot_sumcharge_target_t.append(st.iloc[i])
-                            plot_sumcharge_target_t.append(en.iloc[i])
-                            plot_sumcharge_target_v.append(sumch.iloc[i - 1])
-                            plot_sumcharge_target_v.append(sumch.iloc[i])
-
-                        if dat.target_properties['current'][targ][sub_i] > 0.:
-                            plot_expected_charge_t.append(plot_sumcharge_target_t[-1])
-                            i = len(plot_expected_charge_v)-1
-                            while plot_expected_charge_v[i] is None and i > 0:
-                                i -= 1
-                            current_expected_sum_charge = plot_expected_charge_v[i]
-                            current_expected_sum_charge += \
-                                (plot_sumcharge_target_t[-1] - plot_expected_charge_t[-2]).total_seconds() * \
-                                dat.target_properties['current'][targ][sub_i] * 1e-6 * 0.5
-                            plot_expected_charge_v.append(current_expected_sum_charge*current_plotting_scale)
-
-                        if targ in legends_shown:
-                            show_legend_ok = False
-                        else:
-                            show_legend_ok = True
-                            legends_shown.append(targ)
-
-                        fig.add_trace(
-                            go.Scatter(x=plot_sumcharge_target_t,
-                                       y=plot_sumcharge_target_v,
-                                       mode="lines",
-                                       line=dict(color=dat.target_properties['sums_color'][targ], width=3),
-                                       name=f"Total Charge on {targ}",
-                                       legendgroup="group2",
-                                       showlegend=show_legend_ok
-                                       ),
-                            secondary_y=True)
-
-                        # Decorative: add a dot at the end of the curve.
-                        fig.add_trace(
-                            go.Scatter(x=[plot_sumcharge_target_t[-1]],
-                                       y=[plot_sumcharge_target_v[-1]],
-                                       marker=dict(color=dat.target_properties['sums_color'][targ],
-                                                   size=6),
-                                       showlegend=False),
-                            secondary_y=True)
-
-                        # Decorative: add a box with an annotation of the total charge on this target.
-                        actual_charge = plot_sumcharge_target_v[-1]/current_plotting_scale
-                        fig.add_annotation(
-                            x=plot_sumcharge_target_t[-1],
-                            y=plot_sumcharge_target_v[-1] + max_y_value_sums*0.015,
-                            xref="x",
-                            yref="y2",
-                            text=f"<b>total: {actual_charge:3.2f} mC</b>",
-                            showarrow=False,
-                            font=dict(
-                                family="Arial, sans-serif",
-                                color=dat.target_properties['sums_color'][targ],
-                                size=16),
-                            bgcolor="#FFFFFF"
-                        )
-
-                        # # Annotate - add a curve for the expected charge at 50% efficiency.
-                        showlegend = True if targ == last_targ and sub_i == 2 else False
-                        if args.debug:
-                            print(f"last_targ = {last_targ}  targ: {targ}, sub_i = {sub_i}, showlegend = {showlegend}")
-                        if dat.target_properties['current'][targ][sub_i] > 0.:
-                            fig.add_trace(
-                                go.Scatter(x=plot_expected_charge_t,
-                                           y=plot_expected_charge_v,
-                                           mode='lines',
-                                           line=dict(color='rgba(90, 180, 88, 0.6)', width=4),
-                                           name=f"Expected charge at 50% up",
-                                           showlegend=True if targ == last_targ and sub_i == 2 else False,
-                                           # Only one legend at the end.
-                                           legendgroup="group2",
-                                           ),
-                                secondary_y=True
-                            )
-                            max_expected_charge.append(plot_expected_charge_v[-1])
-                            # print(f"max_expected_charge = {max_expected_charge}")
-
-    #################################################################################################################
-    #                     Luminosity
-    #################################################################################################################
-            else:
-                # sumlumi = plot_runs.loc[:, "sum_lumi"]
-                # plot_sumlumi_t = [starts.iloc[0], ends.iloc[0]]
-                # plot_sumlumi = [0, sumlumi.iloc[0]]
-                #
-                # for i in range(1, len(sumlumi)):
-                #     plot_sumlumi_t.append(starts.iloc[i])
-                #     plot_sumlumi_t.append(ends.iloc[i])
-                #
-                #     plot_sumlumi.append(sumlumi.iloc[i - 1])
-                #     plot_sumlumi.append(sumlumi.iloc[i])
-                #
-                # fig.add_trace(
-                #     go.Scatter(x=plot_sumlumi_t,
-                #                y=plot_sumlumi,
-                #                line=dict(color='#FF3030', width=3),
-                #                name="Luminosity Live"),
-                #     secondary_y=True)
-
-                # We get the sums per target in two steps.
-                # Clumsy, but only way to get the maximum available in second loop
-                plot_sumlumi_target = {}                       # Store sum results.
-                for targ in dat.target_properties['sums_color']:
-                    selected = plot_runs.target == targ
-                    if len(plot_runs.loc[selected, "luminosity"]) > 0:
-                        plot_sumlumi_target[targ] = np.cumsum(plot_runs.loc[selected, "luminosity"])
-                        # Store overall max.
-                        max_y_value_sums = max(float(plot_sumlumi_target[targ].max()), max_y_value_sums)
-
-                for targ in plot_sumlumi_target.keys():  # data.target_properties['sums_color']:
-                    plot_sumlumi_starts = plot_runs.loc[plot_runs["target"] == targ, "start_time"]
-                    plot_sumlumi_ends = plot_runs.loc[plot_runs["target"] == targ, "end_time"]
-                    if len(plot_sumlumi_target[targ]) > 1:
-                        plot_sumlumi_target_t = [plot_sumlumi_starts.iloc[0], plot_sumlumi_ends.iloc[0]]
-                        plot_sumlumi_target_v = [0, plot_sumlumi_target[targ].iloc[0]]
-                        for i in range(1, len(plot_sumlumi_target[targ])):
-                            if plot_sumlumi_target[targ].keys()[i] - plot_sumlumi_target[targ].keys()[i - 1] > 1 and \
-                                    not np.all(dat.All_Runs.loc[plot_sumlumi_target[targ].keys()[i - 1]:
-                                               plot_sumlumi_target[targ].keys()[i]].target == targ):
-                                plot_sumlumi_target_t.append(plot_sumlumi_starts.iloc[i])
-                                plot_sumlumi_target_v.append(None)
-
-                                fig.add_trace(
-                                    go.Scatter(x=[plot_sumlumi_starts.iloc[i-1], plot_sumlumi_starts.iloc[i]],
-                                               y=[plot_sumlumi_target_v[-2], plot_sumlumi_target_v[-2]],
-                                               mode="lines",
-                                               line=dict(color=dat.target_properties['sums_color'][targ], width=1,
-                                                         dash="dot"),
-                                               name=f"Continuation line {targ}",
-                                               legendgroup="group2",
-                                               ),
-                                    secondary_y=True)
-
-                            plot_sumlumi_target_t.append(plot_sumlumi_starts.iloc[i])
-                            plot_sumlumi_target_t.append(plot_sumlumi_ends.iloc[i])
-                            plot_sumlumi_target_v.append(plot_sumlumi_target[targ].iloc[i - 1])
-                            plot_sumlumi_target_v.append(plot_sumlumi_target[targ].iloc[i])
-
-                        fig.add_trace(
-                            go.Scatter(x=plot_sumlumi_target_t,
-                                       y=plot_sumlumi_target_v,
-                                       mode="lines",
-                                       line=dict(color=dat.target_properties['sums_color'][targ], width=3),
-                                       name=f"Sum luminosity on {targ}",
-                                       legendgroup="group2",
-                                       ),
-                            secondary_y=True)
-
-                        fig.add_trace(
-                            go.Scatter(x=[plot_sumlumi_target_t[-1]],
-                                       y=[plot_sumlumi_target_v[-1]],
-                                       marker=dict(
-                                           color=dat.target_properties['sums_color'][targ],
-                                           size=6
-                                           ),
-                                       showlegend=False
-                                       ),
-                            secondary_y=True
-                        )
-
-                        fig.add_annotation(
-                            x=plot_sumlumi_target_t[-1],
-                            y=plot_sumlumi_target_v[-1] + max_y_value_sums*0.015,
-                            xref="x",
-                            yref="y2",
-                            text=f"<b>total: {plot_sumlumi_target_v[-1]:3.2f} 1/fb</b>",
-                            showarrow=False,
-                            font=dict(
-                                family="Arial, sans-serif",
-                                color=dat.target_properties['sums_color'][targ],
-                                size=16),
-                            bgcolor="#FFFFFF"
-                        )
+            excel_output = pd.concat([excel_output, dat.All_Runs], sort=True)
 
         if args.hdf5:
-            sub_dir = f"period_x{sub_i}/"
+            sub_dir = f"period_{sub_i}/"
             run_data_hdf.put(sub_dir + "All_Runs", dat.All_Runs)
-
+            run_data_hdf.put(sub_dir + "fcup_offset_time", fcup_offset_time)
+            run_data_hdf.put(sub_dir + "beam_stop_atten_time", beam_stop_atten_time)
 
     if args.excel:
         print("Write new Excel table.")
-        all_columns = excel_output.columns.drop(['hover', 'center', 'run_start_time', 'run_end_time'])
-        ordered_columns = ['start_time', 'end_time', 'target', 'beam_energy', 'beam_current_request', 'run_config',
+        ordered_columns = ['start_time', 'end_time', 'data_start', 'data_end', 'target', 'beam_energy',
+                           'beam_current_request', 'run_config',
                            'selected', 'event_count', 'sum_event_count', 'event_rate', 'evio_files_count',
                            'megabyte_count', 'is_valid_run_end',
-                           'B_DAQ:livetime_pulser',	'Fcup_charge', 'Fcup_charge_corr', 'IPM2C21A', 'IPM2C21A_corr',
+                           'B_DAQ:livetime_pulser', 'data_charge', 'Fcup_charge', 'Fcup_charge_corr',
+                           'IPM2C21A', 'IPM2C21A_corr',
                            'IPM2C24A', 'IPM2C24A_corr', 'scaler_calc1b', 'scaler_calc1b_corr',
                            'sum_charge', 'sum_charge_targ',
                            'operators', 'user_comment'
@@ -953,104 +544,10 @@ def main(argv=None):
         # print(f"ordered_columns = {ordered_columns}")
         # print(f"excel_output.columns = {excel_output.columns}")
 
-        excel_output.to_excel("RGA_progress.xlsx", columns=ordered_columns)
-
+        excel_output.to_excel("RGA_all_runs.xlsx", columns=ordered_columns)
+        selected_output = excel_output.loc[~excel_output.data_start.isnull()]
+        selected_output.to_excel("RGA_selected_runs.xlsx", columns=ordered_columns)
         # End sub run period loop.
-    if args.plot:
-        fig.add_annotation(
-            x=0.85,
-            xanchor="left",
-            xref="paper",
-            y=-0.1,
-            yanchor="bottom",
-            yref="paper",
-            text="Graph:<i>Maurik Holtrop, UNH</i>",
-            showarrow=False,
-            font=dict(
-                family="Arial",
-                color="rgba(170,150,200,0.4)",
-                size=12)
-        )
-        # Set x-axis title
-        fig.update_layout(
-            title=go.layout.Title(
-                text="RGA Runs",
-                yanchor="top",
-                y=0.95,
-                xanchor="left",
-                x=0.40),
-            titlefont=dict(size=24),
-            legend=dict(
-                x=0.02,
-                y=1.15,
-                bgcolor="rgba(250,250,250,0.80)",
-                font=dict(
-                    size=14
-                ),
-                orientation='h'
-            )
-        )
-
-        # Set y-axes titles
-        fig.update_yaxes(
-            title_text="<b>Event rate kHz</b>",
-            titlefont=dict(size=22),
-            secondary_y=False,
-            tickfont=dict(size=18),
-            range=[0, 1.05*max(25., plot_runs.loc[runs, 'event_rate'].max())]
-        )
-
-        if args.charge:
-            max_expected_charge.append(max_y_value_sums)
-            if args.debug:
-              print(f"max_expected_charge: {max_expected_charge}")
-            max_y_2nd_scale = 1.1*np.max(max_expected_charge)
-            # max_y_2nd_scale = 7.
-            if args.debug:
-                print(f"max_y_2nd_scale = {max_y_2nd_scale}")
-            fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>",
-                             titlefont=dict(size=22),
-                             range=[0, max_y_2nd_scale],
-                             secondary_y=True,
-                             tickfont=dict(size=18)
-                             )
-        else:
-            fig.update_yaxes(title_text="<b>Integrated Luminosity (1/fb)</b>",
-                             titlefont=dict(size=22),
-                             range=[0, 1.05*max_y_value_sums],
-                             secondary_y=True,
-                             tickfont=dict(size=18)
-                             )
-
-        fig.update_xaxes(
-            title_text="Date",
-            titlefont=dict(size=22),
-            tickfont=dict(size=18),
-        )
-
-        if (args.date_from is not None) or (args.date_to is not None):
-            if args.date_from is not None:
-                date_from = datetime.strptime(args.date_from, '%Y,%m,%d')
-            else:
-                date_from = starts.iloc[0]
-
-            if args.date_to is not None:
-                date_to = datetime.strptime(args.date_to, '%Y,%m,%d')
-            else:
-                date_to = ends.iloc[-1]
-
-            fig.update_xaxes(
-                range=[date_from, date_to]
-            )
-
-        print("Show plots.")
-        fig.write_image("RGA_progress.pdf", width=2048, height=900)
-        fig.write_image("RGA_progress.png", width=2048, height=900)
-        fig.write_html("RGA_progress.html")
-        if args.chart:
-            charts.plot(fig, filename='RGA_edit', width=2048, height=900, auto_open=True)
-        if args.live:
-            fig.show(width=2048, height=900)  # width=1024,height=768
 
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@
 #
 # RunData.All_Runs  - Pandas DataFrame with run number of index.
 #
-# Contents of DataFrame:
+# Example Contents of DataFrame:
 #
 # start_time            datetime                      2019-09-08 04:48:02
 # end_time              datetime                      2019-09-08 06:06:25
@@ -90,7 +90,7 @@ warnings.filterwarnings("ignore", 'This pattern has match groups')   # Turn off 
 
 class RunData:
 
-    def __init__(self, i_am_at_jlab=False, cache_file="run_data_cache.sqlite3", sqlcache=True,
+    def __init__(self, i_am_at_jlab=False, cache_file=None, sqlcache=True,
                  username=None, password=None):
         """ Set things up. If not at JLab you will be asked for CUE username and password.
         sqlcache=False will prevent caching querries in a local sqlite3 database.
@@ -129,6 +129,8 @@ class RunData:
         self._cache_engine = None
         self._cache_known_data = None
         self._cache_file_name = cache_file
+
+        self.fix_bad_rcdb_start_times = False  # Set to true to query RCDB twice, once for time, once for run numbers.
 
         self.start_rcdb()
         self.start_cache(sqlcache)
@@ -241,8 +243,7 @@ class RunData:
         return cache_overlaps, cache_extend_before, cache_extend_after
 
     def _cache_fill_runs(self, start, end, min_event):
-        """Fill the cache with runs from start to end.
-        Filter on min_event and leave the rest in All_Runs."""
+        """Fill the cache with runs from start to end and put the result in All_Runs."""
 
         start = start + timedelta(0, 0, -start.microsecond)  # Round down on start
         if end.microsecond != 0:
@@ -269,9 +270,6 @@ class RunData:
             if self.debug > 2:
                 print("Adjusted end for empty rcdb fetch to: ", end)
             return num_runs, end
-
-        good_runs = self.select_good_runs()
-        self.add_current_data_to_runs()  # Fill in the missing current info
 
         # Two scenarios now:
         # 1: The run period we just added is somewhere in the middle of all possible runs. It is thus extremely unlikely
@@ -446,6 +444,13 @@ class RunData:
         self._cache_known_data.to_sql("Known_Data_Ranges", self._cache_engine, if_exists='replace')
 
     def get_runs(self, start, end, min_event):
+        """Get runs with get_runs_only, and then run the select_good_runs and add_current_data_to_runs."""
+        self.get_runs_only(start, end, min_event)
+        good_runs = self.select_good_runs()
+        self.add_current_data_to_runs()
+        return len(self.All_Runs)
+
+    def get_runs_only(self, start, end, min_event):
         """Fetch the runs from start time to end time with at least min_event events.
         Checking local cache if runs have already been fetched (if self._cache_engine is not None)
         If not get them from the rcdb and update the cache (if not None).
@@ -467,8 +472,6 @@ class RunData:
             if self.debug > 2:
                 print("Getting runs bypassing cache, for start={}, end={}, min_event={}".format(start, end, min_event))
             num_runs = self.get_runs_from_rcdb(start, end, min_event)
-            self.select_good_runs()
-            self.add_current_data_to_runs()  # Fill in the missing current info
             return num_runs
 
         num_runs_cache = self._cache_get_runs(start, end, min_event)  # Get whatever we have in the cache already.
@@ -543,7 +546,7 @@ class RunData:
                 if num_runs != 0:
                     if self.debug > 2:
                         print("Appending runs. ")
-                    self.All_Runs = save_all_runs.append(self.All_Runs, sort=True)
+                    self.All_Runs = pd.concat([save_all_runs, self.All_Runs], sort=True)
                 else:
                     # No new runs, so restore what we had before.
                     # TODO: Fix this. When no new runs, because no new data, this can cause an infinite loop.
@@ -604,9 +607,23 @@ class RunData:
 
         return corr
 
+    def get_runs_from_rcdb_by_run_number(self, run_min, run_max, min_event_count):
+        """Return a dictionary with a list of runs with run numbers from run_min to run_max.
+         This will get the list directly from the rcdb database, not looking at the local cache.
+         The output is then parsed through process_runs_from_rcdb."""
+
+        runs = self._db.get_runs(run_min, run_max)
+        self.process_runs_from_rcdb(runs)
+        # The RCDB is by and large a piece of ..., er, very unreliable. Translate "None" to 0.
+        self.All_Runs.loc[(self.All_Runs.event_count == "None"), "event_count"] = 0
+        self.All_Runs = self.All_Runs.loc[self.All_Runs.event_count >= min_event_count]  # Filter the low count runs.
+
+        return len(self.All_Runs)
+
     def get_runs_from_rcdb(self, start_time, end_time, min_event_count):
-        """Return a dictionary with a list of runs for each target in the run period.
-        This will get the list directly from the rcdb database, not looking at the local cache."""
+        """Return a dictionary with a list of runs for each target in the run period from start_time to end_time.
+        This will get the list directly from the rcdb database, not looking at the local cache.
+        The output is then parsed through process_runs_from_rcdb."""
         # A fundamental issue with how the tables are setup is that you cannot construct
         # a simple query filtering on two different conditions. You would need to
         # construct a rather complicated query with a sub query, at which point you may be
@@ -618,8 +635,8 @@ class RunData:
 
         if self._db is not None:
             q = self._db.session.query(Run).join(Run.conditions).join(Condition.type) \
-                .filter(Run.start_time > start_time).filter(Run.start_time < end_time) \
-                .filter((ConditionType.name == "event_count") & (Condition.int_value > min_event_count))
+                .filter(Run.start_time >= start_time).filter(Run.start_time <= end_time) \
+                .filter((ConditionType.name == "event_count") & (Condition.int_value >= min_event_count))
         else:
             return 0
 
@@ -629,9 +646,28 @@ class RunData:
         if num_runs == 0:
             return 0
         all_runs = q.all()
+
+        if self.fix_bad_rcdb_start_times:
+            first_run_number = all_runs[0].number
+            last_run_number = all_runs[-1].number
+            if self.debug > 0:
+                print(f"Getting runs from RCDB from {first_run_number} to {last_run_number}")
+            num_runs = self.get_runs_from_rcdb_by_run_number(first_run_number, last_run_number, min_event_count)
+        else:
+            num_runs = self.process_runs_from_rcdb(all_runs)
+            # The RCDB is by and large a piece of ..., er, very unreliable. Translate "None" to 0.
+            self.All_Runs.loc[(self.All_Runs.event_count == "None"), "event_count"] = 0
+            self.All_Runs = self.All_Runs.loc[self.All_Runs.event_count >= min_event_count]  # Filter the low count runs.
+
+        return num_runs
+
+    def process_runs_from_rcdb(self, db_runs):
+        """Process the rund from the RCDB and enter them into the Pandas DataFrame. """
+
+        num_runs = len(db_runs)
         runs = []
 
-        for R in all_runs:
+        for R in db_runs:
             run_dict = {"number": R.number, "start_time": R.start_time, "end_time": R.end_time}
 
             if str(R.number) in self.ExcludeRuns:
@@ -652,8 +688,21 @@ class RunData:
                     else:
                         print(f"Warning. The target name {run_dict[c]} does not appear in the translation table.")
 
-            run_dict["start_time"] = run_dict["run_start_time"]  # Use the run_start_time and run_end_time
-            run_dict["end_time"] = run_dict["run_end_time"]      # from the RCDB records.
+            if run_dict["run_start_time"] is not None and run_dict["run_start_time"] != "None":
+                run_dict["start_time"] = run_dict["run_start_time"]  # Use the run_start_time and run_end_time
+            elif run_dict["start_time"] is None or run_dict["start_time"] == "None":
+                if self.debug > 0:
+                    print(f"Run {R.number} has no proper start time!!!")
+                if not self.fix_bad_rcdb_start_times:
+                    continue
+            if run_dict["run_end_time"] is not None and run_dict["run_end_time"] != "None":
+                run_dict["end_time"] = run_dict["run_end_time"]      # from the RCDB records.
+            elif run_dict["end_time"] is None or run_dict["end_time"] == "None":
+                if self.debug > 0:
+                    print(f"Run {R.number} has no proper end time!!!")
+                if not self.fix_bad_rcdb_start_times:
+                    continue
+
             # This allows for start/end corrections.
             runs.append(run_dict)
 
@@ -688,12 +737,19 @@ class RunData:
             return
 
         if self.debug > 4:
-            print("add_current_cor, run= {:5d}".format(runnumber))
+            print(f"add_current_cor, run= {runnumber:5d}  start={self.All_Runs.loc[runnumber,'start_time']} "
+                  f"end={self.All_Runs.loc[runnumber, 'end_time']}")
+
+        if pd.isnull(self.All_Runs.loc[runnumber, "start_time"]) or \
+           pd.isnull(self.All_Runs.loc[runnumber, "end_time"]):
+            # We cannot compute the current if the times are not known.
+            return
 
         current = self.Mya.get(current_channel,
                                self.All_Runs.loc[runnumber, "start_time"],
                                self.All_Runs.loc[runnumber, "end_time"],
                                run_number=runnumber)
+
         current.fillna(0, inplace=True)     # Replace Nan or None with 0
         live_time = self.Mya.get(livetime_channel,
                                  self.All_Runs.loc[runnumber, "start_time"],

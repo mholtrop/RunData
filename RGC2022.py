@@ -27,7 +27,7 @@ except ImportError:
     sys.exit(1)
 
 
-def rgm_2022_target_properties():
+def rgc_2022_target_properties():
     """ Returns the dictionary of dictionaries for target properties. """
     target_props = {
         'names': {     # Translation table for long name to short name.
@@ -41,85 +41,67 @@ def rgm_2022_target_properties():
             'LD2': 'LD2',
             'D2': 'LD2',
             'Liquid Deuterium Target': 'LD2',
-            'He': 'L4He',
-            'L4He': 'L4He',
-            'Liquid 4He target': 'L4He',
-            '40Ca': '40Ca',
-            '48Ca': '48Ca',
             'C': 'C',
             'C12': 'C',
             'Carbon target 2 mm': 'C',
-            'C (x4)': 'C (x4)',
-            'Carbon target 2 mm (4x)': 'C (4x)',
-            'Sn':  'Sn (x4)',
-            'Sn (x4)': 'Sn (x4)',
-            '300 um Sn': 'Sn (x4)',
-            'LAr': 'LAr',
-            'Ar': 'LAr',
-            'Liquid Argon': 'LAr'
+            'NH3': 'NH3',
+            'ND3': 'ND3',
+            'CH2': 'CH2',
+            'CD2': 'CD2'
         },
         'density': {     # Units: g/cm^2
             # 'norm': 0.335,
-            'LH2': 0.335,
-            'LD2': 0.820,
-            'L4He': 0.625,
-            '40Ca': 0.310,
-            '48Ca': 0.310,
+#            'LH2': 0.335,
+#            'LD2': 0.820,
             'C': 0.440,
-            'C (x4)': 0.440,
-            'Sn (x4)': 0.205,
-            'LAr': 0.698,
+            'NH3': 3.0,
+            'ND3': 3.0,
+            'CH2': 3.0,
+            'CD2': 3.0,
             'empty': 0
         },
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             ## list of currents for each beam energy period.
-            'scale': [10, 2, 1],     # Special entry. Multiply sum charge by this factor,
-            'LH2': [5., 10., 10.],   # for plotting with multiple beam energies, where charge rates vary a lot.
-            'LD2': [3.5, 7., 7.],
-            'L4He': [2., 4., 4],
-            '40Ca': [15., 30., 30.],
-            '48Ca': [8., 16., 95.],
-            'C': [6., 90., 90.],
-            'C (x4)': [1.5, 22.5, 22.5],
-            'Sn (x4)': [9., 18., 90.],
-            'LAr': [2.5, 22., 25.],
-            'empty': [0., 0., 0.]
+            'scale': [1, 1, 1],     # Special entry. Multiply sum charge by this factor,
+#            'LH2': [0., 0., 0.],   # for plotting with multiple beam energies, where charge rates vary a lot.
+#            'LD2': [0., 0., 0.],
+            'C': [2.5, 5., 90.],
+            'empty': [0., 0., 0.],
+            'NH3': [2.5, 5., 1.],
+            'ND3': [2.5, 5., 1.],
+            'CH2': [2.5, 5., 1.],
+            'CD2': [2.5, 5., 1.]
+
         },
         'attenuation': {     # Units: number
-            'LH2':  1,
-            'LD2': 1,
-            'L4He': 1,
-            '40Ca': 1,
-            '48Ca': 1,
+#            'LH2':  1,
+#            'LD2': 1,
             'C': 1,
-            'C (x4)': 1,
-            'Sn (x4)': 1,
-            'LAr': 1,
             'empty': 1,
+            'NH3': 1,
+            'ND3': 1,
+            'CH2': 1,
+            'CD2': 1,
         },
         'color': {  # Plot color: r,g,b,a
-            'LH2':  'rgba(0, 120, 150, 0.8)',
-            'LD2': 'rgba(20, 80, 255, 0.8)',
-            'L4He': 'rgba(120, 120, 80, 0.8)',
-            '40Ca': 'rgba(200, 120, 120, 0.8)',
-            '48Ca': 'rgba(240, 150, 100, 0.8)',
+#            'LH2':  'rgba(0, 120, 150, 0.8)',
+#            'LD2': 'rgba(20, 80, 255, 0.8)',
             'C': 'rgba(120, 120, 200, 0.8)',
-            'C (x4)': 'rgba(120, 120, 200, 0.8)',
-            'Sn (x4)': 'rgba(120, 200, 200, 0.8)',
-            'LAr': 'rgba(200, 200, 120, 0.8)',
-            'empty': 'rgba(220, 220, 220, 0.8)'
+            'empty': 'rgba(220, 220, 220, 0.8)',
+            'NH3': 'rgba(0, 100, 255, 0.8)',
+            'ND3': 'rgba(0, 255, 100, 0.8)',
+            'CH2': 'rgba(255, 100, 255, 0.8)',
+            'CD2': 'rgba(255, 255, 100, 0.8)'
         },
         'sums_color': {  # Plot color: r,g,b,a
             # 'empty': 'rgba(255, 200, 200, 0.8)',
-            'LH2': 'rgba(255, 120, 150, 0.8)',
-            'LD2': 'rgba(255, 80, 255, 0.8)',
-            'L4He': 'rgba(255, 120, 80, 0.8)',
-            '40Ca': 'rgba(255, 55, 120, 0.8)',
-            '48Ca': 'rgba(255, 80, 50, 0.8)',
+#            'LH2': 'rgba(255, 120, 150, 0.8)',
+#            'LD2': 'rgba(255, 80, 255, 0.8)',
             'C': 'rgba(255, 120, 200, 0.8)',
-            'C (x4)': 'rgba(255, 180, 0, 0.8)',
-            'Sn (x4)': 'rgba(255, 0, 200, 0.8)',
-            'LAr': 'rgba(255, 120, 0, 0.8)'
+            'NH3': 'rgba(255, 0, 100, 0.8)',
+            'ND3': 'rgba(255, 0, 100, 0.8)',
+            'CH2': 'rgba(255, 0, 100, 0.8)',
+            'CD2': 'rgba(255, 0, 100, 0.8)'
         },
 
     }
@@ -168,14 +150,14 @@ def setup_rundata_structures(data_loc, dates):
     data_loc.Good_triggers, data_loc.Calibration_triggers = used_triggers()
 
     data_loc.Production_run_type = "PROD.*"  # ["PROD66", "PROD66_PIN", "PROD66_noVTPread", "PROD67_noVTPread"]
-    data_loc.target_properties = rgm_2022_target_properties()
+    data_loc.target_properties = rgc_2022_target_properties()
     data_loc.target_dens = data_loc.target_properties['density']
     data_loc.atten_dict = None
     data_loc.Current_Channel = "IPM2C21A"  # "scaler_calc1b"
     data_loc.LiveTime_Channel = "B_DAQ:livetime"
     data_loc.Useful_conditions.append('beam_energy')  # This run will have multiple beam energies.
 
-    min_event_count = 500000  # Runs with at least 200k events.
+    min_event_count = 500000  # Runs with at least 500k events.
     end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
     print("Fetching the data from {} to {}".format(start_time, end_time))
     data_loc.get_runs(start_time, end_time, min_event_count)
@@ -222,18 +204,16 @@ def main(argv=None):
         at_jlab = False
 
     if not args.nocache:
-        data = RunData(cache_file="RGM_2022.sqlite3", i_am_at_jlab=at_jlab)
+        data = RunData(cache_file="RGC_2022.sqlite3", i_am_at_jlab=at_jlab)
     else:
         data = RunData(cache_file="", sqlcache=False, i_am_at_jlab=at_jlab)
     # data._cache_engine=None   # Turn OFF cache?
     data.debug = args.debug
 
-    run_sub_periods = [(datetime(2022, 1, 11,  8, 0), datetime(2022, 1, 24, 11, 0)),
-                       (datetime(2022, 1, 27, 11, 0), datetime(2022, 1, 31, 9, 0)),
-                       (datetime(2022, 1, 31, 15, 0), datetime(2022, 2,  8, 9, 0))]
-
-    run_sub_energy = [2.07, 4.03, 5.99]
-    run_sub_y_placement = [0.79, 0.99, 0.99]
+    run_sub_periods = [(datetime(2022, 6, 12,  0, 0), datetime(2022, 6, 15, 8, 0)),
+                       (datetime(2022, 6, 15, 18, 0), datetime.now())]
+    run_sub_energy = [2.21205, 10.5473]
+    run_sub_y_placement = [0.79, 0.99]
 
 
     if args.plot:
@@ -274,7 +254,7 @@ def main(argv=None):
         # if args.debug:
         #     print("Calibration runs: ", calib_runs)
 
-        print("Compute cumulative charge.")
+        print(f"Compute cumulative charge for period {sub_i}.")
         data.compute_cumulative_charge(targets, runs=plot_runs)
 
         if args.excel:
@@ -473,7 +453,7 @@ def main(argv=None):
                         )
 
                         # # Annotate - add a curve for the expected charge at 50% efficiency.
-                        showlegend = True if targ == last_targ and sub_i == 2 else False
+                        showlegend = True if targ == last_targ and sub_i == 1 else False
                         if args.debug:
                             print(f"last_targ = {last_targ}  targ: {targ}, sub_i = {sub_i}, showlegend = {showlegend}")
                         if data.target_properties['current'][targ][sub_i] > 0.:
@@ -483,7 +463,7 @@ def main(argv=None):
                                            mode='lines',
                                            line=dict(color='rgba(90, 180, 88, 0.6)', width=4),
                                            name=f"Expected charge at 50% up",
-                                           showlegend=True if targ == last_targ and sub_i == 2 else False,
+                                           showlegend=showlegend,
                                            # Only one legend at the end.
                                            legendgroup="group2",
                                            ),
@@ -598,7 +578,8 @@ def main(argv=None):
             yanchor="middle",
             yref="paper",
             text=f"<b>E<sub>b</sub> = {run_sub_energy[sub_i]} GeV</b><br>"
-            f"Current scaled {data.target_properties['current']['scale'][sub_i]}x",
+ #           f"Current scaled {data.target_properties['current']['scale'][sub_i]}x",
+            ,
             showarrow=False,
             font=dict(
                 family="Times",
@@ -626,7 +607,7 @@ def main(argv=None):
         # Set x-axis title
         fig.update_layout(
             title=go.layout.Title(
-                text="RGM 2022 Progress",
+                text="RGC 2022 Progress",
                 yanchor="top",
                 y=0.95,
                 xanchor="left",
@@ -696,17 +677,17 @@ def main(argv=None):
             )
 
         print("Show plots.")
-        fig.write_image("RGM2022_progress.pdf", width=2048, height=900)
-        fig.write_image("RGM2022_progress.png", width=2048, height=900)
-        fig.write_html("RGM2022_progress.html")
+        fig.write_image("RGC2022_progress.pdf", width=2048, height=900)
+        fig.write_image("RGC2022_progress.png", width=2048, height=900)
+        fig.write_html("RGC2022_progress.html")
         if args.chart:
-            charts.plot(fig, filename='RGM2022_edit', width=2048, height=900, auto_open=True)
+            charts.plot(fig, filename='RGC2022_edit', width=2048, height=900, auto_open=True)
         if args.live:
             fig.show(width=2048, height=900)  # width=1024,height=768
 
     if args.excel:
         print("Write new Excel table.")
-        excel_output.to_excel("RGM2022_progress.xlsx",
+        excel_output.to_excel("RGC2022_progress.xlsx",
                               columns=['start_time', 'end_time', 'target', 'beam_energy', 'run_config', 'selected',
                                        'event_count', 'sum_event_count', 'charge', 'sum_charge', 'luminosity',
                                        'sum_lumi',
@@ -715,7 +696,7 @@ def main(argv=None):
 if __name__ == "__main__":
     sys.exit(main())
 else:
-    print("Imported the RGM2022 info. Setting up data.")
-    dat = RunData(cache_file="RGM_2022.sqlite3", sqlcache=True, i_am_at_jlab=False)
+    print("Imported the RGC2022 info. Setting up data.")
+    dat = RunData(cache_file="RGC_2022.sqlite3", sqlcache=True, i_am_at_jlab=False)
     dat.debug = 10
-    print("setup_rundata_structures(data,(datetime(2022, 1, 31, 15, 0), datetime.now()))")
+    print("Run something like: setup_rundata_structures(data,(datetime(2022, 6, 18, 15, 0), datetime.now()))")
