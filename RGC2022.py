@@ -64,12 +64,12 @@ def rgc_2022_target_properties():
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             # list of currents for each beam energy period.
             'scale': [1, 1, 1],     # Special entry. Multiply sum charge by this factor,
-            'C': [2.5, 5., 90.],
-            'empty': [0., 0., 0.],
-            'NH3': [2.5, 5., 1.],
-            'ND3': [2.5, 5., 1.],
-            'CH2': [2.5, 5., 1.],
-            'CD2': [2.5, 5., 1.]
+            'empty': [10., 20., 20.],
+            'C': [2.5, 5., 5.],
+            'NH3': [2.5, 5., 5.],
+            'ND3': [2.5, 5., 5.],
+            'CH2': [2.5, 5., 5.],
+            'CD2': [2.5, 5., 5.]
 
         },
         'attenuation': {     # Units: number
@@ -89,7 +89,7 @@ def rgc_2022_target_properties():
             'CD2': 'rgba(255, 255, 100, 0.8)'
         },
         'sums_color': {  # Plot color: r,g,b,a
-            # 'empty': 'rgba(255, 200, 200, 0.8)',
+            'empty': 'rgba(180, 180, 180, 0.8)',
             'C': 'rgba(255, 120, 200, 0.8)',
             'NH3': 'rgba(255, 0, 100, 0.8)',
             'ND3': 'rgba(255, 0, 100, 0.8)',
@@ -131,7 +131,7 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data_lo
 def used_triggers():
     """Setup the triggers used."""
     good_triggers = '.*'
-    calibration_triggers = ['None', 'RNDM']
+    calibration_triggers = ['rgc_300MeV_v1.2_zero.cnf', 'rgc_300MeV_v1.3_zero.cnf', 'rgc_300MeV_v1.4_zero.cnf']
 
     return good_triggers, calibration_triggers
 
@@ -233,6 +233,10 @@ def main(argv=None):
         plot_runs = compute_plot_runs(targets=targets, run_config=data.Good_triggers, data_loc=data)
 
         calib_run_numbers = data.list_selected_runs(targets='.*', run_config=data.Calibration_triggers)
+
+        # Add individual runs by hand that are designated as "Calibration Runs".
+        if sub_i == 1:
+            calib_run_numbers = calib_run_numbers.append(pd.Index([16089, 16096, 16098, 16100, 16101, 16102, 16103, 16184, 16185, 16186]))
 
         calib_runs = plot_runs.loc[calib_run_numbers]
     #    calib_starts = calib_runs["start_time"]
@@ -561,42 +565,43 @@ def main(argv=None):
                             bgcolor="#FFFFFF"
                         )
 
-        mid_time = run_sub_periods[sub_i][0] + (run_sub_periods[sub_i][1] - run_sub_periods[sub_i][0])/2
-        fig.add_annotation(
-            x=mid_time,
-            xanchor="center",
-            xref="x",
-            y=run_sub_y_placement[sub_i],
-            yanchor="middle",
-            yref="paper",
-            text=f"<b>E<sub>b</sub> = {run_sub_energy[sub_i]} GeV</b><br>"
- #           f"Current scaled {data.target_properties['current']['scale'][sub_i]}x",
-            ,
-            showarrow=False,
-            font=dict(
-                family="Times",
-                color="#FF0000",
-                size=20),
-            bgcolor="#FFEEEE"
-        )
+            mid_time = run_sub_periods[sub_i][0] + (run_sub_periods[sub_i][1] - run_sub_periods[sub_i][0])/2
+            fig.add_annotation(
+                x=mid_time,
+                xanchor="center",
+                xref="x",
+                y=run_sub_y_placement[sub_i],
+                yanchor="middle",
+                yref="paper",
+                text=f"<b>E<sub>b</sub> = {run_sub_energy[sub_i]} GeV</b><br>"
+     #           f"Current scaled {data.target_properties['current']['scale'][sub_i]}x",
+                ,
+                showarrow=False,
+                font=dict(
+                    family="Times",
+                    color="#FF0000",
+                    size=20),
+                bgcolor="#FFEEEE"
+            )
 
-    fig.add_annotation(
-        x=0.85,
-        xanchor="left",
-        xref="paper",
-        y=-0.1,
-        yanchor="bottom",
-        yref="paper",
-        text="Graph:<i>Maurik Holtrop, UNH</i>",
-        showarrow=False,
-        font=dict(
-            family="Arial",
-            color="rgba(170,150,200,0.4)",
-            size=12)
-       )
     # End sub run period loop.
     if args.plot:
         # Set x-axis title
+        fig.add_annotation(
+            x=0.85,
+            xanchor="left",
+            xref="paper",
+            y=-0.08,
+            yanchor="bottom",
+            yref="paper",
+            text="Graph:<i>Maurik Holtrop, UNH</i>",
+            showarrow=False,
+            font=dict(
+                family="Arial",
+                color="rgba(170,150,200,0.9)",
+                size=10)
+        )
+
         fig.update_layout(
             title=go.layout.Title(
                 text="RGC 2022 Progress",
