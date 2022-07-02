@@ -591,14 +591,14 @@ def main(argv=None):
             x=0.85,
             xanchor="left",
             xref="paper",
-            y=-0.08,
+            y=-0.09,
             yanchor="bottom",
             yref="paper",
             text="Graph:<i>Maurik Holtrop, UNH</i>",
             showarrow=False,
             font=dict(
                 family="Arial",
-                color="rgba(170,150,200,0.9)",
+                color="rgba(170,150,200,0.3)",
                 size=10)
         )
 
