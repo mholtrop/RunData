@@ -116,6 +116,19 @@ def main():
                        name=f"Current Sum {time_p[0]}"),
             secondary_y=True)
 
+        fig.add_annotation(
+            x=current_time.iloc[-1],
+            y=current_sum[-1]*1.03,
+            xref="x",
+            yref="y2",
+            text=f"<b>Total: {current_sum_tot:5.3f} mC</b>",
+            showarrow=False,
+            font=dict(
+                family="Arial, sans-serif",
+                color=time_p[5],
+                size=16),
+            bgcolor="#FFFFFF"
+        )
 
     fig.update_layout(
         title=go.layout.Title(
