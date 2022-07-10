@@ -341,7 +341,7 @@ class RunData:
             end = end_of_last_run
 
         # Now update the chache times table with the new entry from "start" to "end"
-        if len(self._cache_known_data) == 0:
+        if len(self._cache_known_data) == 0 or "index" not in self._cache_known_data:
             self._cache_known_data = pd.DataFrame({"index": [0], "start_time": [start],
                                                   "end_time": [end], "min_event_count": [1]})
         else:

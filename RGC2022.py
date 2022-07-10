@@ -50,7 +50,7 @@ def rgc_2022_target_properties():
             'NH3': 'NH3',
             'ND3': 'ND3',
             'CH2': 'CH2',
-            'CD2': 'CD2'
+            'CD2': 'CD2',
         },
         'density': {     # Units: g/cm^2
             # 'norm': 0.335,
@@ -59,7 +59,7 @@ def rgc_2022_target_properties():
             'ND3': 3.0,
             'CH2': 3.0,
             'CD2': 3.0,
-            'empty': 0
+            'empty': 0,
         },
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             # list of currents for each beam energy period.
@@ -69,8 +69,7 @@ def rgc_2022_target_properties():
             'NH3': [2.5, 5., 5.],
             'ND3': [2.5, 5., 5.],
             'CH2': [2.5, 5., 5.],
-            'CD2': [2.5, 5., 5.]
-
+            'CD2': [2.5, 5., 5.],
         },
         'attenuation': {     # Units: number
             'C': 1,
@@ -81,20 +80,28 @@ def rgc_2022_target_properties():
             'CD2': 1,
         },
         'color': {  # Plot color: r,g,b,a
-            'C': 'rgba(120, 120, 200, 0.8)',
-            'empty': 'rgba(220, 220, 220, 0.8)',
-            'NH3': 'rgba(0, 100, 255, 0.8)',
-            'ND3': 'rgba(0, 255, 100, 0.8)',
-            'CH2': 'rgba(255, 100, 255, 0.8)',
-            'CD2': 'rgba(255, 255, 100, 0.8)'
+            'empty': 'rgba(150, 100, 100, 0.7)',
+            'C': 'rgba(120, 120, 200, 0.7)',
+            'NH3': 'rgba(0, 100, 255, 0.7)',
+            'ND3': 'rgba(0, 255, 100, 0.7)',
+            'CH2': 'rgba(100, 255, 255, 0.7)',
+            'CD2': 'rgba(255, 100, 100, 0.7)',
+            'calibration': 'rgba(220,220,220,0.5)',
         },
         'sums_color': {  # Plot color: r,g,b,a
-            'empty': 'rgba(180, 180, 180, 0.8)',
-            'C': 'rgba(255, 120, 200, 0.8)',
-            'NH3': 'rgba(255, 0, 100, 0.8)',
-            'ND3': 'rgba(255, 0, 100, 0.8)',
-            'CH2': 'rgba(255, 0, 100, 0.8)',
-            'CD2': 'rgba(255, 0, 100, 0.8)'
+            'empty': 'rgba(80, 80, 80, 0.8)',
+            'C': 'rgba(100, 100, 180, 0.8)',
+            'NH3': 'rgba(0, 80, 200, 0.8)',
+            'ND3': 'rgba(0, 200, 80, 0.8)',
+            'CH2': 'rgba(80, 200, 200, 0.8)',
+            'CD2': 'rgba(200, 80, 80, 0.8)',
+            'expected': 'rgba(0, 0, 0, 0.7)',
+            # 'empty': 'rgba(180, 180, 180, 0.8)',
+            # 'C': 'rgba(255, 120, 200, 0.8)',
+            # 'NH3': 'rgba(255, 0, 100, 0.8)',
+            # 'ND3': 'rgba(255, 0, 100, 0.8)',
+            # 'CH2': 'rgba(255, 0, 100, 0.8)',
+            # 'CD2': 'rgba(255, 0, 100, 0.8)',
         },
 
     }
@@ -205,8 +212,8 @@ def main(argv=None):
 
     run_sub_periods = [(datetime(2022, 6, 12,  0, 0), datetime(2022, 6, 15, 8, 0)),
                        (datetime(2022, 6, 15, 18, 0), datetime.now())]
-    run_sub_energy = [2.21205, 10.5473]
-    run_sub_y_placement = [0.79, 0.99]
+    run_sub_energy = [2.21, 10.54]
+    run_sub_y_placement = [0.90, 0.90]
 
     if args.plot:
         max_y_value_sums = 0.
@@ -244,6 +251,7 @@ def main(argv=None):
 
         plot_runs = plot_runs.loc[~plot_runs.index.isin(calib_run_numbers)]  # Take the calibration runs out.
     #    plot_runs = plot_runs.loc[~plot_runs.index.isin([1506, 1507, 1508, 1509])]  # Take error numbers out.
+
         starts = plot_runs["start_time"]
         ends = plot_runs["end_time"]
 
@@ -298,7 +306,7 @@ def main(argv=None):
                         width=calib_runs['dt'],
                         hovertext=calib_runs['hover'],
                         name="Calibration runs",
-                        marker=dict(color='rgba(150,150,150,0.5)'),
+                        marker=dict(color=data.target_properties['color']['calibration']),
                         legendgroup="group1",
                         ),
                  secondary_y=False, )
@@ -368,7 +376,8 @@ def main(argv=None):
                                             go.Scatter(x=plot_expected_charge_t[-2:],
                                                        y=[current_expected_sum_charge, current_expected_sum_charge],
                                                        mode='lines',
-                                                       line=dict(color='rgba(90, 180, 88, 0.6)', width=2, dash="dot"),
+                                                       line=dict(color=data.target_properties['sums_color']['expected'],
+                                                                 width=1, dash="dot"),
                                                        name=f"Continuation line",
                                                        showlegend=False
                                                        # Only one legend at the end.
@@ -457,7 +466,7 @@ def main(argv=None):
                                 go.Scatter(x=plot_expected_charge_t,
                                            y=plot_expected_charge_v,
                                            mode='lines',
-                                           line=dict(color='rgba(90, 180, 88, 0.6)', width=4),
+                                           line=dict(color=data.target_properties['sums_color']['expected'], width=2),
                                            name=f"Expected charge at 50% up",
                                            showlegend=showlegend,
                                            # Only one legend at the end.
@@ -604,12 +613,12 @@ def main(argv=None):
 
         fig.update_layout(
             title=go.layout.Title(
-                text="RGC 2022 Progress",
+                text="<b>RGC 2022 Progress</b>",
                 yanchor="top",
                 y=0.95,
                 xanchor="left",
                 x=0.40),
-            titlefont=dict(size=24),
+            titlefont=dict(size=24, color='rgba(0,0,100,1.)'),
             legend=dict(
                 x=0.02,
                 y=1.15,
@@ -697,4 +706,4 @@ else:
     print("Imported the RGC2022 info. Setting up data.")
     dat = RunData(cache_file="RGC_2022.sqlite3", sqlcache=True, i_am_at_jlab=False)
     dat.debug = 10
-    print("Run something like: setup_rundata_structures(data,(datetime(2022, 6, 18, 15, 0), datetime.now()))")
+    print("Run something like: setup_rundata_structures(dat,(datetime(2022, 6, 18, 15, 0), datetime.now()))")
