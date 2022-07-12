@@ -38,7 +38,7 @@ def setup_time_periods():
         # target, start_time,   end_time,  raster diameter x, raster diameter y, color
         #(0, datetime(2022, 7, 8, 2, 0), datetime(2022, 7, 8, 7, 0), 12.5, 12.5),
         #(0, datetime(2022, 7, 9, 10, 0), datetime(2022, 7, 9, 13, 49), 12.5, 12.5)
-        ('ND3', datetime(2022, 7, 8, 2, 0), datetime.now(), 12.5, 12.5, 'rgba(255, 60, 80, 0.6)')
+        ('ND3', datetime(2022, 7, 8, 2, 0), datetime(2022, 7, 11, 14, 0), 12.5, 12.5, 'rgba(255, 60, 80, 0.6)')
     ]
     return time_periods
 
