@@ -46,6 +46,7 @@ def rgc_2022_target_properties():
             'Liquid Deuterium Target': 'LD2',
             'C': 'C',
             'C12': 'C',
+            '12C': 'C',
             'Carbon target 2 mm': 'C',
             'NH3': 'NH3',
             'ND3': 'ND3',
@@ -191,6 +192,8 @@ def main(argv=None):
     parser.add_argument('-C', '--chart', action="store_true", help="Put plot on plotly charts website.")
     parser.add_argument('-f', '--date_from', type=str, help="Plot from date, eg '2021,11,09' ", default=None)
     parser.add_argument('-t', '--date_to', type=str, help="Plot to date, eg '2022,01,22' ", default=None)
+    parser.add_argument('-m', '--max_rate', type=float, help="Maximum for date rate axis ", default=15.)
+    parser.add_argument('-M', '--max_charge', type=float, help="Maximum for charge axis ", default=None)
 
     args = parser.parse_args(argv[1:])
 
@@ -630,13 +633,19 @@ def main(argv=None):
             )
         )
 
+        if args.max_rate is not None and args.max_rate > 0:
+            max_rate = args.max_rate
+        else:
+            max_rate = 1.05*max(25., plot_runs.loc[runs, 'event_rate'].max())
+
         # Set y-axes titles
         fig.update_yaxes(
             title_text="<b>Event rate kHz</b>",
             titlefont=dict(size=22),
             secondary_y=False,
             tickfont=dict(size=18),
-            range=[0, 1.05*max(25., plot_runs.loc[runs, 'event_rate'].max())]
+            # range=[0, 1.05*max(25., plot_runs.loc[runs, 'event_rate'].max())]
+            range=[0, max_rate]
         )
 
         if args.charge:
@@ -647,9 +656,14 @@ def main(argv=None):
             # max_y_2nd_scale = 7.
             if args.debug:
                 print(f"max_y_2nd_scale = {max_y_2nd_scale}")
+
+            if args.max_charge is not None and args.max_charge > 0.:
+                max_charge = args.max_charge
+            else:
+                max_charge = max_y_2nd_scale
             fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>",
                              titlefont=dict(size=22),
-                             range=[0, max_y_2nd_scale],
+                             range=[0, max_charge],
                              secondary_y=True,
                              tickfont=dict(size=18)
                              )
