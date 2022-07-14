@@ -81,7 +81,7 @@ def rgc_2022_target_properties():
             'CD2': 1,
         },
         'color': {  # Plot color: r,g,b,a
-            'empty': 'rgba(150, 100, 100, 0.7)',
+            'empty': 'rgba(160, 110, 110, 0.7)',
             'C': 'rgba(120, 120, 200, 0.7)',
             'NH3': 'rgba(0, 100, 255, 0.7)',
             'ND3': 'rgba(0, 255, 100, 0.7)',
@@ -90,7 +90,7 @@ def rgc_2022_target_properties():
             'calibration': 'rgba(220,220,220,0.5)',
         },
         'sums_color': {  # Plot color: r,g,b,a
-            'empty': 'rgba(80, 80, 80, 0.8)',
+            'empty': 'rgba(150, 90, 90, 0.8)',
             'C': 'rgba(100, 100, 180, 0.8)',
             'NH3': 'rgba(0, 80, 200, 0.8)',
             'ND3': 'rgba(0, 200, 80, 0.8)',
@@ -265,7 +265,7 @@ def main(argv=None):
         data.compute_cumulative_charge(targets, runs=plot_runs)
 
         if args.excel:
-            excel_output = excel_output.append(plot_runs.append(calib_runs)).sort_index()
+            excel_output = pd.concat([excel_output, plot_runs, calib_runs]).sort_index()
 
         #    print(data.All_Runs.to_string(columns=['start_time','end_time','target','run_config','selected','event_count','charge','user_comment']))
         #    data.All_Runs.to_latex("hps_run_table.latex",columns=['start_time','end_time','target','run_config','selected','event_count','charge','operators','user_comment'])
