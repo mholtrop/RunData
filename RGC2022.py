@@ -365,7 +365,8 @@ def main(argv=None):
 
                                 if data.target_properties['current'][targ][sub_i] > 0.:
                                     plot_expected_charge_t.append(en.iloc[i-1])
-                                    current_expected_sum_charge = (en.iloc[i-1] - plot_expected_charge_t[-2]).\
+                                    current_expected_sum_charge = plot_expected_charge_v[-1]
+                                    current_expected_sum_charge += (en.iloc[i-1] - plot_expected_charge_t[-2]).\
                                         total_seconds() * data.target_properties['current'][targ][sub_i] * 1e-6 * 0.5
                                     plot_expected_charge_v.append(current_expected_sum_charge)
                                     # Current is in nA, Charge is in mC, at 50% efficiency.
