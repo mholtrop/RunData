@@ -7,7 +7,6 @@
 #
 # Author: Maurik Holtrop - UNH - June 2022.
 #
-from __future__ import print_function
 import sys
 import os
 from datetime import datetime, timedelta
@@ -64,7 +63,7 @@ def rgc_2022_target_properties():
         },
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             # list of currents for each beam energy period.
-            'scale': [1, 1, 1],     # Special entry. Multiply sum charge by this factor,
+            'scale': [10., 1, 1],     # Special entry. Multiply sum charge by this factor,
             'empty': [10., 20., 20.],
             'C': [2.5, 5., 5.],
             'NH3': [2.5, 5., 5.],
@@ -73,8 +72,8 @@ def rgc_2022_target_properties():
             'CD2': [2.5, 5., 5.],
         },
         'attenuation': {     # Units: number
-            'C': 1,
             'empty': 1,
+            'C': 1,
             'NH3': 1,
             'ND3': 1,
             'CH2': 1,
@@ -84,7 +83,11 @@ def rgc_2022_target_properties():
             'empty': 'rgba(160, 110, 110, 0.7)',
             'C': 'rgba(120, 120, 200, 0.7)',
             'NH3': 'rgba(0, 100, 255, 0.7)',
+            'NH3+': 'rgba(0, 60, 190, 0.7)',
+            'NH3-': 'rgba(0, 120, 255, 0.7)',
             'ND3': 'rgba(0, 255, 100, 0.7)',
+            'ND3+': 'rgba(0, 190, 60, 0.7)',
+            'ND3-': 'rgba(0, 255, 120, 0.7)',
             'CH2': 'rgba(100, 255, 255, 0.7)',
             'CD2': 'rgba(255, 100, 100, 0.7)',
             'calibration': 'rgba(220,220,220,0.5)',
@@ -97,12 +100,6 @@ def rgc_2022_target_properties():
             'CH2': 'rgba(80, 200, 200, 0.8)',
             'CD2': 'rgba(200, 80, 80, 0.8)',
             'expected': 'rgba(0, 0, 0, 0.7)',
-            # 'empty': 'rgba(180, 180, 180, 0.8)',
-            # 'C': 'rgba(255, 120, 200, 0.8)',
-            # 'NH3': 'rgba(255, 0, 100, 0.8)',
-            # 'ND3': 'rgba(255, 0, 100, 0.8)',
-            # 'CH2': 'rgba(255, 0, 100, 0.8)',
-            # 'CD2': 'rgba(255, 0, 100, 0.8)',
         },
 
     }
@@ -122,12 +119,16 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data_lo
     runs["center"] = starts + (ends - starts) / 2
     runs["dt"] = [(run["end_time"] - run["start_time"]).total_seconds() * 999 for num, run, in runs.iterrows()]
     runs["event_rate"] = [runs.loc[r, 'event_count'] / runs.loc[r, 'dt'] for r in runs.index]
+    runs.loc[(runs.target_polarization == "None"), 'target_polarization'] = 0.   # Fix RCDB unpleasantries.
+
     runs["hover"] = [f"Run: {r}<br />"
                      f"Trigger:{runs.loc[r, 'run_config']}<br />"
                      f"Start: {runs.loc[r, 'start_time']}<br />"
                      f"End: {runs.loc[r, 'end_time']}<br />"
                      f"DT:   {runs.loc[r, 'dt'] / 1000.:5.1f} s<br />"
                      f"NEvt: {runs.loc[r, 'event_count']:10,d}<br />"
+                     f"Target Pol: {runs.loc[r, 'target_polarization']}<br />"
+                     f"Half W Plate: {runs.loc[r, 'half_wave_plate']} <br />"
                      f"Charge: {runs.loc[r, 'charge']:6.2f} mC <br />"
                      f"Lumi: {runs.loc[r, 'luminosity']:6.2f} 1/fb<br />"
                      f"<Rate>:{runs.loc[r, 'event_rate']:6.2f}kHz<br />"
@@ -156,7 +157,9 @@ def setup_rundata_structures(data_loc, dates):
     data_loc.atten_dict = None
     data_loc.Current_Channel = "IPM2C21A"  # "scaler_calc1b"
     data_loc.LiveTime_Channel = "B_DAQ:livetime"
-    data_loc.Useful_conditions.append('beam_energy')  # This run will have multiple beam energies.
+    data_loc.Useful_conditions.append('beam_energy')
+    data_loc.Useful_conditions.append('target_polarization')
+    data_loc.Useful_conditions.append('half_wave_plate')
 
     min_event_count = 500000  # Runs with at least 500k events.
     end_time = end_time + timedelta(0, 0, -end_time.microsecond)  # Round down on end_time to a second
@@ -194,6 +197,7 @@ def main(argv=None):
     parser.add_argument('-t', '--date_to', type=str, help="Plot to date, eg '2022,01,22' ", default=None)
     parser.add_argument('-m', '--max_rate', type=float, help="Maximum for date rate axis ", default=15.)
     parser.add_argument('-M', '--max_charge', type=float, help="Maximum for charge axis ", default=None)
+    parser.add_argument('--return_data', action="store_true", help="Internal use: return the data at end.", default=None)
 
     args = parser.parse_args(argv[1:])
 
@@ -230,13 +234,85 @@ def main(argv=None):
     legends_shown = []  # To keep track of which target has the charge sum legend shown.
     #   Loop over the different run sub-periods.
 
+    wave_plate = None
+    polarization = None
+
     for sub_i in range(len(run_sub_periods)):
 
         data.clear()
         setup_rundata_structures(data, run_sub_periods[sub_i])
         data.All_Runs['luminosity'] *= 1E-3   # Rescale luminosity from 1/pb to 1/fb
 
+        # Add the polarization of the target and half-wave-plate state to the DataFrame
+        # polarization = []
+        # wave_plate = data.Mya.get('IGL1I00DI24_24M', run_sub_periods[sub_i][0], run_sub_periods[sub_i][1])
+        # # The wave_plate data is funky. It will have 1, but then 0 for 500ms and then 1 again.
+        # # For 0, there is the start
+        # # of the 0 period, and the end, but nothing in between. So we sparsify this data.
+        # wave_plate = wave_plate.drop('run_number', axis=1)  # Drop the num_number column, which is all nan.
+        # # Find the first entry that has a time difference more than 1001 ms
+        # i = 0
+        # while wave_plate.iloc[i + 1].ms - wave_plate.iloc[i].ms < 1001:
+        #     i = i + 1
+        # wave_plate_zero = wave_plate.iloc[i]   # Save as the first entry.
+        # # Cut out any period less than 1001 ms:
+        # wave_plate = wave_plate.loc[(np.diff(wave_plate.ms, append=wave_plate.iloc[-1].ms) > 1001)]
+        # # Get rid of all the 1's (or 0's) in the middle, i.e. keep the transitions.
+        # wave_plate = wave_plate.loc[((wave_plate.value.diff(-1) == 1) | (wave_plate.value.diff(-1) == -1) |
+        #                              (wave_plate.value.diff(1) == 1) | (wave_plate.value.diff(1) == -1))]
+        # wave_plate = pd.concat([pd.DataFrame([wave_plate_zero]), wave_plate])
+        # # Set the index to 'time', so index.get_indexer([data,..., method = 'ffill'] will get the correct values.
+        # wave_plate = wave_plate.set_index('time')
+        #
+        # tmp_indexes = wave_plate.index.get_indexer(data.All_Runs["end_time"], method="ffill")
+        # data.All_Runs["mya_hwp"] = wave_plate.iloc[tmp_indexes].value.values
+        #
+        # target_pol_average = 0
+        # wave_plate_average = 0
+        #
+        # last_targ = None
+        # for row in data.All_Runs.iterrows():
+        #     if row[1].target in ['NH3', 'ND3']:
+        #         target_pol = data.Mya.get('TGT:PT12:Polarization', row[1].start_time, row[1].end_time)
+        #         target_pol = target_pol.loc[~target_pol.value.isna()]  # Filter out the nan values.
+        #         if len(target_pol) == 0:
+        #             if last_targ is not None and last_targ == row[1].target:
+        #                 pass
+        # Keep the last target_pol_average if there was no data in MYA for run and target is same.
+        #             else:
+        #                 print(f"ERROR: Unknown polarization for target {row[1].target} for run {row[0]}. Assigning +")
+        #                 target_pol_average = 1.
+        #         elif len(target_pol) == 1:
+        #             target_pol_average = target_pol.value[0]
+        #         else:
+        #             target_pol_total = np.trapz(target_pol.value, target_pol.ms)
+        #             target_pol_time = target_pol.ms.iloc[-1] - target_pol.ms.iloc[0]
+        #             target_pol_average = target_pol_total/target_pol_time
+        #
+        #         polarization.append(target_pol_average)
+        #         if args.debug > 0:
+        #             print(f"Run {row[0]} Target {row[1].target}  Pol = {target_pol_average}")
+        #
+        #     else:
+        #         polarization.append(0.)
+        #     last_targ = row[1].target
+        #
+        # data.All_Runs["mya_targ_pol"] = polarization
+        # data.All_Runs.loc[ (data.All_Runs.target ) ]
         #    data.add_current_data_to_runs()
+
+        # If you want to rename the targets for + and - polarization, uncomment.
+        # An initial test of this indicated that this caused a plot that become WAY too busy.
+        # data.All_Runs.loc[(data.All_Runs.target == "NH3") &
+        #                   (data.All_Runs.target_polarization > 0.04), "target"] = "NH3+"
+        # data.All_Runs.loc[(data.All_Runs.target == "NH3") &
+        #                   (data.All_Runs.target_polarization < -0.04), "target"] = "NH3-"
+        # data.All_Runs.loc[(data.All_Runs.target == "ND3") &
+        #                   (data.All_Runs.target_polarization > 0.04), "target"] = "ND3+"
+        # data.All_Runs.loc[(data.All_Runs.target == "ND3") &
+        #                   (data.All_Runs.target_polarization < -0.04), "target"] = "ND3-"
+
+
         targets = '.*'
 
         # Select runs into the different categories.
@@ -267,41 +343,104 @@ def main(argv=None):
         if args.excel:
             excel_output = pd.concat([excel_output, plot_runs, calib_runs]).sort_index()
 
-        #    print(data.All_Runs.to_string(columns=['start_time','end_time','target','run_config','selected','event_count','charge','user_comment']))
-        #    data.All_Runs.to_latex("hps_run_table.latex",columns=['start_time','end_time','target','run_config','selected','event_count','charge','operators','user_comment'])
-
         if args.plot:
 
             print(f"Build Plots for period {sub_i}")
 
             last_targ = None
-            for targ in data.target_properties['color']:
+            for targ in data.target_properties['attenuation']:
 
                 if args.debug:
                     print(f"Processing plot for target {targ}")
                 runs = plot_runs.target.str.fullmatch(targ.replace('(', r"\(").replace(')', r'\)'))
 
-                if np.count_nonzero(runs) > 1 and sub_i == len(run_sub_periods) - 1 and \
-                        targ in data.target_properties['sums_color']:
-                    last_targ = targ    # Store the last target name with data for later use.
+                if targ in ['NH3', 'ND3']:
+                    # also select + polarization
+                    runs_p = runs & (plot_runs.target_polarization != "None") & (plot_runs.target_polarization >= 0.)
+                    data_x_p = plot_runs.loc[runs_p, 'center']
+                    data_y_p = plot_runs.loc[runs_p, 'event_rate']
+                    data_width_p = plot_runs.loc[runs_p, 'dt']
+                    data_hover_p = plot_runs.loc[runs_p, 'hover']
+                    data_color_p = data.target_properties['color'][targ+"+"]
 
-                if targ in legends_data or np.count_nonzero(runs) <= 1:  # Do we show this legend?
-                    show_data_legend = False                             # This avoids the same legend shown twice.
+                    if np.count_nonzero(runs_p) > 1 and sub_i == len(run_sub_periods) - 1:
+                        last_targ = targ + "+"  # Store the last target name with data for later use.
+
+                    if targ + "+" in legends_data or np.count_nonzero(runs_p) < 1:  # Do we show this legend?
+                        show_data_legend = False  # This avoids the same legend shown twice.
+                    else:
+                        show_data_legend = True
+                        legends_data.append(targ + "+")
+
+                    fig.add_trace(
+                        go.Bar(x=data_x_p,
+                               y=data_y_p,
+                               width=data_width_p,
+                               hovertext=data_hover_p,
+                               name="run with " + targ + "+",
+                               marker=dict(color=data_color_p),
+                               legendgroup="group1",
+                               showlegend=show_data_legend
+                               ),
+                        secondary_y=False, )
+
+                    runs_n = runs & (plot_runs.loc[runs].target_polarization < 0.)  # also select + polarization
+                    data_x_n = plot_runs.loc[runs_n, 'center']
+                    data_y_n = plot_runs.loc[runs_n, 'event_rate']
+                    data_width_n = plot_runs.loc[runs_n, 'dt']
+                    data_hover_n = plot_runs.loc[runs_n, 'hover']
+                    data_color_n = data.target_properties['color'][targ + "-"]
+
+                    if np.count_nonzero(runs_n) > 1 and sub_i == len(run_sub_periods) - 1:
+                        last_targ = targ + "-"  # Store the last target name with data for later use.
+
+                    if targ + "-" in legends_data or np.count_nonzero(runs_n) < 1:  # Do we show this legend?
+                        show_data_legend = False  # This avoids the same legend shown twice.
+                    else:
+                        show_data_legend = True
+                        legends_data.append(targ + "-")
+
+                    fig.add_trace(
+                        go.Bar(x=data_x_n,
+                               y=data_y_n,
+                               width=data_width_n,
+                               hovertext=data_hover_n,
+                               name="run with " + targ + "-",
+                               marker=dict(color=data_color_n),
+                               legendgroup="group1",
+                               showlegend=show_data_legend
+                               ),
+                        secondary_y=False, )
+
                 else:
-                    show_data_legend = True
-                    legends_data.append(targ)
 
-                fig.add_trace(
-                    go.Bar(x=plot_runs.loc[runs, 'center'],
-                           y=plot_runs.loc[runs, 'event_rate'],
-                           width=plot_runs.loc[runs, 'dt'],
-                           hovertext=plot_runs.loc[runs, 'hover'],
-                           name="run with " + targ,
-                           marker=dict(color=data.target_properties['color'][targ]),
-                           legendgroup="group1",
-                           showlegend=show_data_legend
-                           ),
-                    secondary_y=False, )
+                    if np.count_nonzero(runs) > 1 and sub_i == len(run_sub_periods) - 1 and \
+                            targ in data.target_properties['sums_color']:
+                        last_targ = targ  # Store the last target name with data for later use.
+
+                    if targ in legends_data or np.count_nonzero(runs) < 1:  # Do we show this legend?
+                        show_data_legend = False  # This avoids the same legend shown twice.
+                    else:
+                        show_data_legend = True
+                        legends_data.append(targ)
+
+                    data_x = plot_runs.loc[runs, 'center']
+                    data_y = plot_runs.loc[runs, 'event_rate']
+                    data_width = plot_runs.loc[runs, 'dt']
+                    data_hover = plot_runs.loc[runs, 'hover']
+                    data_color = data.target_properties['color'][targ]
+
+                    fig.add_trace(
+                        go.Bar(x=data_x,
+                               y=data_y,
+                               width=data_width,
+                               hovertext=data_hover,
+                               name="run with " + targ,
+                               marker=dict(color=data_color),
+                               legendgroup="group1",
+                               showlegend=show_data_legend
+                               ),
+                        secondary_y=False, )
 
             fig.add_trace(
                  go.Bar(x=calib_runs['center'],
@@ -389,7 +528,6 @@ def main(argv=None):
                                             secondary_y=True
                                         )
 
-
                             plot_sumcharge_target_t.append(st.iloc[i])
                             plot_sumcharge_target_t.append(en.iloc[i])
                             plot_sumcharge_target_v.append(sumch.iloc[i - 1])
@@ -424,7 +562,6 @@ def main(argv=None):
                             show_legend_ok = True
                             legends_shown.append(targ)
 
-
                         fig.add_trace(
                             go.Scatter(x=plot_sumcharge_target_t,
                                        y=plot_sumcharge_target_v,
@@ -437,28 +574,64 @@ def main(argv=None):
                             secondary_y=True)
 
                         # Decorative: add a dot at the end of the curve.
+                        # Decorative: add a box with an annotation of the total charge on this target.
+                        actual_charge = plot_sumcharge_target_v[-1]/current_plotting_scale
+
                         fig.add_trace(
                             go.Scatter(x=[plot_sumcharge_target_t[-1]],
                                        y=[plot_sumcharge_target_v[-1]],
+                                       mode="markers+text",
                                        marker=dict(color=data.target_properties['sums_color'][targ],
                                                    size=6),
+                                       # text=f"<b>total: {actual_charge:4.2f} mC</b>",
+                                       # textfont=dict(
+                                       #      family="Arial, sans-serif",
+                                       #      color=data.target_properties['sums_color'][targ],
+                                       #      size=16),
+                                       # textposition="top center",
                                        showlegend=False),
                             secondary_y=True)
 
-                        # Decorative: add a box with an annotation of the total charge on this target.
-                        actual_charge = plot_sumcharge_target_v[-1]/current_plotting_scale
+                        annotation_text = f"<b>total: {actual_charge:4.2f} mC</b>"
+                        text_extra_y_shift = 0
+                        if targ in ["NH3", "ND3"]:
+                            annotation_y_offset = max_y_value_sums*0.03
+                            text_extra_y_shift = 12
+                            charge_up = plot_runs.loc[
+                                (plot_runs.target == targ) & (plot_runs.target_polarization >= 0.)].charge.sum()
+                            charge_down = plot_runs.loc[
+                                (plot_runs.target == targ) & (plot_runs.target_polarization < 0.)].charge.sum()
+#                            annotation_text += f"<br />⬆︎ {charge_up:5.3f} mC ⬇︎ {charge_down:5.3f} mC"
+                            fig.add_annotation(
+                                x=plot_sumcharge_target_t[-1],
+                                y=plot_sumcharge_target_v[-1],
+                                xref="x",
+                                yref="y2",
+                                yanchor="bottom",
+                                yshift=6,
+                                text=f"⬆︎ {charge_up:5.3f} mC ⬇︎ {charge_down:5.3f} mC",
+                                showarrow=False,
+                                font=dict(
+                                    family="Arial, sans-serif",
+                                    color=data.target_properties['sums_color'][targ],
+                                    size=10),
+                                bgcolor="rgba(255,255,255,0.7)"
+                            )
+
                         fig.add_annotation(
                             x=plot_sumcharge_target_t[-1],
-                            y=plot_sumcharge_target_v[-1] + max_y_value_sums*0.015,
+                            y=plot_sumcharge_target_v[-1],
                             xref="x",
                             yref="y2",
-                            text=f"<b>total: {actual_charge:3.2f} mC</b>",
+                            yanchor="bottom",
+                            yshift=6 + text_extra_y_shift,
+                            text=annotation_text,
                             showarrow=False,
                             font=dict(
                                 family="Arial, sans-serif",
                                 color=data.target_properties['sums_color'][targ],
                                 size=16),
-                            bgcolor="#FFFFFF"
+                            bgcolor="rgba(255,255,255,0.6)"
                         )
 
                         # # Annotate - add a curve for the expected charge at 50% efficiency.
@@ -481,102 +654,9 @@ def main(argv=None):
                             max_expected_charge.append(plot_expected_charge_v[-1])
                             # print(f"max_expected_charge = {max_expected_charge}")
 
-
-    #################################################################################################################
-    #                     Luminosity
-    #################################################################################################################
-            else:
-                # sumlumi = plot_runs.loc[:, "sum_lumi"]
-                # plot_sumlumi_t = [starts.iloc[0], ends.iloc[0]]
-                # plot_sumlumi = [0, sumlumi.iloc[0]]
-                #
-                # for i in range(1, len(sumlumi)):
-                #     plot_sumlumi_t.append(starts.iloc[i])
-                #     plot_sumlumi_t.append(ends.iloc[i])
-                #
-                #     plot_sumlumi.append(sumlumi.iloc[i - 1])
-                #     plot_sumlumi.append(sumlumi.iloc[i])
-                #
-                # fig.add_trace(
-                #     go.Scatter(x=plot_sumlumi_t,
-                #                y=plot_sumlumi,
-                #                line=dict(color='#FF3030', width=3),
-                #                name="Luminosity Live"),
-                #     secondary_y=True)
-
-                # We get the sums per target in two steps. Clumsy, but only way to get the maximum available in second loop
-                plot_sumlumi_target = {}                       # Store sum results.
-                for targ in data.target_properties['sums_color']:
-                    selected = plot_runs.target == targ
-                    if len(plot_runs.loc[selected, "luminosity"]) > 0:
-                        plot_sumlumi_target[targ] = np.cumsum(plot_runs.loc[selected, "luminosity"])
-                        # Store overall max.
-                        max_y_value_sums = max(float(plot_sumlumi_target[targ].max()), max_y_value_sums)
-
-                for targ in plot_sumlumi_target.keys():  # data.target_properties['sums_color']:
-                    plot_sumlumi_starts = plot_runs.loc[plot_runs["target"] == targ, "start_time"]
-                    plot_sumlumi_ends = plot_runs.loc[plot_runs["target"] == targ, "end_time"]
-                    if len(plot_sumlumi_target[targ]) > 1:
-                        plot_sumlumi_target_t = [plot_sumlumi_starts.iloc[0], plot_sumlumi_ends.iloc[0]]
-                        plot_sumlumi_target_v = [0, plot_sumlumi_target[targ].iloc[0]]
-                        for i in range(1, len(plot_sumlumi_target[targ])):
-                            if plot_sumlumi_target[targ].keys()[i] - plot_sumlumi_target[targ].keys()[i - 1] > 1 and \
-                                    not np.all(data.All_Runs.loc[plot_sumlumi_target[targ].keys()[i-1]:
-                                               plot_sumlumi_target[targ].keys()[i]].target == targ):
-                                plot_sumlumi_target_t.append(plot_sumlumi_starts.iloc[i])
-                                plot_sumlumi_target_v.append(None)
-
-                                fig.add_trace(
-                                    go.Scatter(x=[plot_sumlumi_starts.iloc[i-1], plot_sumlumi_starts.iloc[i]],
-                                               y=[plot_sumlumi_target_v[-2], plot_sumlumi_target_v[-2]],
-                                               mode="lines",
-                                               line=dict(color=data.target_properties['sums_color'][targ], width=1,
-                                                         dash="dot"),
-                                               name=f"Continuation line {targ}",
-                                               legendgroup="group2",
-                                               ),
-                                    secondary_y=True)
-
-                            plot_sumlumi_target_t.append(plot_sumlumi_starts.iloc[i])
-                            plot_sumlumi_target_t.append(plot_sumlumi_ends.iloc[i])
-                            plot_sumlumi_target_v.append(plot_sumlumi_target[targ].iloc[i - 1])
-                            plot_sumlumi_target_v.append(plot_sumlumi_target[targ].iloc[i])
-
-                        fig.add_trace(
-                            go.Scatter(x=plot_sumlumi_target_t,
-                                       y=plot_sumlumi_target_v,
-                                       mode="lines",
-                                       line=dict(color=data.target_properties['sums_color'][targ], width=3),
-                                       name=f"Sum luminosity on {targ}",
-                                       legendgroup="group2",
-                                       ),
-                            secondary_y=True)
-
-                        fig.add_trace(
-                            go.Scatter(x=[plot_sumlumi_target_t[-1]],
-                                       y=[plot_sumlumi_target_v[-1]],
-                                       marker=dict(
-                                           color=data.target_properties['sums_color'][targ],
-                                           size=6
-                                           ),
-                                       showlegend=False
-                                       ),
-                            secondary_y=True
-                        )
-
-                        fig.add_annotation(
-                            x=plot_sumlumi_target_t[-1],
-                            y=plot_sumlumi_target_v[-1] + max_y_value_sums*0.015,
-                            xref="x",
-                            yref="y2",
-                            text=f"<b>total: {plot_sumlumi_target_v[-1]:3.2f} 1/fb</b>",
-                            showarrow=False,
-                            font=dict(
-                                family="Arial, sans-serif",
-                                color=data.target_properties['sums_color'][targ],
-                                size=16),
-                            bgcolor="#FFFFFF"
-                        )
+            run_sub_annotation = f"<b>E<sub>b</sub> = {run_sub_energy[sub_i]} GeV</b><br>"
+            if data.target_properties['current']['scale'][sub_i] != 1.:
+                run_sub_annotation += f"Current scaled {data.target_properties['current']['scale'][sub_i]:3.0f}x"
 
             mid_time = run_sub_periods[sub_i][0] + (run_sub_periods[sub_i][1] - run_sub_periods[sub_i][0])/2
             fig.add_annotation(
@@ -586,9 +666,7 @@ def main(argv=None):
                 y=run_sub_y_placement[sub_i],
                 yanchor="middle",
                 yref="paper",
-                text=f"<b>E<sub>b</sub> = {run_sub_energy[sub_i]} GeV</b><br>"
-     #           f"Current scaled {data.target_properties['current']['scale'][sub_i]}x",
-                ,
+                text=run_sub_annotation,
                 showarrow=False,
                 font=dict(
                     family="Times",
@@ -668,13 +746,6 @@ def main(argv=None):
                              secondary_y=True,
                              tickfont=dict(size=18)
                              )
-        else:
-            fig.update_yaxes(title_text="<b>Integrated Luminosity (1/fb)</b>",
-                             titlefont=dict(size=22),
-                             range=[0, 1.05*max_y_value_sums],
-                             secondary_y=True,
-                             tickfont=dict(size=18)
-                             )
 
         fig.update_xaxes(
             title_text="Date",
@@ -709,16 +780,19 @@ def main(argv=None):
     if args.excel:
         print("Write new Excel table.")
         excel_output.to_excel("RGC2022_progress.xlsx",
-                              columns=['start_time', 'end_time', 'target', 'beam_energy', 'run_config', 'selected',
-                                       'event_count', 'sum_event_count', 'charge', 'sum_charge', 'luminosity',
-                                       'sum_lumi',
-                                       'evio_files_count', 'megabyte_count', 'operators', 'user_comment'])
+                              columns=['start_time', 'end_time', 'target', 'target_polarization', 'beam_energy',
+                                       'half_wave_plate', 'run_config', 'selected',
+                                       'event_count', 'sum_event_count', 'charge', 'sum_charge', 'sum_charge_targ',
+                                       'evio_files_count', 'megabyte_count',
+                                       'operators', 'user_comment'])
+
+    if args.return_data:
+        return data, plot_runs, wave_plate, polarization
 
 
 if __name__ == "__main__":
     sys.exit(main())
 else:
-    print("Imported the RGC2022 info. Setting up data.")
-    dat = RunData(cache_file="RGC_2022.sqlite3", sqlcache=True, i_am_at_jlab=False)
-    dat.debug = 10
-    print("Run something like: setup_rundata_structures(dat,(datetime(2022, 6, 18, 15, 0), datetime.now()))")
+    print("You still need to setup stuff.")
+    arguments = "--return_data -d -d -d "  # No plot or excel.
+    print("data, plot_runs, wave_plate, polarization = main(arguments)")
