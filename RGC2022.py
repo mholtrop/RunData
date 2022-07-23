@@ -195,7 +195,7 @@ def main(argv=None):
     parser.add_argument('-C', '--chart', action="store_true", help="Put plot on plotly charts website.")
     parser.add_argument('-f', '--date_from', type=str, help="Plot from date, eg '2021,11,09' ", default=None)
     parser.add_argument('-t', '--date_to', type=str, help="Plot to date, eg '2022,01,22' ", default=None)
-    parser.add_argument('-m', '--max_rate', type=float, help="Maximum for date rate axis ", default=15.)
+    parser.add_argument('-m', '--max_rate', type=float, help="Maximum for date rate axis ", default=None)
     parser.add_argument('-M', '--max_charge', type=float, help="Maximum for charge axis ", default=None)
     parser.add_argument('--return_data', action="store_true", help="Internal use: return the data at end.", default=None)
 
@@ -242,7 +242,9 @@ def main(argv=None):
         data.clear()
         setup_rundata_structures(data, run_sub_periods[sub_i])
         data.All_Runs['luminosity'] *= 1E-3   # Rescale luminosity from 1/pb to 1/fb
-
+        if sub_i == 1:
+            data.All_Runs.loc[16359, "target_polarization"] = 0.04
+            data.All_Runs.loc[16406, "target_polarization"] = 0.26
         # Add the polarization of the target and half-wave-plate state to the DataFrame
         # polarization = []
         # wave_plate = data.Mya.get('IGL1I00DI24_24M', run_sub_periods[sub_i][0], run_sub_periods[sub_i][1])
@@ -715,7 +717,7 @@ def main(argv=None):
         if args.max_rate is not None and args.max_rate > 0:
             max_rate = args.max_rate
         else:
-            max_rate = 1.05*max(25., plot_runs.loc[runs, 'event_rate'].max())
+            max_rate = 8.   # 1.05*max(25., plot_runs.loc[runs, 'event_rate'].max())
 
         # Set y-axes titles
         fig.update_yaxes(
