@@ -49,6 +49,8 @@ def rgc_2022_target_properties():
             'Carbon target 2 mm': 'C',
             'NH3': 'NH3',
             'ND3': 'ND3',
+            'ND3 Positive': 'ND3',
+            'ND3 Negative': 'ND3',
             'CH2': 'CH2',
             'CD2': 'CD2',
         },
@@ -197,6 +199,8 @@ def main(argv=None):
     parser.add_argument('-t', '--date_to', type=str, help="Plot to date, eg '2022,01,22' ", default=None)
     parser.add_argument('-m', '--max_rate', type=float, help="Maximum for date rate axis ", default=None)
     parser.add_argument('-M', '--max_charge', type=float, help="Maximum for charge axis ", default=None)
+    parser.add_argument('-r', '--runperiod', type=int,
+                        help="Run sub-period, 0=all, 1, 2 or 3, or 12 for 1+2", default=3),
     parser.add_argument('--return_data', action="store_true", help="Internal use: return the data at end.", default=None)
 
     args = parser.parse_args(argv[1:])
@@ -218,9 +222,28 @@ def main(argv=None):
     data.debug = args.debug
 
     run_sub_periods = [(datetime(2022, 6, 12,  0, 0), datetime(2022, 6, 15, 8, 0)),
-                       (datetime(2022, 6, 15, 18, 0), datetime.now())]
-    run_sub_energy = [2.21, 10.54]
-    run_sub_y_placement = [0.90, 0.90]
+                       (datetime(2022, 6, 15, 18, 0), datetime(2022, 8, 29, 8, 0)),
+                       (datetime(2022, 9, 26, 4, 24), datetime.now())]
+
+    run_sub_energy = [2.21, 10.54, 10.54]
+    run_sub_y_placement = [0.90, 0.90, 0.90]
+
+    run_period_name = ""
+    run_period_sub_num = range(len(run_sub_periods))
+    if args.runperiod == 0:
+        run_period_name = "_all"
+    elif 0 < args.runperiod <= 3:
+        run_period_sub_num = [args.runperiod-1]
+        if args.runperiod == 3:
+            run_period_name = ""
+        else:
+            run_period_name = "_r"+str(args.runperiod)
+    elif args.runperiod == 12:
+        run_period_sub_num = [0, 1]
+        run_period_name = "_fton"
+    else:
+        print("Incorrect choice for runperiod argument.")
+        return
 
     if args.plot:
         max_y_value_sums = 0.
@@ -237,11 +260,12 @@ def main(argv=None):
     wave_plate = None
     polarization = None
 
-    for sub_i in range(len(run_sub_periods)):
+    for sub_i in run_period_sub_num:
 
         data.clear()
         setup_rundata_structures(data, run_sub_periods[sub_i])
-        data.All_Runs['luminosity'] *= 1E-3   # Rescale luminosity from 1/pb to 1/fb
+        if data.All_Runs is not None:
+            data.All_Runs['luminosity'] *= 1E-3   # Rescale luminosity from 1/pb to 1/fb
         if sub_i == 1:
             data.All_Runs.loc[16359, "target_polarization"] = 0.04
             data.All_Runs.loc[16406, "target_polarization"] = 0.26
@@ -314,11 +338,13 @@ def main(argv=None):
         # data.All_Runs.loc[(data.All_Runs.target == "ND3") &
         #                   (data.All_Runs.target_polarization < -0.04), "target"] = "ND3-"
 
-
         targets = '.*'
 
         # Select runs into the different categories.
-        plot_runs = compute_plot_runs(targets=targets, run_config=data.Good_triggers, data_loc=data)
+        if data.All_Runs is not None:
+            plot_runs = compute_plot_runs(targets=targets, run_config=data.Good_triggers, data_loc=data)
+        else:
+            plot_runs = pd.DataFrame()
 
         calib_run_numbers = data.list_selected_runs(targets='.*', run_config=data.Calibration_triggers)
 
@@ -365,7 +391,7 @@ def main(argv=None):
                     data_hover_p = plot_runs.loc[runs_p, 'hover']
                     data_color_p = data.target_properties['color'][targ+"+"]
 
-                    if np.count_nonzero(runs_p) > 1 and sub_i == len(run_sub_periods) - 1:
+                    if np.count_nonzero(runs_p) > 1 and sub_i == len(run_period_sub_num) - 1:
                         last_targ = targ + "+"  # Store the last target name with data for later use.
 
                     if targ + "+" in legends_data or np.count_nonzero(runs_p) < 1:  # Do we show this legend?
@@ -393,7 +419,7 @@ def main(argv=None):
                     data_hover_n = plot_runs.loc[runs_n, 'hover']
                     data_color_n = data.target_properties['color'][targ + "-"]
 
-                    if np.count_nonzero(runs_n) > 1 and sub_i == len(run_sub_periods) - 1:
+                    if np.count_nonzero(runs_n) > 1 and sub_i == len(run_period_sub_num) - 1:
                         last_targ = targ + "-"  # Store the last target name with data for later use.
 
                     if targ + "-" in legends_data or np.count_nonzero(runs_n) < 1:  # Do we show this legend?
@@ -416,7 +442,7 @@ def main(argv=None):
 
                 else:
 
-                    if np.count_nonzero(runs) > 1 and sub_i == len(run_sub_periods) - 1 and \
+                    if np.count_nonzero(runs) > 1 and sub_i == len(run_period_sub_num) - 1 and \
                             targ in data.target_properties['sums_color']:
                         last_targ = targ  # Store the last target name with data for later use.
 
@@ -637,7 +663,7 @@ def main(argv=None):
                         )
 
                         # # Annotate - add a curve for the expected charge at 50% efficiency.
-                        showlegend = True if targ == last_targ and sub_i == 1 else False
+                        showlegend = True if targ == last_targ and sub_i == len(run_period_sub_num)-1 else False
                         if args.debug:
                             print(f"last_targ = {last_targ}  targ: {targ}, sub_i = {sub_i}, showlegend = {showlegend}")
                         if data.target_properties['current'][targ][sub_i] > 0.:
@@ -695,9 +721,15 @@ def main(argv=None):
                 size=10)
         )
 
+        if args.runperiod == 3:
+            title = "<b>RGC 22/23 FToff Progress</b>"
+        elif args.runperiod == 0:
+            title = "<b>Run Group C Progress</b>"
+        else:
+            title = "<b>RGC 2022 FTon Progress</b>"
         fig.update_layout(
             title=go.layout.Title(
-                text="<b>RGC 2022 Progress</b>",
+                text=title,
                 yanchor="top",
                 y=0.95,
                 xanchor="left",
@@ -771,17 +803,17 @@ def main(argv=None):
             )
 
         print("Show plots.")
-        fig.write_image("RGC2022_progress.pdf", width=2048, height=900)
-        fig.write_image("RGC2022_progress.png", width=2048, height=900)
-        fig.write_html("RGC2022_progress.html")
+        fig.write_image("RGC2022_progress"+run_period_name+".pdf", width=2048, height=900)
+        fig.write_image("RGC2022_progress"+run_period_name+".png", width=2048, height=900)
+        fig.write_html("RGC2022_progress"+run_period_name+".html")
         if args.chart:
-            charts.plot(fig, filename='RGC2022_edit', width=2048, height=900, auto_open=True)
+            charts.plot(fig, filename='RGC_edit', width=2048, height=900, auto_open=True)
         if args.live:
             fig.show(width=2048, height=900)  # width=1024,height=768
 
     if args.excel:
         print("Write new Excel table.")
-        excel_output.to_excel("RGC2022_progress.xlsx",
+        excel_output.to_excel("RGC2022_progress"+run_period_name+".xlsx",
                               columns=['start_time', 'end_time', 'target', 'target_polarization', 'beam_energy',
                                        'half_wave_plate', 'run_config', 'selected',
                                        'event_count', 'sum_event_count', 'charge', 'sum_charge', 'sum_charge_targ',

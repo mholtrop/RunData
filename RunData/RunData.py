@@ -447,8 +447,11 @@ class RunData:
         """Get runs with get_runs_only, and then run the select_good_runs and add_current_data_to_runs."""
         self.get_runs_only(start, end, min_event)
         good_runs = self.select_good_runs()
-        self.add_current_data_to_runs()
-        return len(self.All_Runs)
+        if len(good_runs) > 0:
+            self.add_current_data_to_runs()
+            return len(self.All_Runs)
+        else:
+            return 0
 
     def get_runs_only(self, start, end, min_event):
         """Fetch the runs from start time to end time with at least min_event events.
@@ -869,6 +872,10 @@ class RunData:
         if self.debug > 5:
             print("select_good_runs: Production_run_type = ", self.Production_run_type)
         good_runs = []
+
+        if self.All_Runs is None:
+            return good_runs
+
         for rnum in self.All_Runs.index:
             test1 = False
             if self.Production_run_type is None:
@@ -925,6 +932,8 @@ class RunData:
         """
 
         if runs is None:
+            if self.All_Runs is None:
+                return pd.Index([], dtype='Int64')  # Return an empty Index.
             runs = self.All_Runs
 
         test_run_config = None
