@@ -264,8 +264,10 @@ def main(argv=None):
 
         data.clear()
         setup_rundata_structures(data, run_sub_periods[sub_i])
-        if data.All_Runs is not None:
-            data.All_Runs['luminosity'] *= 1E-3   # Rescale luminosity from 1/pb to 1/fb
+        if data.All_Runs is None:
+            return
+
+        data.All_Runs['luminosity'] *= 1E-3   # Rescale luminosity from 1/pb to 1/fb
         if sub_i == 1:
             data.All_Runs.loc[16359, "target_polarization"] = 0.04
             data.All_Runs.loc[16406, "target_polarization"] = 0.26
