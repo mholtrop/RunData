@@ -66,12 +66,12 @@ def rgc_2022_target_properties():
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             # list of currents for each beam energy period.
             'scale': [10., 1, 1],     # Special entry. Multiply sum charge by this factor,
-            'empty': [10., 20., 20.],
-            'C': [2.5, 5., 5.],
-            'NH3': [2.5, 5., 5.],
-            'ND3': [2.5, 5., 5.],
-            'CH2': [2.5, 5., 5.],
-            'CD2': [2.5, 5., 5.],
+            'empty': [10., 20., 40.],
+            'C': [2.5, 5., 10.],
+            'NH3': [2.5, 5., 10.],
+            'ND3': [2.5, 5., 10.],
+            'CH2': [2.5, 5., 10.],
+            'CD2': [2.5, 5., 10.],
         },
         'attenuation': {     # Units: number
             'empty': 1,
