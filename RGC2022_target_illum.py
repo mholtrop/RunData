@@ -188,7 +188,7 @@ def main():
     fig.write_image("RGC2022_target_illum.pdf", width=2048, height=900)
     fig.write_image("RGC2022_target_illum.png", width=2048, height=900)
     fig.write_html("RGC2022_target_illum.html")
-    fig.show(width=2048, height=900)  # width=1024,height=768
+    #   fig.show(width=2048, height=900)  # width=1024,height=768
 
 
 if __name__ == "__main__":
