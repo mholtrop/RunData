@@ -36,6 +36,7 @@ def rgc_2022_target_properties():
             'Empty cell': 'empty',
             'Empty': 'empty',
             'empty': 'empty',
+            'Empty  - Raster': 'empty',
             'None': 'empty',
             'LH2': 'LH2',
             'H': 'LH2',
