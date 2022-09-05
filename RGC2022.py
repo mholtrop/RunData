@@ -143,7 +143,8 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data_lo
 def used_triggers():
     """Setup the triggers used."""
     good_triggers = '.*'
-    calibration_triggers = ['rgc_300MeV_v1.2_zero.cnf', 'rgc_300MeV_v1.3_zero.cnf', 'rgc_300MeV_v1.4_zero.cnf']
+    calibration_triggers = ['rgc_300MeV_v1.2_zero.cnf', 'rgc_300MeV_v1.3_zero.cnf', 'rgc_300MeV_v1.4_zero.cnf',
+                            'rgc_300MeV_v1.5_zero.cnf', 'rgc_300MeV_v1.6_zero.cnf']
 
     return good_triggers, calibration_triggers
 
@@ -353,7 +354,11 @@ def main(argv=None):
 
         # Add individual runs by hand that are designated as "Calibration Runs".
         if sub_i == 1:
-            calib_run_numbers = calib_run_numbers.append(pd.Index([16089, 16096, 16098, 16100, 16101, 16102, 16103, 16184, 16185, 16186]))
+            calib_run_numbers = calib_run_numbers.append(pd.Index([16089, 16096, 16098, 16100, 16101, 16102, 16103,
+                                                                   16184, 16185, 16186]))
+
+        if sub_i == 2:
+            calib_run_numbers = calib_run_numbers.append(pd.Index([16861, 16863, 16864]))
 
         calib_runs = plot_runs.loc[calib_run_numbers]
     #    calib_starts = calib_runs["start_time"]
