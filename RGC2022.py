@@ -757,7 +757,7 @@ def main(argv=None):
         if args.max_rate is not None and args.max_rate > 0:
             max_rate = args.max_rate
         else:
-            max_rate = 8.   # 1.05*max(25., plot_runs.loc[runs, 'event_rate'].max())
+            max_rate = 15.   # 1.05*max(25., plot_runs.loc[runs, 'event_rate'].max())
 
         # Set y-axes titles
         fig.update_yaxes(
