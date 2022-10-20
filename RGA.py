@@ -121,15 +121,38 @@ def used_triggers():
 
 def read_rafo_start_end_times():
     """Read the run start and end times that Rafo extracted from the data and return in a DataFrame."""
+    #
+    # These CSV files were produced by Rafayel Paremuzyan (rafopar@jlab.org) in March 2022 by analyzing the data
+    # files for RGA.
+    #
     rafo_times1 = pd.read_csv("RunSummaryinfo_F18_Inb_Earlyruns.dat",
                               names=["run_number", "charge", "t_start", "t_end"], index_col=0)
-    rafo_times2 = pd.read_csv("RunSummaryinfo_F18inbend.dat", names=["run_number", "charge", "t_start", "t_end"],
+    rafo_times2 = pd.read_csv("RunSummaryinfo_F18inbend.dat", names=["run_number", "data_charge", "t_start", "t_end"],
                               index_col=0)
+
+    #
+    # A software fix in the CLAS12 java code is expected to give better charge integration results. Rafo send me
+    # the file Run_Charge.dat on Oct 12, 2022 with the new values. The columns in this file are:
+    # run_number, GatedCharge UngatedCharge max_GatedCharge min_GatedCharge max_UngatedCharge min_UngatedCharge
+    #
+    rafo_new_charge = pd.read_fwf("Run_Charge.dat", names=["run_number", "gated_charge", "ungated_charge",
+                                                           "max_gated_charge", "min_gated_charge",
+                                                           "max_ungated_charge", "min_ungated_charge"])
+    # rafo_new_charge["gated_charge"] *= 1E-6
+    # rafo_new_charge["ungated_charge"] *= 1E-6
+    # rafo_new_charge["max_gated_charge"] *= 1E-6
+    # rafo_new_charge["min_gated_charge"] *= 1E-6
+    # rafo_new_charge["max_ungated_charge"] *= 1E-6
+    # rafo_new_charge["min_ungated_charge"] *= 1E-6
+
     rafo_times1["data_start"] = rafo_times1.t_start.map(datetime.fromtimestamp)
     rafo_times1["data_end"] = rafo_times1.t_end.map(datetime.fromtimestamp)
     rafo_times2["data_start"] = rafo_times2.t_start.map(datetime.fromtimestamp)
     rafo_times2["data_end"] = rafo_times2.t_end.map(datetime.fromtimestamp)
     rafo_times = pd.concat([rafo_times1, rafo_times2])
+
+    rafo_times = pd.merge(rafo_times, rafo_new_charge, on="run_number", how="outer")
+
     return rafo_times
 
 
@@ -154,15 +177,31 @@ def setup_rundata_structures(data, runs=None):
     # We need to check the runs that have missing start_time or end_time.
     # If start or end time is missing, use the data tables from Rafo.
 
-    print("Get the data based start times.")
     if not hasattr(data, "rafo_times"):
+        print("Get the data based start times.")
         data.rafo_times = read_rafo_start_end_times()
 
-    # Add the rafo_times into the All_Runs dataframe
-    data.All_Runs["data_start"] = data.rafo_times["data_start"]
-    data.All_Runs["data_end"] = data.rafo_times["data_end"]
-    data.All_Runs["data_charge"] = data.rafo_times["charge"]
-
+    # Add the rafo_times only into the All_Runs dataframe
+    #
+    # data.All_Runs["data_start"] = data.rafo_times["data_start"]
+    # data.All_Runs["data_end"] = data.rafo_times["data_end"]
+    # data.All_Runs["data_charge"] = data.rafo_times["charge"]
+    # data.All_Runs["data_gated_charge"] = data.rafo_times["gated_charge"]
+    # data.All_Runs["data_ungated_charge"] = data.rafo_times["ungated_charge"]
+    #
+    # "Better" full merge.
+    #
+    data.All_Runs.reset_index(inplace=True)
+    data.All_Runs = pd.merge(data.All_Runs, data.rafo_times, left_on="number", right_on="run_number", how="left")
+    data.All_Runs.drop(["max_gated_charge", "min_gated_charge", "max_ungated_charge", "min_ungated_charge"],
+                       axis=1, inplace=True)
+    data.All_Runs.set_index("number", inplace=True)
+    #
+    # Since the file Run_Charge.dat is still changing, better to do this merge in a separate step. However,
+    # we also want the data_start and data_end times to fix up RCDB issues. So, we re-merge this data in the
+    # plotting file. See: RGA_Charge_Plot.ipynb
+    #
+    #
     # if 5381 in data.All_Runs.index and 5382 in data.All_Runs.index:
     #     # This run seems to have a bad start time from the RCDB database. If so, we fix it here.
     #     if data.All_Runs.loc[5382].start_time < data.All_Runs.loc[5381].end_time:
@@ -264,7 +303,7 @@ def compute_fcup_current(rnum, data, override=False, current_channel="scalerS2b"
     start_time = data.All_Runs.loc[rnum, "start_time"]
     end_time = data.All_Runs.loc[rnum, "end_time"]
     if pd.isnull(start_time) or pd.isnull(end_time):
-        return(None)
+        return None
     else:
         scaler = data.Mya.get(current_channel, start_time, end_time, run_number=rnum)
 
@@ -328,8 +367,7 @@ def compute_fcup_current_livetime_correction(runnumber, current, data, livetime_
         if data.debug > 1:
             print(f"compute_fcup_current_livetime_correction: Issue with live_time for run {runnumber} - len<2 ")
         live_time = pd.DataFrame({'ms': [start.timestamp() * 1000, end.timestamp() * 1000],
-                      'value': [100., 100.],
-                      'time': [start, end]})
+                                 'value': [100., 100.], 'time': [start, end]})
     elif len(live_time) < 3:
         live_time.fillna(100., inplace=True)  # Replace Nan or None with 1 - no data returned.
     else:
@@ -488,7 +526,7 @@ def main(argv=None):
 
     if args.hdf5:
         from pandas import HDFStore
-        run_data_hdf = HDFStore('RGA_RunData.h5')
+        run_data_hdf = HDFStore('RGA_RunData_Oct2022.h5')
 
     for sub_i in range(len(run_sub_periods)):
 
@@ -530,7 +568,8 @@ def main(argv=None):
                            'beam_current_request', 'run_config',
                            'selected', 'event_count', 'sum_event_count', 'event_rate', 'evio_files_count',
                            'megabyte_count', 'is_valid_run_end',
-                           'B_DAQ:livetime_pulser', 'data_charge', 'Fcup_charge', 'Fcup_charge_corr',
+                           'B_DAQ:livetime_pulser', 'data_charge', 'data_gated_charge', 'data_ungated_charge',
+                           'Fcup_charge', 'Fcup_charge_corr',
                            'IPM2C21A', 'IPM2C21A_corr',
                            'IPM2C24A', 'IPM2C24A_corr', 'scaler_calc1b', 'scaler_calc1b_corr',
                            'sum_charge', 'sum_charge_targ',
@@ -557,4 +596,3 @@ else:
     print("Setup 'data' with: data = RunData(cache_file='RGA.sqlite3', sqlcache=True)")
 #    data = RunData(cache_file="RGA.sqlite3", sqlcache=True)
 #    data.debug = 10
-
