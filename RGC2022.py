@@ -273,74 +273,6 @@ def main(argv=None):
         if sub_i == 1:
             data.All_Runs.loc[16359, "target_polarization"] = 0.04
             data.All_Runs.loc[16406, "target_polarization"] = 0.26
-        # Add the polarization of the target and half-wave-plate state to the DataFrame
-        # polarization = []
-        # wave_plate = data.Mya.get('IGL1I00DI24_24M', run_sub_periods[sub_i][0], run_sub_periods[sub_i][1])
-        # # The wave_plate data is funky. It will have 1, but then 0 for 500ms and then 1 again.
-        # # For 0, there is the start
-        # # of the 0 period, and the end, but nothing in between. So we sparsify this data.
-        # wave_plate = wave_plate.drop('run_number', axis=1)  # Drop the num_number column, which is all nan.
-        # # Find the first entry that has a time difference more than 1001 ms
-        # i = 0
-        # while wave_plate.iloc[i + 1].ms - wave_plate.iloc[i].ms < 1001:
-        #     i = i + 1
-        # wave_plate_zero = wave_plate.iloc[i]   # Save as the first entry.
-        # # Cut out any period less than 1001 ms:
-        # wave_plate = wave_plate.loc[(np.diff(wave_plate.ms, append=wave_plate.iloc[-1].ms) > 1001)]
-        # # Get rid of all the 1's (or 0's) in the middle, i.e. keep the transitions.
-        # wave_plate = wave_plate.loc[((wave_plate.value.diff(-1) == 1) | (wave_plate.value.diff(-1) == -1) |
-        #                              (wave_plate.value.diff(1) == 1) | (wave_plate.value.diff(1) == -1))]
-        # wave_plate = pd.concat([pd.DataFrame([wave_plate_zero]), wave_plate])
-        # # Set the index to 'time', so index.get_indexer([data,..., method = 'ffill'] will get the correct values.
-        # wave_plate = wave_plate.set_index('time')
-        #
-        # tmp_indexes = wave_plate.index.get_indexer(data.All_Runs["end_time"], method="ffill")
-        # data.All_Runs["mya_hwp"] = wave_plate.iloc[tmp_indexes].value.values
-        #
-        # target_pol_average = 0
-        # wave_plate_average = 0
-        #
-        # last_targ = None
-        # for row in data.All_Runs.iterrows():
-        #     if row[1].target in ['NH3', 'ND3']:
-        #         target_pol = data.Mya.get('TGT:PT12:Polarization', row[1].start_time, row[1].end_time)
-        #         target_pol = target_pol.loc[~target_pol.value.isna()]  # Filter out the nan values.
-        #         if len(target_pol) == 0:
-        #             if last_targ is not None and last_targ == row[1].target:
-        #                 pass
-        # Keep the last target_pol_average if there was no data in MYA for run and target is same.
-        #             else:
-        #                 print(f"ERROR: Unknown polarization for target {row[1].target} for run {row[0]}. Assigning +")
-        #                 target_pol_average = 1.
-        #         elif len(target_pol) == 1:
-        #             target_pol_average = target_pol.value[0]
-        #         else:
-        #             target_pol_total = np.trapz(target_pol.value, target_pol.ms)
-        #             target_pol_time = target_pol.ms.iloc[-1] - target_pol.ms.iloc[0]
-        #             target_pol_average = target_pol_total/target_pol_time
-        #
-        #         polarization.append(target_pol_average)
-        #         if args.debug > 0:
-        #             print(f"Run {row[0]} Target {row[1].target}  Pol = {target_pol_average}")
-        #
-        #     else:
-        #         polarization.append(0.)
-        #     last_targ = row[1].target
-        #
-        # data.All_Runs["mya_targ_pol"] = polarization
-        # data.All_Runs.loc[ (data.All_Runs.target ) ]
-        #    data.add_current_data_to_runs()
-
-        # If you want to rename the targets for + and - polarization, uncomment.
-        # An initial test of this indicated that this caused a plot that become WAY too busy.
-        # data.All_Runs.loc[(data.All_Runs.target == "NH3") &
-        #                   (data.All_Runs.target_polarization > 0.04), "target"] = "NH3+"
-        # data.All_Runs.loc[(data.All_Runs.target == "NH3") &
-        #                   (data.All_Runs.target_polarization < -0.04), "target"] = "NH3-"
-        # data.All_Runs.loc[(data.All_Runs.target == "ND3") &
-        #                   (data.All_Runs.target_polarization > 0.04), "target"] = "ND3+"
-        # data.All_Runs.loc[(data.All_Runs.target == "ND3") &
-        #                   (data.All_Runs.target_polarization < -0.04), "target"] = "ND3-"
 
         targets = '.*'
 
@@ -835,6 +767,76 @@ def main(argv=None):
 if __name__ == "__main__":
     sys.exit(main())
 else:
-    print("You still need to setup stuff.")
-    arguments = "--return_data -d -d -d "  # No plot or excel.
-    print("data, plot_runs, wave_plate, polarization = main(arguments)")
+    print("RGC setup.")
+    # arguments = "--return_data -d -d -d "  # No plot or excel.
+    # print("data, plot_runs, wave_plate, polarization = main(arguments)")
+
+# ========================== DEAD CODE Commented out, but preserved here just in case. ==========================
+# Add the polarization of the target and half-wave-plate state to the DataFrame
+# polarization = []
+# wave_plate = data.Mya.get('IGL1I00DI24_24M', run_sub_periods[sub_i][0], run_sub_periods[sub_i][1])
+# # The wave_plate data is funky. It will have 1, but then 0 for 500ms and then 1 again.
+# # For 0, there is the start
+# # of the 0 period, and the end, but nothing in between. So we sparsify this data.
+# wave_plate = wave_plate.drop('run_number', axis=1)  # Drop the num_number column, which is all nan.
+# # Find the first entry that has a time difference more than 1001 ms
+# i = 0
+# while wave_plate.iloc[i + 1].ms - wave_plate.iloc[i].ms < 1001:
+#     i = i + 1
+# wave_plate_zero = wave_plate.iloc[i]   # Save as the first entry.
+# # Cut out any period less than 1001 ms:
+# wave_plate = wave_plate.loc[(np.diff(wave_plate.ms, append=wave_plate.iloc[-1].ms) > 1001)]
+# # Get rid of all the 1's (or 0's) in the middle, i.e. keep the transitions.
+# wave_plate = wave_plate.loc[((wave_plate.value.diff(-1) == 1) | (wave_plate.value.diff(-1) == -1) |
+#                              (wave_plate.value.diff(1) == 1) | (wave_plate.value.diff(1) == -1))]
+# wave_plate = pd.concat([pd.DataFrame([wave_plate_zero]), wave_plate])
+# # Set the index to 'time', so index.get_indexer([data,..., method = 'ffill'] will get the correct values.
+# wave_plate = wave_plate.set_index('time')
+#
+# tmp_indexes = wave_plate.index.get_indexer(data.All_Runs["end_time"], method="ffill")
+# data.All_Runs["mya_hwp"] = wave_plate.iloc[tmp_indexes].value.values
+#
+# target_pol_average = 0
+# wave_plate_average = 0
+#
+# last_targ = None
+# for row in data.All_Runs.iterrows():
+#     if row[1].target in ['NH3', 'ND3']:
+#         target_pol = data.Mya.get('TGT:PT12:Polarization', row[1].start_time, row[1].end_time)
+#         target_pol = target_pol.loc[~target_pol.value.isna()]  # Filter out the nan values.
+#         if len(target_pol) == 0:
+#             if last_targ is not None and last_targ == row[1].target:
+#                 pass
+# Keep the last target_pol_average if there was no data in MYA for run and target is same.
+#             else:
+#                 print(f"ERROR: Unknown polarization for target {row[1].target} for run {row[0]}. Assigning +")
+#                 target_pol_average = 1.
+#         elif len(target_pol) == 1:
+#             target_pol_average = target_pol.value[0]
+#         else:
+#             target_pol_total = np.trapz(target_pol.value, target_pol.ms)
+#             target_pol_time = target_pol.ms.iloc[-1] - target_pol.ms.iloc[0]
+#             target_pol_average = target_pol_total/target_pol_time
+#
+#         polarization.append(target_pol_average)
+#         if args.debug > 0:
+#             print(f"Run {row[0]} Target {row[1].target}  Pol = {target_pol_average}")
+#
+#     else:
+#         polarization.append(0.)
+#     last_targ = row[1].target
+#
+# data.All_Runs["mya_targ_pol"] = polarization
+# data.All_Runs.loc[ (data.All_Runs.target ) ]
+#    data.add_current_data_to_runs()
+
+# If you want to rename the targets for + and - polarization, uncomment.
+# An initial test of this indicated that this caused a plot that become WAY too busy.
+# data.All_Runs.loc[(data.All_Runs.target == "NH3") &
+#                   (data.All_Runs.target_polarization > 0.04), "target"] = "NH3+"
+# data.All_Runs.loc[(data.All_Runs.target == "NH3") &
+#                   (data.All_Runs.target_polarization < -0.04), "target"] = "NH3-"
+# data.All_Runs.loc[(data.All_Runs.target == "ND3") &
+#                   (data.All_Runs.target_polarization > 0.04), "target"] = "ND3+"
+# data.All_Runs.loc[(data.All_Runs.target == "ND3") &
+#                   (data.All_Runs.target_polarization < -0.04), "target"] = "ND3-"
