@@ -734,10 +734,12 @@ class RunData:
         if livetime_channel is None:
             livetime_channel = self.LiveTime_Channel
 
-        if not override and \
-                (current_channel in self.All_Runs.keys()) and \
-                not np.isnan(self.All_Runs.loc[runnumber, current_channel]):
-            return
+        if not override:
+            if current_channel in self.All_Runs.keys():
+                # print(f"add_current_cor: {runnumber} {current_channel} = "
+                #       f"{self.All_Runs.loc[runnumber, current_channel]}")
+                if not np.isnan(self.All_Runs.loc[runnumber, current_channel]):
+                    return
 
         if self.debug > 4:
             print(f"add_current_cor, run= {runnumber:5d}  start={self.All_Runs.loc[runnumber,'start_time']} "
