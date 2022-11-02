@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import numpy as np
 
 from RunData.RunData import RunData
+import pandas as pd
 
 try:
     import plotly.graph_objects as go
@@ -32,9 +33,12 @@ except ImportError:
 # total_days_in_proposed_run - The calandar days (NOT PAC DAYS) this run was scheduled for.
 
 # This will be over written in main and filled with actual arguments.
+
+
 class args:
     def __init__(self):
         self.debug = 1
+
 
 total_days_in_proposed_run = 7*7
 proposed_lumi_rate = 9.470415818323063e-05  # 1(pb s) = 0.09470415818323064 * 1/(nb s)
@@ -44,6 +48,7 @@ print(f"Total proposed luminosity = {total_proposed_luminosity}")
 Start_1pass_running = datetime(2021, 10, 19, 9, 0)
 End_1pass_running = datetime(2021, 10, 25, 12, 0)
 
+
 def hps_2021_target_properties():
     """ Returns the dictionary of dictionaries for target properties. """
     target_props = {
@@ -51,8 +56,8 @@ def hps_2021_target_properties():
             # rho = 19.3 g/cm^3 for Tungsten.
             # mmass = 183.84*u.gram/u.mol for Tungsten.
             'norm':     20.e-4*19.3/183.84,  # Value to normalize to.
-            '8 um W ':   8.e-4*19.3/183.84,
-            '20 um W ': 20.e-4*19.3/183.84
+            '8 um W':   8.e-4*19.3/183.84,
+            '20 um W': 20.e-4*19.3/183.84
         },
         # 'attenuation': {
         # 'Empty': 36.556800,
@@ -67,9 +72,9 @@ def hps_2021_target_properties():
             '20 um W': 1
         },
         'color': {  # Plot color: r,g,b,a
-            'norm'   : 'rgba(0,0,0,0)',
-            '8 um W ': 'rgba(20,80,255,0.8)',
-            '20 um W ': 'rgba(0,120,150,0.8)'
+            'norm': 'rgba(0,0,0,0)',
+            '8 um W': 'rgba(20,80,255,0.8)',
+            '20 um W': 'rgba(0,120,150,0.8)'
         },
     }
 
@@ -92,15 +97,15 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data=No
     runs["event_rate"] = [runs.loc[r, 'event_count'] / runs.loc[r, 'dt']
                                for r in runs.index]
     runs["hover"] = [f"Run: {r}<br />"
-                          f"Trigger:{runs.loc[r, 'run_config']}<br />"
-                          f"Start: {runs.loc[r, 'start_time']}<br />"
-                          f"End: {runs.loc[r, 'end_time']}<br />"
-                          f"DT:   {runs.loc[r, 'dt'] / 1000.:5.1f} s<br />"
-                          f"NEvt: {runs.loc[r, 'event_count']:10,d}<br />"
-                          f"Charge: {runs.loc[r, 'charge']:6.2f} mC <br />"
-                          f"Lumi: {runs.loc[r, 'luminosity']:6.2f} 1/pb<br />"
-                          f"<Rate>:{runs.loc[r, 'event_rate']:6.2f}kHz<br />"
-                          for r in runs.index]
+                     f"Trigger:{runs.loc[r, 'run_config']}<br />"
+                     f"Start: {runs.loc[r, 'start_time']}<br />"
+                     f"End: {runs.loc[r, 'end_time']}<br />"
+                     f"DT:   {runs.loc[r, 'dt'] / 1000.:5.1f} s<br />"
+                     f"NEvt: {runs.loc[r, 'event_count']:10,d}<br />"
+                     f"Charge: {runs.loc[r, 'charge']:6.2f} mC <br />"
+                     f"Lumi: {runs.loc[r, 'luminosity']:6.2f} 1/pb<br />"
+                     f"<Rate>:{runs.loc[r, 'event_rate']:6.2f}kHz<br />"
+                     for r in runs.index]
     return runs, starts, ends
 
 def used_triggers():
@@ -129,6 +134,7 @@ def used_triggers():
 
     return Good_triggers, Calibration_triggers
 
+
 def setup_rundata_structures(data, date_from=None, date_to=None):
     """Setup the data structures for parsing the databases."""
     data.Good_triggers, data.Calibration_triggers = used_triggers()
@@ -136,7 +142,7 @@ def setup_rundata_structures(data, date_from=None, date_to=None):
     data.Production_run_type = ["PROD77", "PROD77_PIN"]
     data.target_properties = hps_2021_target_properties()
     data.target_dens = data.target_properties['density']
-    data.atten_dict = None #  target_props['attenuation']  # The corrections are already taken into account.
+    data.atten_dict = None  # target_props['attenuation']  # The corrections are already taken into account.
     data.Current_Channel = "scaler_calc1b"
 
     min_event_count = 10000000  # Runs with at least 10M events.
@@ -155,6 +161,7 @@ def setup_rundata_structures(data, date_from=None, date_to=None):
 #    print("Fetching the data from {} to {}".format(start_time, end_time))
     data.get_runs(start_time, end_time, min_event_count)
     data.select_good_runs()
+
 
 def setup_plot_structures(data):
     """Setup the plotting structures from the RunData structure in data.
@@ -230,7 +237,7 @@ def main(argv=None):
 
     setup_rundata_structures(data, args.date_from, args.date_to)
 
-    plot_runs, starts, ends, calib_runs, c_starts, c_ends,plot_runs_1pass, starts_1pass, ends_1pass = \
+    plot_runs, starts, ends, calib_runs, c_starts, c_ends, plot_runs_1pass, starts_1pass, ends_1pass = \
         setup_plot_structures(data)
 
     if args.excel:
@@ -245,15 +252,21 @@ def main(argv=None):
             end_time = datetime(2021, 11, 5, 8, 11)
 
         print("Write new Excel table for all runs from {start_time} to {end_time}")
-        runs = data.All_Runs.loc[data.list_selected_runs(targets='.*um W *', run_config=data.Good_triggers,
-                                                         date_min=start_time, date_max=end_time)]
-        data.compute_cumulative_charge('.*um W *', runs=runs)
-        print(data.All_Runs.keys())
-        runs.to_excel("HPSRun2021_progress.xlsx",
-                               columns=['start_time', 'end_time', 'target', 'run_config', 'selected', 'event_count',
-                                        'megabyte_count', 'evio_files_count',
-                                        'sum_event_count', 'live_time', 'charge', 'sum_charge', 'luminosity', 'sum_lumi',
-                                        'operators', 'user_comment'])
+        # runs = data.All_Runs.loc[data.list_selected_runs(targets='.*um W *', run_config=data.Good_triggers,
+        #                                                  date_min=start_time, date_max=end_time)]
+        # data.compute_cumulative_charge('.*um W *', runs=runs)
+        excel_data = pd.concat([plot_runs, plot_runs_1pass])
+        excel_data.sort_index(inplace=True)
+        print(excel_data.keys())
+        columns = ['start_time', 'end_time', 'target', 'run_config', 'selected', 'event_count',
+                   'megabyte_count', 'evio_files_count',
+                   'sum_event_count', 'B_DAQ_HPS:TS:livetime', 'charge', 'sum_charge', 'luminosity', 'sum_lumi',
+                   'operators', 'user_comment']
+        for c in columns:
+            if c not in excel_data.keys():
+                print(f"{c} is not available.")
+                columns.remove(c)
+        excel_data.to_excel("HPSRun2021_progress.xlsx", columns=columns)
 
     #    print(data.All_Runs.to_string(columns=['start_time','end_time','target','run_config','selected','event_count','charge','user_comment']))
     #    data.All_Runs.to_latex("hps_run_table.latex",columns=['start_time','end_time','target','run_config','selected','event_count','charge','operators','user_comment'])
@@ -286,7 +299,6 @@ def main(argv=None):
 
         plot_sumcharge_norm_t = plot_sumcharge_t
 
-
         for i in range(1, len(sumcharge_norm)):
             plot_sumcharge_norm_t.append(starts.iloc[i])
             plot_sumcharge_norm_t.append(ends.iloc[i])
@@ -318,10 +330,10 @@ def main(argv=None):
         fig = make_subplots(specs=[[{"secondary_y": True}]])
 
         targ_cols = {
-            '4 um W ': 'rgba(255,100,255,0.8)',
-            '8 um W ': 'rgba(20,80,255,0.8)',
-            '15 um W ': 'rgba(0,255,255,0.8)',
-            '20 um W ': 'rgba(0,120,150,0.8)'
+            '4 um W': 'rgba(255,100,255,0.8)',
+            '8 um W': 'rgba(20,80,255,0.8)',
+            '15 um W': 'rgba(0,255,255,0.8)',
+            '20 um W': 'rgba(0,120,150,0.8)'
         }
 
         for targ in targ_cols:
@@ -373,7 +385,7 @@ def main(argv=None):
                 secondary_y=True)
 
             if "sum_charge_targ" in plot_runs.keys():
-                t = '8 um W '
+                t = '8 um W'
                 fig.add_trace(
                     go.Scatter(x=plot_sumcharge_target_t[t],
                                y=plot_sumcharge_target_v[t],
@@ -381,7 +393,7 @@ def main(argv=None):
                                name="Charge on 8 µm W"),
                     secondary_y=True)
 
-                t = '20 um W '
+                t = '20 um W'
                 fig.add_trace(
                     go.Scatter(x=plot_sumcharge_target_t[t],
                                y=plot_sumcharge_target_v[t],
