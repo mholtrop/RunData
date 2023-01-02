@@ -1,3 +1,11 @@
+# Code output
+*.xlsx
+*.png
+*.pdf
+*.html
+*.sqlite3
+working_dir/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
