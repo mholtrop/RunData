@@ -226,7 +226,7 @@ def main(argv=None):
     run_sub_periods = [(datetime(2022, 6, 12,  0, 0), datetime(2022, 6, 15, 8, 0)),
                        (datetime(2022, 6, 15, 18, 0), datetime(2022, 8, 29, 8, 0)),
                        (datetime(2022, 9, 3, 12, 0), datetime(2022, 11, 11, 12, 0)),
-                       (datetime(2022, 11, 8, 6, 0), datetime.now())]
+                       (datetime(2023, 1, 18, 6, 0), datetime.now())]
 
     run_sub_energy = [2.21, 10.54, 10.54, 10.54]
     run_sub_y_placement = [0.90, 0.90, 0.95, 0.95]
