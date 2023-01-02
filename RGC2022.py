@@ -66,13 +66,13 @@ def rgc_2022_target_properties():
         },
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             # list of currents for each beam energy period.
-            'scale': [10., 1, 1],     # Special entry. Multiply sum charge by this factor,
-            'empty': [10., 20., 40.],
-            'C': [2.5, 5., 10.],
-            'NH3': [2.5, 5., 10.],
-            'ND3': [2.5, 5., 10.],
-            'CH2': [2.5, 5., 10.],
-            'CD2': [2.5, 5., 10.],
+            'scale': [10., 1, 1, 1],     # Special entry. Multiply sum charge by this factor,
+            'empty': [10., 20., 40., 20.],
+            'C': [2.5, 5., 10., 5.],
+            'NH3': [2.5, 5., 10., 5.],
+            'ND3': [2.5, 5., 10., 5.],
+            'CH2': [2.5, 5., 10., 5.],
+            'CD2': [2.5, 5., 10., 5.],
         },
         'attenuation': {     # Units: number
             'empty': 1,
@@ -202,7 +202,7 @@ def main(argv=None):
     parser.add_argument('-m', '--max_rate', type=float, help="Maximum for date rate axis ", default=None)
     parser.add_argument('-M', '--max_charge', type=float, help="Maximum for charge axis ", default=None)
     parser.add_argument('-r', '--runperiod', type=int,
-                        help="Run sub-period, 0=all, 1, 2 or 3, or 12 for 1+2", default=3),
+                        help="Run sub-period, 0=all, 1, 2, 3, 4, or 12 for 1+2", default=4),
     parser.add_argument('--return_data', action="store_true", help="Internal use: return the data at end.", default=None)
 
     args = parser.parse_args(argv[1:])
@@ -225,24 +225,25 @@ def main(argv=None):
 
     run_sub_periods = [(datetime(2022, 6, 12,  0, 0), datetime(2022, 6, 15, 8, 0)),
                        (datetime(2022, 6, 15, 18, 0), datetime(2022, 8, 29, 8, 0)),
-                       (datetime(2022, 9, 3, 18, 0), datetime.now())]
+                       (datetime(2022, 9, 3, 12, 0), datetime(2022, 11, 11, 12, 0)),
+                       (datetime(2022, 11, 8, 6, 0), datetime.now())]
 
-    run_sub_energy = [2.21, 10.54, 10.54]
-    run_sub_y_placement = [0.90, 0.90, 0.95]
+    run_sub_energy = [2.21, 10.54, 10.54, 10.54]
+    run_sub_y_placement = [0.90, 0.90, 0.95, 0.95]
 
     run_period_name = ""
     run_period_sub_num = range(len(run_sub_periods))
     if args.runperiod == 0:
         run_period_name = "_all"
-    elif 0 < args.runperiod <= 3:
+    elif args.runperiod <= len(run_sub_periods):
         run_period_sub_num = [args.runperiod-1]
-        if args.runperiod == 3:
+        if args.runperiod == len(run_sub_periods):  # Last period == current period, no postfix.
             run_period_name = ""
         else:
             run_period_name = "_r"+str(args.runperiod)
     elif args.runperiod == 12:
         run_period_sub_num = [0, 1]
-        run_period_name = "_fton"
+        run_period_name = "_r12_fton"
     else:
         print("Incorrect choice for runperiod argument.")
         return
@@ -269,7 +270,9 @@ def main(argv=None):
         if data.All_Runs is None:
             return
 
-        data.All_Runs['luminosity'] *= 1E-3   # Rescale luminosity from 1/pb to 1/fb
+        if "luminosity" in data.All_Runs.keys():
+            data.All_Runs['luminosity'] *= 1E-3   # Rescale luminosity from 1/pb to 1/fb
+
         if sub_i == 1:
             data.All_Runs.loc[16359, "target_polarization"] = 0.04
             data.All_Runs.loc[16406, "target_polarization"] = 0.26
@@ -305,7 +308,11 @@ def main(argv=None):
         # if args.debug:
         #     print("Calibration runs: ", calib_runs)
 
-        print(f"Compute cumulative charge for period {sub_i}.")
+        print(f"Compute cumulative charge for period {sub_i+1}.")
+
+        if "charge" not in plot_runs.keys():
+            print(f"No charge data available for run period {sub_i+1}, skipping period.")
+            continue
         data.compute_cumulative_charge(targets, runs=plot_runs)
 
         if args.excel:
@@ -313,7 +320,7 @@ def main(argv=None):
 
         if args.plot:
 
-            print(f"Build Plots for period {sub_i}")
+            print(f"Build Plots for period {sub_i+1}")
 
             last_targ = None
             for targ in data.target_properties['attenuation']:
@@ -661,12 +668,14 @@ def main(argv=None):
                 size=10)
         )
 
-        if args.runperiod == 3:
-            title = "<b>RGC 22/23 FToff Progress</b>"
+        if args.runperiod == 4:
+            title = "<b>RGC 23 FTon Progress</b>"
+        elif args.runperiod == 3:
+            title = "<b>RGC 22 FToff Progress</b>"
         elif args.runperiod == 0:
             title = "<b>Run Group C Progress</b>"
         else:
-            title = "<b>RGC 2022 FTon Progress</b>"
+            title = "<b>RGC 22 FTon Progress</b>"
         fig.update_layout(
             title=go.layout.Title(
                 text=title,
