@@ -673,7 +673,7 @@ def main(argv=None):
         elif args.runperiod == 3:
             title = "<b>RGC 22 FToff Progress</b>"
         elif args.runperiod == 0:
-            title = "<b>Run Group C Progress</b>"
+            title = "<b>RGC 22 FTon Progress</b>"
         else:
             title = "<b>RGC 22 FTon Progress</b>"
         fig.update_layout(
