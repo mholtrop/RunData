@@ -33,3 +33,13 @@ add a script for a particular run group, please contact me.
 
 ![Image for the HPS 2021 run.](HPSRun2021_progress.png)
 ![Image for the RGM 2021 run.](RGM2021_progress.png)
+
+# Package Requirements
+To run the python code, you need a bunch of additional packages: 
+pandas, numpy, scipy, plotly, plotly chart_studio, MySQLdb. 
+For a conda installation, you can install it all with:
+```
+conda install pandas numpy scipy plotly
+conda install -c plotly chart-studio
+conda install -c anaconda mysql-python
+```
