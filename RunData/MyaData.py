@@ -194,10 +194,10 @@ class MyaData:
         pd_frame = pd.read_sql(sql, self._cache_engine, parse_dates=["time"], index_col=index_col)
         return pd_frame
 
-    def get(self, channel, start, end, do_not_clean=False, run_number=None, no_cache=False):
+    def get(self, channel, start, end, do_not_clean=False, run_number=None, no_cache=False, deployment=None):
         """Get a series of Mya data with a myQuery call for channel, from start to end time.
         IF run_number is specified, then first look in the cache to see if the data is already there. If it is not
-        then the data will be retreived from Mya and added to the cache for that run number.
+        then the data will be retrieved from Mya and added to the cache for that run number.
         Returns a Pandas data frame with index, and keys: "ms", "value" and "time". Where "ms" is the
         MYA millisecond time stamp, "value" is the requested channel value, and "time" is a Pandas timestamp.
         Usually the data will be cleaned, unless do_not_clean is set to True. Cleaning in this case means dropping
@@ -219,10 +219,11 @@ class MyaData:
             return None
 
         data_age = (datetime.now() - start).days
-        if data_age > 2*365:   # More than two years old, get from history deployment.
-            deployment = 'history'
-        else:
-            deployment = 'ops'
+        if deployment is None:
+            if data_age > 365:   # More than two years old, get from history deployment.
+                deployment = 'history'
+            else:
+                deployment = 'ops'
 
         params = {
             'c': channel,
@@ -298,7 +299,7 @@ class MyaData:
             # But these are quite a bit slower.
             #
 
-        if self._cache_engine is not None and run_number is not None:
+        if self._cache_engine is not None and run_number is not None and not no_cache:
             # We want to now store the data to the cache.
             # We use the pd.DataFrame functionality to do so.
             self.add_to_mya_data_range(channel, start, end, run_number, dat_len)
@@ -307,7 +308,7 @@ class MyaData:
         return pd_frame
 
     def add_to_mya_data_range(self, channel, start, end, run_number, data_length):
-        """Add an entry to the Mya_Data_Ranges table in the cache, so you can lookup
+        """Add an entry to the Mya_Data_Ranges table in the cache, so you can look up
         the data by run number as well as by time slot. This is mostly an internal method."""
         if self._cache_engine is not None and run_number is not None:
             result = self._cache_engine.execute('select max("index") from Mya_Data_Ranges;')
