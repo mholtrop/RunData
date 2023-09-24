@@ -3,6 +3,7 @@
 #
 # Specify encoding so strings can have special characters.
 #
+# Beam E = 5986.36
 
 from __future__ import print_function
 import sys

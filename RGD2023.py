@@ -45,36 +45,57 @@ def target_properties():
             'C': 'C',
             'C12': 'C',
             '12C': 'C',
-            'Carbon target 2 mm': 'C',
+            'Carbon target': 'C',
+            'LD2CuSn': 'LD2CuSn',
+            'LD2C12' : 'LD2C12',
         },
         'density': {     # Units: g/cm^2
             # 'norm': 0.335,
             'C': 0.440,
             'empty': 0,
+            'LH2': 0.355,
+            'LD2': 0.820,
+            'LD2CuSn': 1.04,
+            'LD2C12': 1.,
         },
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             # list of currents for each beam energy period.
-            'scale': [10., 1, 1, 1],     # Special entry. Multiply sum charge by this factor,
-            'empty': [10., 20., 40., 20.],
-            'C': [2.5, 5., 10., 5.],
+            'scale': [1., 1, 1, 1],     # Special entry. Multiply sum charge by this factor,
+            'empty': [200., 200., 200., 200.],
+            'C': [30., 30., 30., 30.],
+            'LH2': [75., 75., 75., 75.],
+            'LD2': [35., 35., 35., 35.],
+            'LD2CuSn': [125., 125., 125., 125.],
+            'LD2C12': [125., 125., 125., 125.],
         },
         'attenuation': {     # Units: number
             'empty': 1,
             'C': 1,
+            'LH2': 1,
+            'LD2': 1,
+            'LD2CuSn': 1,
+            'LD2C12': 1,
         },
         'color': {  # Plot color: r,g,b,a
             'empty': 'rgba(160, 110, 110, 0.7)',
-            'C': 'rgba(120, 120, 200, 0.7)',
+            'C': 'rgba(80, 80, 200, 0.7)',
             'CH2': 'rgba(100, 255, 255, 0.7)',
+            'LH2': 'rgba(100, 255, 255, 0.7)',
+            'LD2': 'rgba(100, 180, 180, 0.7)',
+            'LD2CuSn': 'rgba(255, 100, 100, 0.7)',
+            'LD2C12': 'rgba(120, 120, 250, 0.7)',
             'calibration': 'rgba(220,220,220,0.5)',
         },
         'sums_color': {  # Plot color: r,g,b,a
             'empty': 'rgba(150, 90, 90, 0.8)',
             'C': 'rgba(100, 100, 180, 0.8)',
             'CH2': 'rgba(80, 200, 200, 0.8)',
+            'LH2': 'rgba(80, 200, 200, 0.8)',
+            'LD2': 'rgba(80, 200, 200, 0.8)',
+            'LD2CuSn': 'rgba(80, 200, 200, 0.8)',
+            'LD2C12': 'rgba(80, 200, 200, 0.8)',
             'expected': 'rgba(0, 0, 0, 0.7)',
         },
-
     }
 
     return target_props
@@ -171,7 +192,7 @@ def main(argv=None):
     parser.add_argument('-m', '--max_rate', type=float, help="Maximum for date rate axis ", default=None)
     parser.add_argument('-M', '--max_charge', type=float, help="Maximum for charge axis ", default=None)
     parser.add_argument('-r', '--runperiod', type=int,
-                        help="Run sub-period, 0=all, 1, 2, 3, 4, or 12 for 1+2", default=4),
+                        help="Run sub-period, 0=all, 1, 2, 3, 4, or 12 for 1+2", default=0),
     parser.add_argument('--return_data', action="store_true", help="Internal use: return the data at end.", default=None)
 
     args = parser.parse_args(argv[1:])
@@ -192,10 +213,10 @@ def main(argv=None):
     # data._cache_engine=None   # Turn OFF cache?
     data.debug = args.debug
 
-    run_sub_periods = [(datetime(2023, 9, 18,  0, 0),  datetime.now())
+    run_sub_periods = [(datetime(2023, 9, 22,  0, 0),  datetime.now())
                        ]
 
-    run_sub_energy = [99.]
+    run_sub_energy = [10.]
     run_sub_y_placement = [0.90]
 
     run_period_name = ""
