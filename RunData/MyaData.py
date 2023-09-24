@@ -311,8 +311,9 @@ class MyaData:
         """Add an entry to the Mya_Data_Ranges table in the cache, so you can look up
         the data by run number as well as by time slot. This is mostly an internal method."""
         if self._cache_engine is not None and run_number is not None:
-            result = self._cache_engine.execute('select max("index") from Mya_Data_Ranges;')
-            result_fetch = result.fetchall()
+            with self._cache_engine.begin() as connection:
+                result = connection.execute(sqlalchemy.text('select max("index") from Mya_Data_Ranges;'))
+                result_fetch = result.fetchall()
             if result_fetch[0][0] is not None:
                 max_index = result_fetch[0][0] + 1
             else:
