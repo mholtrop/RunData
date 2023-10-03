@@ -58,12 +58,12 @@ def target_properties():
         },
         'density': {     # Units: g/cm^2
             # 'norm': 0.335,
-            'C': 0.440,
+            'C': 2*0.440,  # Two foils.
             'empty': 0,
             'LH2': 0.355,
             'LD2': 0.820,
-            'LD2CuSn': 1.04,
-            'LD2C12': 1.,
+            'LD2CuSn': 0.08333 + 0.125,  # Cu and Sn, the LD2 is empty.
+            'LD2C12': 2*0.440,  # Two foils, the LD2 is empty.
             'NH3': 0.820,
         },
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
