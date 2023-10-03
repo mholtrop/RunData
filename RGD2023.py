@@ -36,6 +36,7 @@ def target_properties():
             'Empty': 'empty',
             'empty': 'empty',
             'None': 'empty',
+            'Unknown': 'empty',
             'LH2': 'LH2',
             'H': 'LH2',
             'Liquid Hydrogen Target': 'LH2',
