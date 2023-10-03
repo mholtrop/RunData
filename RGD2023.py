@@ -43,11 +43,17 @@ def target_properties():
             'D2': 'LD2',
             'Liquid Deuterium Target': 'LD2',
             'C': 'C',
+            'CxC': 'CxC',
             'C12': 'C',
             '12C': 'C',
             'Carbon target': 'C',
             'LD2CuSn': 'LD2CuSn',
-            'LD2C12' : 'LD2C12',
+            'CuSn': 'LD2CuSn',
+            'LD2C12': 'LD2C12',
+            'NH3': 'NH3',
+            'ND3': 'ND3',
+            'CH2': 'CH2',
+            'CD2': 'CD2'
         },
         'density': {     # Units: g/cm^2
             # 'norm': 0.335,
@@ -57,6 +63,7 @@ def target_properties():
             'LD2': 0.820,
             'LD2CuSn': 1.04,
             'LD2C12': 1.,
+            'NH3': 0.820,
         },
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             # list of currents for each beam energy period.
@@ -67,6 +74,8 @@ def target_properties():
             'LD2': [35., 35., 35., 35.],
             'LD2CuSn': [125., 125., 125., 125.],
             'LD2C12': [125., 125., 125., 125.],
+            'CH2': [125., 125., 125., 125.],
+            'NH3': [125., 125., 125., 125.],
         },
         'attenuation': {     # Units: number
             'empty': 1,
@@ -75,6 +84,7 @@ def target_properties():
             'LD2': 1,
             'LD2CuSn': 1,
             'LD2C12': 1,
+            'NH3': 1,
         },
         'color': {  # Plot color: r,g,b,a
             'empty': 'rgba(160, 110, 110, 0.7)',
@@ -85,6 +95,7 @@ def target_properties():
             'LD2CuSn': 'rgba(255, 100, 100, 0.7)',
             'LD2C12': 'rgba(120, 120, 250, 0.7)',
             'calibration': 'rgba(220,220,220,0.5)',
+            'NH3': 'rgba(0, 100, 255, 0.7)',
         },
         'sums_color': {  # Plot color: r,g,b,a
             'empty': 'rgba(150, 90, 90, 0.8)',
@@ -95,6 +106,7 @@ def target_properties():
             'LD2CuSn': 'rgba(80, 200, 200, 0.8)',
             'LD2C12': 'rgba(80, 200, 200, 0.8)',
             'expected': 'rgba(0, 0, 0, 0.7)',
+            'NH3': 'rgba(255, 100, 255, 0.7)',
         },
     }
 
@@ -113,7 +125,6 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data_lo
     runs["center"] = starts + (ends - starts) / 2
     runs["dt"] = [(run["end_time"] - run["start_time"]).total_seconds() * 999 for num, run, in runs.iterrows()]
     runs["event_rate"] = [runs.loc[r, 'event_count'] / runs.loc[r, 'dt'] for r in runs.index]
-    runs.loc[(runs.target_polarization == "None"), 'target_polarization'] = 0.   # Fix RCDB unpleasantries.
 
     runs["hover"] = [f"Run: {r}<br />"
                      f"Trigger:{runs.loc[r, 'run_config']}<br />"
@@ -121,8 +132,6 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data_lo
                      f"End: {runs.loc[r, 'end_time']}<br />"
                      f"DT:   {runs.loc[r, 'dt'] / 1000.:5.1f} s<br />"
                      f"NEvt: {runs.loc[r, 'event_count']:10,d}<br />"
-                     f"Target Pol: {runs.loc[r, 'target_polarization']}<br />"
-                     f"Half W Plate: {runs.loc[r, 'half_wave_plate']} <br />"
                      f"Charge: {runs.loc[r, 'charge']:6.2f} mC <br />"
                      f"Lumi: {runs.loc[r, 'luminosity']:6.2f} 1/fb<br />"
                      f"<Rate>:{runs.loc[r, 'event_rate']:6.2f}kHz<br />"
@@ -134,8 +143,7 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data_lo
 def used_triggers():
     """Setup the triggers used."""
     good_triggers = '.*'
-    calibration_triggers = ['rgc_300MeV_v1.2_zero.cnf', 'rgc_300MeV_v1.3_zero.cnf', 'rgc_300MeV_v1.4_zero.cnf',
-                            'rgc_300MeV_v1.5_zero.cnf', 'rgc_300MeV_v1.6_zero.cnf']
+    calibration_triggers = ["rgd_v1.0_30kHz.cnf_x"]
 
     return good_triggers, calibration_triggers
 
@@ -207,14 +215,16 @@ def main(argv=None):
         at_jlab = False
 
     if not args.nocache:
-        data = RunData(cache_file="RGC_2022.sqlite3", i_am_at_jlab=at_jlab)
+        data = RunData(cache_file="RGD.sqlite3", i_am_at_jlab=at_jlab)
     else:
         data = RunData(cache_file="", sqlcache=False, i_am_at_jlab=at_jlab)
     # data._cache_engine=None   # Turn OFF cache?
     data.debug = args.debug
 
-    run_sub_periods = [(datetime(2023, 9, 22,  0, 0),  datetime.now())
-                       ]
+    run_sub_periods = [
+        # (datetime(2023, 2, 20,  0, 0),  datetime(2023, 2, 25, 0, 0)),
+        (datetime(2023, 10, 2, 0, 0), datetime.now())
+        ]
 
     run_sub_energy = [10.]
     run_sub_y_placement = [0.90]
@@ -481,11 +491,6 @@ def main(argv=None):
                         if targ in ["NH3", "ND3"]:
                             annotation_y_offset = max_y_value_sums*0.03
                             text_extra_y_shift = 12
-                            charge_up = plot_runs.loc[
-                                (plot_runs.target == targ) & (plot_runs.target_polarization >= 0.)].charge.sum()
-                            charge_down = plot_runs.loc[
-                                (plot_runs.target == targ) & (plot_runs.target_polarization < 0.)].charge.sum()
-#                            annotation_text += f"<br />⬆︎ {charge_up:5.3f} mC ⬇︎ {charge_down:5.3f} mC"
                             fig.add_annotation(
                                 x=plot_sumcharge_target_t[-1],
                                 y=plot_sumcharge_target_v[-1],
@@ -493,7 +498,7 @@ def main(argv=None):
                                 yref="y2",
                                 yanchor="bottom",
                                 yshift=6,
-                                text=f"⬆︎ {charge_up:5.3f} mC ⬇︎ {charge_down:5.3f} mC",
+                                text=f" ??? mC",
                                 showarrow=False,
                                 font=dict(
                                     family="Arial, sans-serif",
@@ -538,26 +543,26 @@ def main(argv=None):
                             max_expected_charge.append(plot_expected_charge_v[-1])
                             # print(f"max_expected_charge = {max_expected_charge}")
 
-            run_sub_annotation = f"<b>E<sub>b</sub> = {run_sub_energy[sub_i]} GeV</b><br>"
-            if data.target_properties['current']['scale'][sub_i] != 1.:
-                run_sub_annotation += f"Current scaled {data.target_properties['current']['scale'][sub_i]:3.0f}x"
-
-            mid_time = run_sub_periods[sub_i][0] + (run_sub_periods[sub_i][1] - run_sub_periods[sub_i][0])/2
-            fig.add_annotation(
-                x=mid_time,
-                xanchor="center",
-                xref="x",
-                y=run_sub_y_placement[sub_i],
-                yanchor="middle",
-                yref="paper",
-                text=run_sub_annotation,
-                showarrow=False,
-                font=dict(
-                    family="Times",
-                    color="#FF0000",
-                    size=20),
-                bgcolor="#FFEEEE"
-            )
+            # run_sub_annotation = f"<b>E<sub>b</sub> = {run_sub_energy[sub_i]} GeV</b><br>"
+            # if data.target_properties['current']['scale'][sub_i] != 1.:
+            #     run_sub_annotation += f"Current scaled {data.target_properties['current']['scale'][sub_i]:3.0f}x"
+            #
+            # mid_time = run_sub_periods[sub_i][0] + (run_sub_periods[sub_i][1] - run_sub_periods[sub_i][0])/2
+            # fig.add_annotation(
+            #     x=mid_time,
+            #     xanchor="center",
+            #     xref="x",
+            #     y=run_sub_y_placement[sub_i],
+            #     yanchor="middle",
+            #     yref="paper",
+            #     text=run_sub_annotation,
+            #     showarrow=False,
+            #     font=dict(
+            #         family="Times",
+            #         color="#FF0000",
+            #         size=20),
+            #     bgcolor="#FFEEEE"
+            # )
 
     # End sub run period loop.
     if args.plot:
@@ -577,14 +582,8 @@ def main(argv=None):
                 size=10)
         )
 
-        if args.runperiod == 4:
-            title = "<b>RGC 23 FTon Progress</b>"
-        elif args.runperiod == 3:
-            title = "<b>RGC 22 FToff Progress</b>"
-        elif args.runperiod == 0:
-            title = "<b>RGC 22 FTon Progress</b>"
-        else:
-            title = "<b>RGC 22 FTon Progress</b>"
+
+        title = "<b>RGD 2023 Progress</b>"
         fig.update_layout(
             title=go.layout.Title(
                 text=title,
@@ -662,18 +661,18 @@ def main(argv=None):
             )
 
         print("Show plots.")
-        fig.write_image("RGC2022_progress"+run_period_name+".pdf", width=2048, height=900)
-        fig.write_image("RGC2022_progress"+run_period_name+".png", width=2048, height=900)
-        fig.write_html("RGC2022_progress"+run_period_name+".html")
+        fig.write_image("RGD2023_progress"+run_period_name+".pdf", width=2048, height=900)
+        fig.write_image("RGD2023_progress"+run_period_name+".png", width=2048, height=900)
+        fig.write_html("RGD2023_progress"+run_period_name+".html")
         if args.chart:
-            charts.plot(fig, filename='RGC_edit', width=2048, height=900, auto_open=True)
+            charts.plot(fig, filename='RGD_edit', width=2048, height=900, auto_open=True)
         if args.live:
             fig.show(width=2048, height=900)  # width=1024,height=768
 
     if args.excel:
         print("Write new Excel table.")
         excel_output.to_excel("RGC2022_progress"+run_period_name+".xlsx",
-                              columns=['start_time', 'end_time', 'target', 'target_polarization', 'beam_energy',
+                              columns=['start_time', 'end_time', 'target', 'beam_energy',
                                        'half_wave_plate', 'run_config', 'selected',
                                        'event_count', 'sum_event_count', 'charge', 'sum_charge', 'sum_charge_targ',
                                        'evio_files_count', 'megabyte_count',
