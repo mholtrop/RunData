@@ -69,12 +69,13 @@ def target_properties():
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             # list of currents for each beam energy period.
             'scale': [1., 1, 1, 1],     # Special entry. Multiply sum charge by this factor,
-            'empty': [200., 200., 200., 200.],
+            'empty': [165., 165., 165., 165.],
             'C': [30., 30., 30., 30.],
+            'CxC': [30., 30., 30., 30.],
             'LH2': [75., 75., 75., 75.],
             'LD2': [35., 35., 35., 35.],
-            'LD2CuSn': [125., 125., 125., 125.],
-            'LD2C12': [125., 125., 125., 125.],
+            'LD2CuSn': [30., 30., 30., 30.],
+            'LD2C12': [30., 30., 30., 30.],
             'CH2': [125., 125., 125., 125.],
             'NH3': [125., 125., 125., 125.],
         },
@@ -224,7 +225,7 @@ def main(argv=None):
 
     run_sub_periods = [
         # (datetime(2023, 2, 20,  0, 0),  datetime(2023, 2, 25, 0, 0)),
-        (datetime(2023, 10, 2, 0, 0), datetime.now())
+        (datetime(2023, 10, 4, 9, 0), datetime.now())
         ]
 
     run_sub_energy = [10.]
