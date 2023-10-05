@@ -225,7 +225,7 @@ def main(argv=None):
 
     run_sub_periods = [
         # (datetime(2023, 2, 20,  0, 0),  datetime(2023, 2, 25, 0, 0)),
-        (datetime(2023, 10, 4, 9, 0), datetime.now())
+        (datetime(2023, 10, 4, 6, 0), datetime.now())
         ]
 
     run_sub_energy = [10.]
@@ -592,7 +592,7 @@ def main(argv=None):
                 yanchor="top",
                 y=0.95,
                 xanchor="left",
-                x=0.40),
+                x=0.45),
             titlefont=dict(size=24, color='rgba(0,0,100,1.)'),
             legend=dict(
                 x=0.02,
