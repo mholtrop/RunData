@@ -145,7 +145,7 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data_lo
 def used_triggers():
     """Setup the triggers used."""
     good_triggers = '.*'
-    calibration_triggers = ["rgd_v1.0_30kHz.cnf_x"]
+    calibration_triggers = ["rgd_v1.0_30kHz.cnf", "rgd_v1.0_no_DC.cnf", "rgd_v1.0_zero.cnf"]
 
     return good_triggers, calibration_triggers
 
@@ -352,21 +352,25 @@ def main(argv=None):
             if args.charge:
                 current_plotting_scale = data.target_properties['current']['scale'][sub_i]
                 sumcharge = plot_runs.loc[:, "sum_charge"] * current_plotting_scale
-                max_y_value_sums = plot_runs.sum_charge_targ.max() * current_plotting_scale
+                if "sum_charge_targ" in plot_runs.keys():
+                    max_y_value_sums = plot_runs.sum_charge_targ.max() * current_plotting_scale
+                else:
+                    max_y_value_sums = 10.
 
-                plot_sumcharge_t = [starts.iloc[0], ends.iloc[0]]
-                plot_sumcharge_v = [0, sumcharge.iloc[0]]
+                if len(starts) > 0:
+                    plot_sumcharge_t = [starts.iloc[0], ends.iloc[0]]
+                    plot_sumcharge_v = [0, sumcharge.iloc[0]]
 
-                for i in range(1, len(sumcharge)):
-                    plot_sumcharge_t.append(starts.iloc[i])
-                    plot_sumcharge_t.append(ends.iloc[i])
-                    plot_sumcharge_v.append(sumcharge.iloc[i - 1])
-                    plot_sumcharge_v.append(sumcharge.iloc[i])
+                    for i in range(1, len(sumcharge)):
+                        plot_sumcharge_t.append(starts.iloc[i])
+                        plot_sumcharge_t.append(ends.iloc[i])
+                        plot_sumcharge_v.append(sumcharge.iloc[i - 1])
+                        plot_sumcharge_v.append(sumcharge.iloc[i])
 
-                for targ in data.target_properties['sums_color']:
-                    sumch = plot_runs.loc[plot_runs["target"] == targ, "sum_charge_targ"]*current_plotting_scale
-                    st = plot_runs.loc[plot_runs["target"] == targ, "start_time"]
-                    en = plot_runs.loc[plot_runs["target"] == targ, "end_time"]
+                    for targ in data.target_properties['sums_color']:
+                        sumch = plot_runs.loc[plot_runs["target"] == targ, "sum_charge_targ"]*current_plotting_scale
+                        st = plot_runs.loc[plot_runs["target"] == targ, "start_time"]
+                        en = plot_runs.loc[plot_runs["target"] == targ, "end_time"]
 
                     if len(sumch) > 1:
                         # Complication: When a target was taken out and then later put back in there is an interruption
