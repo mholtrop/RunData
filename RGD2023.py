@@ -44,12 +44,12 @@ def target_properties():
             'D2': 'LD2',
             'Liquid Deuterium Target': 'LD2',
             'C': 'C',
-            'CxC': 'CxC',
             'C12': 'C',
             '12C': 'C',
             'Carbon target': 'C',
-            'LD2CuSn': 'LD2CuSn',
-            'CuSn': 'LD2CuSn',
+            'CxC': 'CxC',
+            'CuSn': 'CuSn',
+            'LD2CuSn': 'CuSn',
             'LD2C12': 'LD2C12',
             'NH3': 'NH3',
             'ND3': 'ND3',
@@ -58,11 +58,12 @@ def target_properties():
         },
         'density': {     # Units: g/cm^2
             # 'norm': 0.335,
-            'C': 2*0.440,  # Two foils.
             'empty': 0,
+            'C':  0.440,  # One foil.
+            'CxC': 2 * 0.440,  # Two foils.
             'LH2': 0.355,
             'LD2': 0.820,
-            'LD2CuSn': 0.08333 + 0.125,  # Cu and Sn, the LD2 is empty.
+            'CuSn': 0.08333 + 0.125,  # Cu and Sn, the LD2 is empty.
             'LD2C12': 2*0.440,  # Two foils, the LD2 is empty.
             'NH3': 0.820,
         },
@@ -74,7 +75,7 @@ def target_properties():
             'CxC': [30., 30., 30., 30.],
             'LH2': [75., 75., 75., 75.],
             'LD2': [35., 35., 35., 35.],
-            'LD2CuSn': [30., 30., 30., 30.],
+            'CuSn': [125., 125., 125., 125.],
             'LD2C12': [30., 30., 30., 30.],
             'CH2': [125., 125., 125., 125.],
             'NH3': [125., 125., 125., 125.],
@@ -82,19 +83,21 @@ def target_properties():
         'attenuation': {     # Units: number
             'empty': 1,
             'C': 1,
+            'CxC': 1,
             'LH2': 1,
             'LD2': 1,
-            'LD2CuSn': 1,
+            'CuSn': 1,
             'LD2C12': 1,
             'NH3': 1,
         },
         'color': {  # Plot color: r,g,b,a
             'empty': 'rgba(160, 110, 110, 0.7)',
             'C': 'rgba(80, 80, 200, 0.7)',
+            'CxC': 'rgba(80, 80, 200, 0.7)',
             'CH2': 'rgba(100, 255, 255, 0.7)',
             'LH2': 'rgba(100, 255, 255, 0.7)',
             'LD2': 'rgba(100, 180, 180, 0.7)',
-            'LD2CuSn': 'rgba(255, 100, 100, 0.7)',
+            'CuSn': 'rgba(255, 100, 100, 0.7)',
             'LD2C12': 'rgba(120, 120, 250, 0.7)',
             'calibration': 'rgba(220,220,220,0.5)',
             'NH3': 'rgba(0, 100, 255, 0.7)',
@@ -102,10 +105,11 @@ def target_properties():
         'sums_color': {  # Plot color: r,g,b,a
             'empty': 'rgba(150, 90, 90, 0.8)',
             'C': 'rgba(100, 100, 180, 0.8)',
+            'CxC': 'rgba(100, 100, 180, 0.8)',
             'CH2': 'rgba(80, 200, 200, 0.8)',
             'LH2': 'rgba(80, 200, 200, 0.8)',
             'LD2': 'rgba(80, 200, 200, 0.8)',
-            'LD2CuSn': 'rgba(80, 200, 200, 0.8)',
+            'CuSn': 'rgba(125, 50, 50, 0.8)',
             'LD2C12': 'rgba(80, 200, 200, 0.8)',
             'expected': 'rgba(0, 0, 0, 0.7)',
             'NH3': 'rgba(255, 100, 255, 0.7)',
@@ -145,7 +149,7 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data_lo
 def used_triggers():
     """Setup the triggers used."""
     good_triggers = '.*'
-    calibration_triggers = ["rgd_v1.0_30kHz.cnf", "rgd_v1.0_no_DC.cnf", "rgd_v1.0_zero.cnf"]
+    calibration_triggers = ["rgd_v1.0_30kHz.cnf", "rgd_v1.0_zero.cnf"]
 
     return good_triggers, calibration_triggers
 
@@ -357,20 +361,19 @@ def main(argv=None):
                 else:
                     max_y_value_sums = 10.
 
-                if len(starts) > 0:
-                    plot_sumcharge_t = [starts.iloc[0], ends.iloc[0]]
-                    plot_sumcharge_v = [0, sumcharge.iloc[0]]
+                plot_sumcharge_t = [starts.iloc[0], ends.iloc[0]]
+                plot_sumcharge_v = [0, sumcharge.iloc[0]]
 
-                    for i in range(1, len(sumcharge)):
-                        plot_sumcharge_t.append(starts.iloc[i])
-                        plot_sumcharge_t.append(ends.iloc[i])
-                        plot_sumcharge_v.append(sumcharge.iloc[i - 1])
-                        plot_sumcharge_v.append(sumcharge.iloc[i])
+                for i in range(1, len(sumcharge)):
+                    plot_sumcharge_t.append(starts.iloc[i])
+                    plot_sumcharge_t.append(ends.iloc[i])
+                    plot_sumcharge_v.append(sumcharge.iloc[i - 1])
+                    plot_sumcharge_v.append(sumcharge.iloc[i])
 
-                    for targ in data.target_properties['sums_color']:
-                        sumch = plot_runs.loc[plot_runs["target"] == targ, "sum_charge_targ"]*current_plotting_scale
-                        st = plot_runs.loc[plot_runs["target"] == targ, "start_time"]
-                        en = plot_runs.loc[plot_runs["target"] == targ, "end_time"]
+                for targ in data.target_properties['sums_color']:
+                    sumch = plot_runs.loc[plot_runs["target"] == targ, "sum_charge_targ"]*current_plotting_scale
+                    st = plot_runs.loc[plot_runs["target"] == targ, "start_time"]
+                    en = plot_runs.loc[plot_runs["target"] == targ, "end_time"]
 
                     if len(sumch) > 1:
                         # Complication: When a target was taken out and then later put back in there is an interruption
