@@ -154,7 +154,7 @@ def used_triggers():
     return good_triggers, calibration_triggers
 
 
-def setup_rundata_structures(data_loc, dates):
+def setup_rundata_structures(data_loc, dates, current_channel=None):
     """Setup the data structures for parsing the databases."""
 
     start_time, end_time = dates
@@ -164,7 +164,10 @@ def setup_rundata_structures(data_loc, dates):
     data_loc.target_properties = target_properties()
     data_loc.target_dens = data_loc.target_properties['density']
     data_loc.atten_dict = None
-    data_loc.Current_Channel =  "IPM2C21A" # "scaler_calc1b" # "IPM2C21A"
+    if current_channel is None:
+        data_loc.Current_Channel = "IPM2C21A"  # "scaler_calc1b" # "IPM2C21A"
+    else:
+        data_loc.Current_Channel = current_channel
     data_loc.LiveTime_Channel = "B_DAQ:livetime"
     data_loc.Useful_conditions.append('beam_energy')
 
@@ -265,10 +268,12 @@ def main(argv=None):
     for sub_i in run_period_sub_num:
 
         data.clear()
-        setup_rundata_structures(data, run_sub_periods[sub_i])
-
+        current_channel = None
         if args.fcup:
-            data.Current_Channel = "scaler_calc1b"
+            current_channel = "scaler_calc1b"
+            print(f"Using {current_channel} for the current.")
+
+        setup_rundata_structures(data, run_sub_periods[sub_i], current_channel)
 
         if data.All_Runs is None:
             return
@@ -596,8 +601,10 @@ def main(argv=None):
                 size=10)
         )
 
-
-        title = "<b>RGD 2023 Progress</b>"
+        if args.fcup:
+            title = "<b>RGD 2023 Progress</b>  FCup"
+        else:
+            title = "<b>RGD 2023 Progress</b>  IPM2C21"
         fig.update_layout(
             title=go.layout.Title(
                 text=title,
