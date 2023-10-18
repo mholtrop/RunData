@@ -164,7 +164,7 @@ def setup_rundata_structures(data_loc, dates):
     data_loc.target_properties = target_properties()
     data_loc.target_dens = data_loc.target_properties['density']
     data_loc.atten_dict = None
-    data_loc.Current_Channel =  "scaler_calc1b" # "IPM2C21A"
+    data_loc.Current_Channel =  "IPM2C21A" # "scaler_calc1b" # "IPM2C21A"
     data_loc.LiveTime_Channel = "B_DAQ:livetime"
     data_loc.Useful_conditions.append('beam_energy')
 
@@ -202,6 +202,7 @@ def main(argv=None):
     parser.add_argument('-c', '--charge', action="store_true", help="Make a plot of charge not luminosity.")
     parser.add_argument('-C', '--chart', action="store_true", help="Put plot on plotly charts website.")
     parser.add_argument('-f', '--date_from', type=str, help="Plot from date, eg '2021,11,09' ", default=None)
+    parser.add_argument("-F", '--fcup', action="store_true", help="Use the Faraday cup instead of IPM2C21A.")
     parser.add_argument('-t', '--date_to', type=str, help="Plot to date, eg '2022,01,22' ", default=None)
     parser.add_argument('-m', '--max_rate', type=float, help="Maximum for date rate axis ", default=None)
     parser.add_argument('-M', '--max_charge', type=float, help="Maximum for charge axis ", default=None)
@@ -265,6 +266,10 @@ def main(argv=None):
 
         data.clear()
         setup_rundata_structures(data, run_sub_periods[sub_i])
+
+        if args.fcup:
+            data.Current_Channel = "scaler_calc1b"
+
         if data.All_Runs is None:
             return
 
