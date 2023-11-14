@@ -743,7 +743,7 @@ class RunData:
 
         if self.debug > 4:
             print(f"add_current_cor, run= {runnumber:5d}  start={self.All_Runs.loc[runnumber,'start_time']} "
-                  f"end={self.All_Runs.loc[runnumber, 'end_time']}")
+                  f"end={self.All_Runs.loc[runnumber, 'end_time']} channel = {current_channel}")
 
         if pd.isnull(self.All_Runs.loc[runnumber, "start_time"]) or \
            pd.isnull(self.All_Runs.loc[runnumber, "end_time"]):

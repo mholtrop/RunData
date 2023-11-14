@@ -72,10 +72,10 @@ def target_properties():
             'scale': [1., 1, 1, 1],     # Special entry. Multiply sum charge by this factor,
             'empty': [165., 165., 165., 165.],
             'C': [30., 30., 30., 30.],
-            'CxC': [30., 30., 30., 30.],
+            'CxC': [50., 50., 50., 50.],
             'LH2': [75., 75., 75., 75.],
-            'LD2': [35., 35., 35., 35.],
-            'CuSn': [125., 125., 125., 125.],
+            'LD2': [50., 60., 60., 60.],
+            'CuSn': [95., 95., 95., 95.],
             'LD2C12': [30., 30., 30., 30.],
             'CH2': [125., 125., 125., 125.],
             'NH3': [125., 125., 125., 125.],
@@ -213,6 +213,8 @@ def main(argv=None):
                         help="Run sub-period, 0=all, 1, 2, 3, 4, or 12 for 1+2", default=0),
     parser.add_argument('--return_data', action="store_true", help="Internal use: return the data at end.", default=None)
 
+    continue_charge_sums = False
+
     args = parser.parse_args(argv[1:])
 
     hostname = os.uname()[1]
@@ -233,6 +235,8 @@ def main(argv=None):
 
     run_sub_periods = [
         # (datetime(2023, 2, 20,  0, 0),  datetime(2023, 2, 25, 0, 0)),
+        #(datetime(2023, 10, 4, 6, 0), datetime(2023, 10, 31,0,0)),
+        #(datetime(2023, 10, 31, 0, 0), datetime.now())
         (datetime(2023, 10, 4, 6, 0), datetime.now())
         ]
 
@@ -264,6 +268,10 @@ def main(argv=None):
     legends_data = []  # To keep track of which targets already have a legend shown.
     legends_shown = []  # To keep track of which target has the charge sum legend shown.
     #   Loop over the different run sub-periods.
+    previous_max_charge = 0.
+    previous_max_charge_target = {}
+    for targ in target_properties()['sums_color']:
+        previous_max_charge_target[targ] = 0.
 
     for sub_i in run_period_sub_num:
 
@@ -372,13 +380,16 @@ def main(argv=None):
                     max_y_value_sums = 10.
 
                 plot_sumcharge_t = [starts.iloc[0], ends.iloc[0]]
-                plot_sumcharge_v = [0, sumcharge.iloc[0]]
+                plot_sumcharge_v = [previous_max_charge, sumcharge.iloc[0] + previous_max_charge]
 
                 for i in range(1, len(sumcharge)):
                     plot_sumcharge_t.append(starts.iloc[i])
                     plot_sumcharge_t.append(ends.iloc[i])
-                    plot_sumcharge_v.append(sumcharge.iloc[i - 1])
-                    plot_sumcharge_v.append(sumcharge.iloc[i])
+                    plot_sumcharge_v.append(sumcharge.iloc[i - 1]+previous_max_charge)
+                    plot_sumcharge_v.append(sumcharge.iloc[i]+previous_max_charge)
+
+                if continue_charge_sums:
+                    previous_max_charge = plot_sumcharge_v[-1]
 
                 for targ in data.target_properties['sums_color']:
                     sumch = plot_runs.loc[plot_runs["target"] == targ, "sum_charge_targ"]*current_plotting_scale
@@ -443,8 +454,11 @@ def main(argv=None):
 
                             plot_sumcharge_target_t.append(st.iloc[i])
                             plot_sumcharge_target_t.append(en.iloc[i])
-                            plot_sumcharge_target_v.append(sumch.iloc[i - 1])
-                            plot_sumcharge_target_v.append(sumch.iloc[i])
+                            plot_sumcharge_target_v.append(sumch.iloc[i - 1] + previous_max_charge_target[targ])
+                            plot_sumcharge_target_v.append(sumch.iloc[i] + previous_max_charge_target[targ])
+
+                        if continue_charge_sums:
+                            previous_max_charge_target[targ] = plot_sumcharge_target_v[-1]
 
                         if data.target_properties['current'][targ][sub_i] > 0.:
                             plot_expected_charge_t.append(plot_sumcharge_target_t[-1])
