@@ -291,6 +291,9 @@ def main(argv=None):
 
         targets = '.*'
 
+        if 18829 in data.All_Runs.index:
+            data.All_Runs.drop(18829, inplace=True)
+            
         # Select runs into the different categories.
         if data.All_Runs is not None:
             plot_runs = compute_plot_runs(targets=targets, run_config=data.Good_triggers, data_loc=data)
@@ -706,9 +709,10 @@ def main(argv=None):
 
     if args.excel:
         print("Write new Excel table.")
-        excel_output.to_excel("RGC2022_progress"+run_period_name+".xlsx",
+        print(excel_output.keys())
+        excel_output.to_excel("RGD2023_progress"+run_period_name+".xlsx",
                               columns=['start_time', 'end_time', 'target', 'beam_energy',
-                                       'half_wave_plate', 'run_config', 'selected',
+                                       'run_config', 'selected',
                                        'event_count', 'sum_event_count', 'charge', 'sum_charge', 'sum_charge_targ',
                                        'evio_files_count', 'megabyte_count',
                                        'operators', 'user_comment'])
