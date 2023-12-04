@@ -242,8 +242,10 @@ def main(argv=None):
 
     run_sub_energy = [10.]
     run_sub_y_placement = [0.90]
-
     run_period_name = ""
+
+    Excluded_runs = [18829, 18963, 18964, 18977, 18983]   # Explicitly exclude these runs from all further processing.
+
     run_period_sub_num = range(len(run_sub_periods))
     if args.runperiod == 0:
         run_period_name = "_all"
@@ -291,8 +293,9 @@ def main(argv=None):
 
         targets = '.*'
 
-        if 18829 in data.All_Runs.index:
-            data.All_Runs.drop(18829, inplace=True)
+        for r in Excluded_runs:
+            if r in data.All_Runs.index:
+               data.All_Runs.drop(r, inplace=True)
             
         # Select runs into the different categories.
         if data.All_Runs is not None:
