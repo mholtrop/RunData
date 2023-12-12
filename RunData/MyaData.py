@@ -303,6 +303,12 @@ class MyaData:
             # We want to now store the data to the cache.
             # We use the pd.DataFrame functionality to do so.
             self.add_to_mya_data_range(channel, start, end, run_number, dat_len)
+            #
+            # Occasionally extra columns are added to the data frame, so we need to drop them.
+            #
+            extra = set(pd_frame.keys()) - {'ms', 'value', 'time', 'run_number'}
+            if len(extra) > 0:
+                pd_frame.drop(list(extra), axis=1, inplace=True)
             pd_frame.to_sql(channel, self._cache_engine, if_exists="append")
 
         return pd_frame
