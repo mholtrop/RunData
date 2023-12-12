@@ -442,7 +442,7 @@ def main(argv=None):
                                     plot_expected_charge_t.append(en.iloc[i-1])
                                     plot_expected_charge_v.append(None)
 
-                                    if i+1 < len(sumch):  # Add the start of the next line segment
+                                    if i < len(sumch):  # Add the start of the next line segment
                                         plot_expected_charge_t.append(st.iloc[i])
                                         plot_expected_charge_v.append(current_expected_sum_charge)
                                         fig.add_trace(
@@ -580,7 +580,7 @@ def main(argv=None):
                                 secondary_y=True
                             )
                             max_expected_charge.append(plot_expected_charge_v[-1])
-                            # print(f"max_expected_charge = {max_expected_charge}")
+                            print(f"max_expected_charge = {max_expected_charge}  for target {targ}")
 
             # run_sub_annotation = f"<b>E<sub>b</sub> = {run_sub_energy[sub_i]} GeV</b><br>"
             # if data.target_properties['current']['scale'][sub_i] != 1.:
@@ -727,7 +727,7 @@ def main(argv=None):
 if __name__ == "__main__":
     sys.exit(main())
 else:
-    print("RGC setup.")
+    print("RGD setup.")
     # arguments = "--return_data -d -d -d "  # No plot or excel.
     # print("data, plot_runs, wave_plate, polarization = main(arguments)")
 
