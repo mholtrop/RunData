@@ -237,7 +237,7 @@ def main(argv=None):
         # (datetime(2023, 2, 20,  0, 0),  datetime(2023, 2, 25, 0, 0)),
         #(datetime(2023, 10, 4, 6, 0), datetime(2023, 10, 31,0,0)),
         #(datetime(2023, 10, 31, 0, 0), datetime.now())
-        (datetime(2023, 10, 4, 6, 0), datetime.now())
+        (datetime(2023, 10, 4, 6, 0), datetime(2023,12, 15, 8, 0))
         ]
 
     run_sub_energy = [10.]
