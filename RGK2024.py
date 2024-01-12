@@ -318,7 +318,8 @@ def main(argv=None):
         # if args.debug:
         #     print("Calibration runs: ", calib_runs)
 
-        print(f"Compute cumulative charge for period {sub_i+1}.")
+        if args.debug:
+            print(f"Compute cumulative charge for period {sub_i+1}.")
 
         if "charge" not in plot_runs.keys():
             print(f"No charge data available for run period {sub_i+1}, skipping period.")
@@ -329,7 +330,8 @@ def main(argv=None):
             excel_output = pd.concat([excel_output, plot_runs, calib_runs]).sort_index()
 
         if args.plot:
-            print(f"Build Plots for period {sub_i+1}")
+            if args.debug:
+                print(f"Build Plots for period {sub_i+1}")
 
             last_targ = None
             for targ in data.target_properties['attenuation']:
@@ -563,7 +565,8 @@ def main(argv=None):
                                 secondary_y=True
                             )
                             max_expected_charge.append(plot_expected_charge_v[-1])
-                            print(f"max_expected_charge = {max_expected_charge}  for target {targ}")
+                            if args.debug > 1:
+                                print(f"max_expected_charge = {max_expected_charge}  for target {targ}")
 
             # run_sub_annotation = f"<b>E<sub>b</sub> = {run_sub_energy[sub_i]} GeV</b><br>"
             # if data.target_properties['current']['scale'][sub_i] != 1.:
@@ -684,7 +687,8 @@ def main(argv=None):
                 range=[date_from, date_to]
             )
 
-        print("Show plots.")
+        if args.debug:
+            print("Show plots.")
         fig.write_image("RGK2024_progress"+run_period_name+".pdf", width=2048, height=900)
         fig.write_image("RGK2024_progress"+run_period_name+".png", width=2048, height=900)
         fig.write_html("RGK2024_progress"+run_period_name+".html")
