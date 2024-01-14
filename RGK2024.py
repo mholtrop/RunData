@@ -62,7 +62,7 @@ def target_properties():
             'empty': 0,
             'C':  0.440,  # One foil.
             'CxC': 2 * 0.440,  # Two foils.
-            'LH2': 0.355,
+            'LH2': 0.07151*5.0, # density of liquid H2
             'LD2': 0.820,
             'CuSn': 0.08333 + 0.125,  # Cu and Sn, the LD2 is empty.
             'LD2C12': 2*0.440,  # Two foils, the LD2 is empty.
@@ -96,7 +96,7 @@ def target_properties():
             'C': 'rgba(80, 80, 200, 0.7)',
             'CxC': 'rgba(80, 80, 200, 0.7)',
             'CH2': 'rgba(100, 255, 255, 0.7)',
-            'LH2': 'rgba(100, 200, 200, 0.7)',
+            'LH2': 'rgba(0, 100, 200, 0.7)',
             'LD2': 'rgba(100, 180, 180, 0.7)',
             'CuSn': 'rgba(255, 100, 100, 0.7)',
             'LD2C12': 'rgba(120, 120, 250, 0.7)',

@@ -99,6 +99,8 @@ class RunData:
         """
         self.Production_run_type = "PROD.*"  # Type of production runs to consider.
         # List of conditions to put in tables.
+        # To find the list of possible RCDB items check the RCDB web interface (https://clasweb.jlab.org/rcdb)
+        # and click on a specific run.
         self.Useful_conditions = ['is_valid_run_end', 'user_comment', 'run_type',
                                   'target', 'beam_current_request', 'operators', 'event_count',
                                   'events_rate', 'run_config', 'status',
