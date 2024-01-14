@@ -171,6 +171,7 @@ def setup_rundata_structures(data_loc, dates, current_channel=None):
         data_loc.Current_Channel = current_channel
     data_loc.LiveTime_Channel = "B_DAQ:livetime"
     data_loc.Useful_conditions.append('beam_energy')
+    data_loc.Useful_conditions.append('half_wave_plate')
 
     min_event_count = 500000  # Runs with at least 500k events.
 
@@ -698,10 +699,11 @@ def main(argv=None):
             fig.show(width=2048, height=900)  # width=1024,height=768
 
     if args.excel:
-        print("Write new Excel table.")
-        print(excel_output.keys())
+        if args.debug:
+            print("Write new Excel table.")
+            print(excel_output.keys())
         excel_output.to_excel("RGK2024_progress"+run_period_name+".xlsx",
-                              columns=['start_time', 'end_time', 'target', 'beam_energy',
+                              columns=['start_time', 'end_time', 'target', 'beam_energy','half_wave_plate',
                                        'run_config', 'selected',
                                        'event_count', 'sum_event_count', 'charge', 'sum_charge', 'sum_charge_targ',
                                        'evio_files_count', 'megabyte_count',
