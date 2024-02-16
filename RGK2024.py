@@ -61,59 +61,55 @@ def target_properties():
             # 'norm': 0.335,
             'empty': 0,
             'C':  0.440,  # One foil.
-            'CxC': 2 * 0.440,  # Two foils.
+        #    'CxC': 2 * 0.440,  # Two foils.
             'LH2': 0.07151*5.0, # density of liquid H2
             'LD2': 0.820,
-            'CuSn': 0.08333 + 0.125,  # Cu and Sn, the LD2 is empty.
-            'LD2C12': 2*0.440,  # Two foils, the LD2 is empty.
-            'NH3': 0.820,
+         #   'CuSn': 0.08333 + 0.125,  # Cu and Sn, the LD2 is empty.
+         #   'LD2C12': 2*0.440,  # Two foils, the LD2 is empty.
+         #   'NH3': 0.820,
         },
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             # list of currents for each beam energy period.
             'scale': [1., 1, 1, 1],     # Special entry. Multiply sum charge by this factor,
             'empty': [165., 165., 165., 165.],
             'C': [30., 30., 30., 30.],
-            'CxC': [50., 50., 50., 50.],
+  #          'CxC': [50., 50., 50., 50.],
             'LH2': [65., 65., 65., 65.],
             'LD2': [50., 60., 60., 60.],
-            'CuSn': [95., 95., 95., 95.],
-            'LD2C12': [30., 30., 30., 30.],
+   #         'CuSn': [95., 95., 95., 95.],
+   #         'LD2C12': [30., 30., 30., 30.],
             'CH2': [125., 125., 125., 125.],
-            'NH3': [125., 125., 125., 125.],
+   #         'NH3': [125., 125., 125., 125.],
         },
         'attenuation': {     # Units: number
             'empty': 1,
             'C': 1,
-            'CxC': 1,
+ #           'CxC': 1,
             'LH2': 1,
             'LD2': 1,
-            'CuSn': 1,
-            'LD2C12': 1,
-            'NH3': 1,
+ #           'CuSn': 1,
+ #           'LD2C12': 1,
+ #           'NH3': 1,
         },
         'color': {  # Plot color: r,g,b,a
-            'empty': 'rgba(160, 110, 110, 0.7)',
-            'C': 'rgba(80, 80, 200, 0.7)',
-            'CxC': 'rgba(80, 80, 200, 0.7)',
-            'CH2': 'rgba(100, 255, 255, 0.7)',
-            'LH2': 'rgba(0, 100, 200, 0.7)',
-            'LD2': 'rgba(100, 180, 180, 0.7)',
-            'CuSn': 'rgba(255, 100, 100, 0.7)',
-            'LD2C12': 'rgba(120, 120, 250, 0.7)',
-            'calibration': 'rgba(220,220,220,0.5)',
-            'NH3': 'rgba(0, 100, 255, 0.7)',
+            'empty': ['rgba(160, 110, 110, 0.7)', 'rgba(160, 110, 110, 0.7)'],
+            'C': ['rgba(80, 80, 200, 0.7)','rgba(80, 80, 200, 0.7)'],
+            'CH2': ['rgba(100, 255, 255, 0.7)', 'rgba(100, 255, 255, 0.7)'],
+            'LH2': ['rgba(0, 100, 200, 0.7)', 'rgba(0, 100, 150, 0.7)'],
+            'LD2': ['rgba(100, 180, 180, 0.7)', 'rgba(100, 180, 180, 0.7)'],
+            'calibration': ['rgba(220,220,220,0.5)', 'rgba(220,220,220,0.5)'],
         },
         'sums_color': {  # Plot color: r,g,b,a
             'empty': 'rgba(150, 90, 90, 0.8)',
             'C': 'rgba(100, 100, 180, 0.8)',
-            'CxC': 'rgba(100, 100, 180, 0.8)',
+#            'CxC': 'rgba(100, 100, 180, 0.8)',
             'CH2': 'rgba(80, 200, 200, 0.8)',
             'LH2': 'rgba(0, 0, 255, 0.8)',
             'LD2': 'rgba(80, 200, 200, 0.8)',
-            'CuSn': 'rgba(180, 50, 50, 0.8)',
-            'LD2C12': 'rgba(80, 200, 200, 0.8)',
+#            'CuSn': 'rgba(180, 50, 50, 0.8)',
+#            'LD2C12': 'rgba(80, 200, 200, 0.8)',
             'expected': 'rgba(0, 0, 0, 0.7)',
-            'NH3': 'rgba(255, 100, 255, 0.7)',
+#            'NH3': 'rgba(255, 100, 255, 0.7)',
         },
     }
 
@@ -239,11 +235,12 @@ def main(argv=None):
         # (datetime(2023, 2, 20,  0, 0),  datetime(2023, 2, 25, 0, 0)),
         #(datetime(2023, 10, 4, 6, 0), datetime(2023, 10, 31,0,0)),
         #(datetime(2023, 10, 31, 0, 0), datetime.now())
-        (datetime(2024, 1, 12, 0, 0), datetime.now())
-        ]
+        (datetime(2024, 1, 12, 0, 0), datetime(2024, 2, 13, 11,0)),
+        (datetime(2024, 2, 13, 22, 0), datetime.now())
+    ]
 
-    run_sub_energy = [6.394]
-    run_sub_y_placement = [0.90]
+    run_sub_energy = [6.394, 8.477]
+    run_sub_y_placement = [0.99, 0.99]
     run_period_name = ""
 
     Excluded_runs = []   # Explicitly exclude these runs from all further processing.
@@ -271,9 +268,13 @@ def main(argv=None):
 
     legends_data = []  # To keep track of which targets already have a legend shown.
     legends_shown = []  # To keep track of which target has the charge sum legend shown.
+
     #   Loop over the different run sub-periods.
     previous_max_charge = 0.
     previous_max_charge_target = {}
+    max_rate_subi = []  # Keep track of the maximum rate for each sub-period.
+    max_charge_subi = []  # Keep track of the maximum charge for each sub-period.
+
     for targ in target_properties()['sums_color']:
         previous_max_charge_target[targ] = 0.
 
@@ -356,7 +357,7 @@ def main(argv=None):
                 data_y = plot_runs.loc[runs, 'event_rate']
                 data_width = plot_runs.loc[runs, 'dt']
                 data_hover = plot_runs.loc[runs, 'hover']
-                data_color = data.target_properties['color'][targ]
+                data_color = data.target_properties['color'][targ][sub_i]
 
                 fig.add_trace(
                     go.Bar(x=data_x,
@@ -376,7 +377,7 @@ def main(argv=None):
                         width=calib_runs['dt'],
                         hovertext=calib_runs['hover'],
                         name="Calibration runs",
-                        marker=dict(color=data.target_properties['color']['calibration']),
+                        marker=dict(color=data.target_properties['color']['calibration'][0]),
                         legendgroup="group1",
                         ),
                  secondary_y=False, )
@@ -569,26 +570,44 @@ def main(argv=None):
                             if args.debug > 1:
                                 print(f"max_expected_charge = {max_expected_charge}  for target {targ}")
 
-            # run_sub_annotation = f"<b>E<sub>b</sub> = {run_sub_energy[sub_i]} GeV</b><br>"
+            run_sub_annotation = f"<b>E<sub>b</sub> = {run_sub_energy[sub_i]} GeV</b><br>"
             # if data.target_properties['current']['scale'][sub_i] != 1.:
             #     run_sub_annotation += f"Current scaled {data.target_properties['current']['scale'][sub_i]:3.0f}x"
             #
-            # mid_time = run_sub_periods[sub_i][0] + (run_sub_periods[sub_i][1] - run_sub_periods[sub_i][0])/2
-            # fig.add_annotation(
-            #     x=mid_time,
-            #     xanchor="center",
-            #     xref="x",
-            #     y=run_sub_y_placement[sub_i],
-            #     yanchor="middle",
-            #     yref="paper",
-            #     text=run_sub_annotation,
-            #     showarrow=False,
-            #     font=dict(
-            #         family="Times",
-            #         color="#FF0000",
-            #         size=20),
-            #     bgcolor="#FFEEEE"
-            # )
+            mid_time = run_sub_periods[sub_i][0] + (run_sub_periods[sub_i][1] - run_sub_periods[sub_i][0])/2
+            fig.add_annotation(
+                x=mid_time,
+                xanchor="center",
+                xref="x",
+                y=run_sub_y_placement[sub_i],
+                yanchor="middle",
+                yref="paper",
+                text=run_sub_annotation,
+                showarrow=False,
+                font=dict(
+                    family="Times",
+                    color="#FF0000",
+                    size=20),
+                bgcolor="#FFEEEE"
+            )
+
+        if args.max_rate is not None and args.max_rate > 0:
+            max_rate = args.max_rate
+        else:
+            all_runs = (plot_runs.selected == True)
+            max_rate = 1.05*plot_runs.loc[all_runs, 'event_rate'].max()
+            max_rate_subi.append(max_rate)
+            max_rate = max(max_rate_subi)
+
+        if args.charge:
+            max_expected_charge.append(max_y_value_sums)
+            if args.debug:
+              print(f"max_expected_charge: {max_expected_charge}")
+            max_y_2nd_scale = 1.1*np.max(max_expected_charge)
+            max_charge_subi.append(max_y_2nd_scale)
+            max_y_2nd_scale = max(max_charge_subi)
+            if args.debug:
+                print(f"max_y_2nd_scale = {max_y_2nd_scale}")
 
     # End sub run period loop.
     if args.plot:
@@ -631,12 +650,6 @@ def main(argv=None):
             )
         )
 
-        if args.max_rate is not None and args.max_rate > 0:
-            max_rate = args.max_rate
-        else:
-            all_runs = (plot_runs.selected == True)
-            max_rate = 1.05*plot_runs.loc[all_runs, 'event_rate'].max()
-
         # Set y-axes titles
         fig.update_yaxes(
             title_text="<b>Event rate kHz</b>",
@@ -648,13 +661,13 @@ def main(argv=None):
         )
 
         if args.charge:
-            max_expected_charge.append(max_y_value_sums)
-            if args.debug:
-              print(f"max_expected_charge: {max_expected_charge}")
-            max_y_2nd_scale = 1.1*np.max(max_expected_charge)
-            # max_y_2nd_scale = 7.
-            if args.debug:
-                print(f"max_y_2nd_scale = {max_y_2nd_scale}")
+            # max_expected_charge.append(max_y_value_sums)
+            # if args.debug:
+            #   print(f"max_expected_charge: {max_expected_charge}")
+            # max_y_2nd_scale = 1.1*np.max(max_expected_charge)
+            # # max_y_2nd_scale = 7.
+            # if args.debug:
+            #     print(f"max_y_2nd_scale = {max_y_2nd_scale}")
 
             if args.max_charge is not None and args.max_charge > 0.:
                 max_charge = args.max_charge
