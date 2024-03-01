@@ -717,7 +717,7 @@ def main(argv=None):
     if args.excel:
         print("Write new Excel table.")
         print(excel_output.keys())
-        excel_output.to_excel("RGD2023_progress"+run_period_name+".xlsx",
+        excel_output.to_excel("RGD2023_progress"+run_period_name+"_full_orig.xlsx",
                               columns=['start_time', 'end_time', 'target', 'beam_energy',
                                        'run_config', 'selected',
                                        'event_count', 'sum_event_count', 'charge', 'sum_charge', 'sum_charge_targ',
