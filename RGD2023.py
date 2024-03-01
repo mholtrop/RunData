@@ -284,6 +284,9 @@ def main(argv=None):
             print(f"Using {current_channel} for the current.")
 
         setup_rundata_structures(data, run_sub_periods[sub_i], current_channel)
+        data.add_current_data_to_runs(current_channel="IPM2C24A")
+        data.add_current_data_to_runs(current_channel="IPM2H01")
+        data.add_current_data_to_runs(current_channel="scaler_calc1b")
 
         if data.All_Runs is None:
             return
@@ -326,6 +329,7 @@ def main(argv=None):
 
         if args.excel:
             excel_output = pd.concat([excel_output, plot_runs, calib_runs]).sort_index()
+            plot_runs.to_excel("RGD2023_progress_full.xlsx")
 
         if args.plot:
             print(f"Build Plots for period {sub_i+1}")
