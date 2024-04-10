@@ -56,6 +56,14 @@ def target_properties():
             'CH2': 'CH2',
             'CD2': 'CD2',
             'LD2 + Pb': 'LD2Pb',
+            'LD2 + C': 'LD2C',
+            'LD2 + Al': 'LD2Al',
+            'LD2 + AL': 'LD2Al',
+            'LD2 + Cu': 'LD2Cu',
+            'LD2 + CU': 'LD2Cu',
+            'LD2 + Co': 'LD2Cu',
+            'LD2 + Sn': 'LD2Sn',
+            'LD2 + SN': 'LD2Sn',
         },
         'density': {     # Units: g/cm^2
             # 'norm': 0.335,
@@ -68,6 +76,10 @@ def target_properties():
             'LD2C12': 2*0.440,  # Two foils, the LD2 is empty.
             'NH3': 0.820,
             'LD2Pb': 0.820+0.01*11.35,  # 11.35 g/cm^2 for the lead.
+            'LD2C': 0.820+0.440,  # 0.820 for the LD2, 0.440 for the C.
+            'LD2Al': 0.820+0.270,  # 0.820 for the LD2, 0.270 for the Al.
+            'LD2Cu': 0.820+0.324,  # 0.820 for the LD2, 0.324 for the Cu.
+            'LD2Sn': 0.820+0.668,  # 0.820 for the LD2, 0.668 for the Sn.
         },
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             # list of currents for each beam energy period.
@@ -82,6 +94,10 @@ def target_properties():
             'CH2': [125., 125., 125., 125.],
             'NH3': [125., 125., 125., 125.],
             'LD2Pb': [100., 100., 100., 100.],
+            'LD2C': [100., 100., 100., 100.],
+            'LD2Al': [100., 100., 100., 100.],
+            'LD2Cu': [100., 100., 100., 100.],
+            'LD2Sn': [100., 100., 100., 100.],
         },
         'attenuation': {     # Units: number
             'empty': 1,
@@ -93,6 +109,10 @@ def target_properties():
             'LD2C12': 1,
             'NH3': 1,
             'LD2Pb': 1,
+            'LD2C': 1,
+            'LD2Al': 1,
+            'LD2Cu': 1,
+            'LD2Sn': 1,
         },
         'color': {  # Plot color: r,g,b,a
             'empty': 'rgba(160, 110, 110, 0.7)',
@@ -106,6 +126,10 @@ def target_properties():
             'calibration': 'rgba(220,220,220,0.5)',
             'NH3': 'rgba(0, 100, 255, 0.7)',
             'LD2Pb': 'rgba( 90, 125, 215, 0.7)',
+            'LD2C': 'rgba( 80, 80, 80, 0.7)',
+            'LD2Al': 'rgba( 140, 200, 250, 0.7)',
+            'LD2Cu': 'rgba( 250, 100, 100, 0.7)',
+            'LD2Sn': 'rgba( 135, 135, 255, 0.7)',
         },
         'sums_color': {  # Plot color: r,g,b,a
             'empty': 'rgba(150, 90, 90, 0.8)',
@@ -119,6 +143,10 @@ def target_properties():
             'expected': 'rgba(0, 0, 0, 0.7)',
             'NH3': 'rgba(255, 100, 255, 0.7)',
             'LD2Pb': 'rgba(30, 55, 121, 0.8)',
+            'LD2C': 'rgba(100, 100, 100, 0.8)',
+            'LD2Al': 'rgba(10, 125, 200, 0.8)',
+            'LD2Cu': 'rgba(145, 10, 10, 0.8)',
+            'LD2Sn': 'rgba(80, 80, 255, 0.8)',
         },
     }
 
