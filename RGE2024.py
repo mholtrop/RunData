@@ -93,11 +93,11 @@ def target_properties():
             'LD2C12': [50., 50., 50., 50.],
             'CH2': [125., 125., 125., 125.],
             'NH3': [125., 125., 125., 125.],
-            'LD2Pb': [100., 100., 100., 100.],
-            'LD2C': [100., 100., 100., 100.],
-            'LD2Al': [100., 100., 100., 100.],
-            'LD2Cu': [100., 100., 100., 100.],
-            'LD2Sn': [100., 100., 100., 100.],
+            'LD2Pb': [70., 70., 70., 70.],
+            'LD2C': [85., 85., 85., 85.],
+            'LD2Al': [80., 80., 80., 80.],
+            'LD2Cu': [75., 75., 75., 75.],
+            'LD2Sn': [70., 70., 70., 70.],
         },
         'attenuation': {     # Units: number
             'empty': 1,
@@ -330,7 +330,7 @@ def main(argv=None):
         for r in Excluded_runs:
             if r in data.All_Runs.index:
                data.All_Runs.drop(r, inplace=True)
-            
+
         # Select runs into the different categories.
         if data.All_Runs is not None:
             plot_runs = compute_plot_runs(targets=targets, run_config=data.Good_triggers, data_loc=data)
@@ -364,8 +364,11 @@ def main(argv=None):
         data.compute_cumulative_charge(targets, runs=plot_runs)
 
         if args.excel:
-            excel_output = pd.concat([excel_output, plot_runs, calib_runs]).sort_index()
-            plot_runs.to_excel("RGE2024_progress_full.xlsx")
+            if len(calib_runs) > 0:
+                excel_output = pd.concat([excel_output, plot_runs, calib_runs]).sort_index()
+            else:
+                excel_output = pd.concat([excel_output, plot_runs]).sort_index()
+            excel_output.to_excel("RGE2024_progress_full.xlsx")
 
         if args.plot:
             print(f"Build Plots for period {sub_i+1}")
