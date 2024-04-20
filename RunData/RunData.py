@@ -113,6 +113,7 @@ class RunData:
 
         # This runs to be excluded for other reasons. (I.e. marked in online spreadsheet.
         self.ExcludeRuns = []
+        self.Calibration_triggers = []
 
         self.min_event_count = 1000000
         self.target_properties = {}
