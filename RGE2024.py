@@ -61,6 +61,7 @@ def target_properties():
             'LD2 + AL': 'LD2Al',
             'LD2 + Cu': 'LD2Cu',
             'LD2 + CU': 'LD2Cu',
+            'Cu': 'LD2Cu',
             'LD2 + Co': 'LD2Cu',
             'LD2 + Sn': 'LD2Sn',
             'LD2 + SN': 'LD2Sn',
@@ -75,11 +76,11 @@ def target_properties():
             'CuSn': 0.08333 + 0.125,  # Cu and Sn, the LD2 is empty.
             'LD2C12': 2*0.440,  # Two foils, the LD2 is empty.
             'NH3': 0.820,
-            'LD2Pb': 0.820+0.01*11.35,  # 11.35 g/cm^2 for the lead.
-            'LD2C': 0.820+0.440,  # 0.820 for the LD2, 0.440 for the C.
-            'LD2Al': 0.820+0.270,  # 0.820 for the LD2, 0.270 for the Al.
-            'LD2Cu': 0.820+0.324,  # 0.820 for the LD2, 0.324 for the Cu.
-            'LD2Sn': 0.820+0.668,  # 0.820 for the LD2, 0.668 for the Sn.
+            'LD2Pb': 0.152,  # target density for solid only in g/cm^2. Values from Hayk Hakobyan.
+            'LD2C': 0.257,   # ...
+            'LD2Al': 0.314,  # ...
+            'LD2Cu': 0.278,  # ...
+            'LD2Sn': 0.208,  # ...
         },
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             # list of currents for each beam energy period.
@@ -234,9 +235,10 @@ def main(argv=None):
     parser.add_argument('-d', '--debug', action="count", help="Be more verbose if possible. ", default=0)
     parser.add_argument('-N', '--nocache', action="store_true", help="Do not use a sqlite3 cache")
     parser.add_argument('-p', '--plot', action="store_true", help="Create the plotly plots.")
-    parser.add_argument('-l', '--live', action="store_true", help="Show the live plotly plot.")
+    parser.add_argument('-L', '--live', action="store_true", help="Show the live plotly plot.")
     parser.add_argument('-e', '--excel', action="store_true", help="Create the Excel table of the data")
-    parser.add_argument('-c', '--charge', action="store_true", help="Make a plot of charge not luminosity.")
+    parser.add_argument('-c', '--charge', action="store_true", help="Add lines for accumulated charge.")
+    parser.add_argument('-l', '--lumi', action="store_true", help="Add lines for accumulated luminosity.")
     parser.add_argument('-C', '--chart', action="store_true", help="Put plot on plotly charts website.")
     parser.add_argument('-f', '--date_from', type=str, help="Plot from date, eg '2021,11,09' ", default=None)
     parser.add_argument("-F", '--fcup', action="store_true", help="Use the Faraday cup instead of IPM2C21A.")
@@ -250,6 +252,18 @@ def main(argv=None):
     continue_charge_sums = False
 
     args = parser.parse_args(argv[1:])
+
+    # Consistency check:
+    if args.charge and args.lumi:
+        print("Cannot plot both charge and luminosity on the same plot. It would be a mess.")
+        print("Please choose either -l or -c. Neither will omit the curves.")
+        return
+
+    # From Python units, see also RunData.py:845
+    # ((1.*u.avogadro_constant*1.*u.cm * 1.*u.g/(1*u.Unit('cm^3'))/(1.*u.Unit('g/mol')))*(1*u.mC/(1*u.elementary_charge))).to('1/pb')
+    # Out[4]: 3758.724620122003 <Unit('1 / picobarn')>
+    luminosity_scale = 3.758724620122003  # 1/fb, inverse femto-barns.
+    luminosity_scale_unit = "1/fb"
 
     hostname = os.uname()[1]
     if hostname.find('clon') >= 0 or hostname.find('ifarm') >= 0 or hostname.find('jlab.org') >= 0:
@@ -290,10 +304,13 @@ def main(argv=None):
         print("Incorrect choice for runperiod argument.")
         return
 
+    max_y_value_sums = 0.
+    max_y_value_lumi = 0.
+    max_expected_charge = []
+    max_expected_lumi = []
+
     if args.plot:
-        max_y_value_sums = 0.
         fig = make_subplots(specs=[[{"secondary_y": True}]])
-        max_expected_charge = []
 
     if args.excel:
         excel_output = pd.DataFrame()
@@ -421,17 +438,27 @@ def main(argv=None):
                             ),
                      secondary_y=False, )
 
-            if args.charge:
+            if args.charge or args.lumi:
                 current_plotting_scale = data.target_properties['current']['scale'][sub_i]
                 sumcharge = plot_runs.loc[:, "sum_charge"] * current_plotting_scale
-                if "sum_charge_targ" in plot_runs.keys():
-                    max_y_value_sums = plot_runs.sum_charge_targ.max() * current_plotting_scale
-                else:
-                    max_y_value_sums = 10.
+
+                max_y_value_sums = 10.
+                max_y_value_lumi = 20.
+
+                # if "sum_charge_targ" in plot_runs.keys():
+                #     max_y_value_sums = plot_runs.sum_charge_targ.max() * current_plotting_scale
+                # else:
+                #     max_y_value_sums = 10.
+                #
+                # if "luminosity" in plot_runs.keys():
+                #     max_y_value_lumi = plot_runs.luminosity.max()
+                # else:
+                #     max_y_value_lumi = 1.
 
                 if len(starts) == 0 or len(ends) == 0:
                     print("No data to plot.")
                     continue
+
                 plot_sumcharge_t = [starts.iloc[0], ends.iloc[0]]
                 plot_sumcharge_v = [previous_max_charge, sumcharge.iloc[0] + previous_max_charge]
 
@@ -469,9 +496,13 @@ def main(argv=None):
                                 plot_sumcharge_target_t.append(st.iloc[i])
                                 plot_sumcharge_target_v.append(None)        # None causes line break.
 
+                                y_plot = np.array([plot_sumcharge_target_v[-2], plot_sumcharge_target_v[-2]])
+                                if args.lumi:
+                                    y_plot = luminosity_scale * y_plot * data.target_properties['density'][targ]
+
                                 fig.add_trace(
                                     go.Scatter(x=[en.iloc[i-1], st.iloc[i]],
-                                               y=[plot_sumcharge_target_v[-2], plot_sumcharge_target_v[-2]],
+                                               y=y_plot,
                                                mode="lines",
                                                line=dict(color=data.target_properties['sums_color'][targ], width=1,
                                                          dash="dot"),
@@ -484,6 +515,7 @@ def main(argv=None):
                                     current_expected_sum_charge = plot_expected_charge_v[-1]
                                     current_expected_sum_charge += (en.iloc[i-1] - plot_expected_charge_t[-2]).\
                                         total_seconds() * data.target_properties['current'][targ][sub_i] * 1e-6 * 0.5
+
                                     plot_expected_charge_v.append(current_expected_sum_charge)
                                     # Current is in nA, Charge is in mC, at 50% efficiency.
                                     plot_expected_charge_t.append(en.iloc[i-1])
@@ -492,9 +524,12 @@ def main(argv=None):
                                     if i < len(sumch):  # Add the start of the next line segment
                                         plot_expected_charge_t.append(st.iloc[i])
                                         plot_expected_charge_v.append(current_expected_sum_charge)
+                                        y_plot = np.array([current_expected_sum_charge, current_expected_sum_charge])
+                                        if args.lumi:
+                                            y_plot = luminosity_scale * y_plot * data.target_properties['density'][targ]
                                         fig.add_trace(
                                             go.Scatter(x=plot_expected_charge_t[-2:],
-                                                       y=[current_expected_sum_charge, current_expected_sum_charge],
+                                                       y=y_plot,
                                                        mode='lines',
                                                        line=dict(color=data.target_properties['sums_color']['expected'],
                                                                  width=1, dash="dot"),
@@ -542,12 +577,21 @@ def main(argv=None):
                             show_legend_ok = True
                             legends_shown.append(targ)
 
+                        y_plot = np.array(plot_sumcharge_target_v)
+                        if args.lumi:
+                            y_plot = luminosity_scale * y_plot * data.target_properties['density'][targ]
+
+                        if args.charge:
+                            line_text = f"Total Charge on {targ}"
+                        else:
+                            line_text = f"Luminosity for {targ}"
+
                         fig.add_trace(
                             go.Scatter(x=plot_sumcharge_target_t,
-                                       y=plot_sumcharge_target_v,
+                                       y=y_plot,
                                        mode="lines",
                                        line=dict(color=data.target_properties['sums_color'][targ], width=3),
-                                       name=f"Total Charge on {targ}",
+                                       name=line_text,
                                        legendgroup="group2",
                                        showlegend=show_legend_ok
                                        ),
@@ -557,45 +601,37 @@ def main(argv=None):
                         # Decorative: add a box with an annotation of the total charge on this target.
                         actual_charge = plot_sumcharge_target_v[-1]/current_plotting_scale
 
+                        y_plot = plot_sumcharge_target_v[-1]
+                        if args.lumi:
+                            y_plot = luminosity_scale * y_plot * data.target_properties['density'][targ]
+
+                        # Store the maximum value for the y-axis, so we don't run off the top.
+                        max_y_value_sums = max(max_y_value_sums, plot_sumcharge_target_v[-1])
+                        max_y_value_lumi = max(max_y_value_lumi, luminosity_scale * plot_sumcharge_target_v[-1]
+                                               * data.target_properties['density'][targ])
+
                         fig.add_trace(
                             go.Scatter(x=[plot_sumcharge_target_t[-1]],
-                                       y=[plot_sumcharge_target_v[-1]],
+                                       y=[y_plot],
                                        mode="markers+text",
                                        marker=dict(color=data.target_properties['sums_color'][targ],
                                                    size=6),
-                                       # text=f"<b>total: {actual_charge:4.2f} mC</b>",
-                                       # textfont=dict(
-                                       #      family="Arial, sans-serif",
-                                       #      color=data.target_properties['sums_color'][targ],
-                                       #      size=16),
-                                       # textposition="top center",
                                        showlegend=False),
                             secondary_y=True)
 
-                        annotation_text = f"<b>total: {actual_charge:4.2f} mC</b>"
+                        if args.lumi:
+                            actual_charge *= luminosity_scale * data.target_properties['density'][targ]
+                            annotation_text = f"<b>total: {actual_charge:4.2f} "+luminosity_scale_unit+ "</b>"
+                        elif args.charge:
+                            annotation_text = f"<b>total: {actual_charge:4.2f} mC</b>"
+                        else:
+                            annotation_text = ""
+
                         text_extra_y_shift = 0
-                        if targ in ["NH3", "ND3"]:
-                            annotation_y_offset = max_y_value_sums*0.03
-                            text_extra_y_shift = 12
-                            fig.add_annotation(
-                                x=plot_sumcharge_target_t[-1],
-                                y=plot_sumcharge_target_v[-1],
-                                xref="x",
-                                yref="y2",
-                                yanchor="bottom",
-                                yshift=6,
-                                text=f" ??? mC",
-                                showarrow=False,
-                                font=dict(
-                                    family="Arial, sans-serif",
-                                    color=data.target_properties['sums_color'][targ],
-                                    size=10),
-                                bgcolor="rgba(255,255,255,0.7)"
-                            )
 
                         fig.add_annotation(
                             x=plot_sumcharge_target_t[-1],
-                            y=plot_sumcharge_target_v[-1],
+                            y=y_plot,
                             xref="x",
                             yref="y2",
                             yanchor="bottom",
@@ -613,21 +649,33 @@ def main(argv=None):
                         showlegend = True if targ == last_targ and sub_i == len(run_period_sub_num)-1 else False
                         if args.debug:
                             print(f"last_targ = {last_targ}  targ: {targ}, sub_i = {sub_i}, showlegend = {showlegend}")
+
                         if data.target_properties['current'][targ][sub_i] > 0.:
+                            y_plot = np.array(plot_expected_charge_v)
+                            trace_name = "Expected charge at 50% up"
+                            if args.lumi:
+                                y_plot *= luminosity_scale * data.target_properties['density'][targ]
+                                trace_name = "Expected lumi at 50% up"
                             fig.add_trace(
                                 go.Scatter(x=plot_expected_charge_t,
-                                           y=plot_expected_charge_v,
+                                           y=y_plot,
                                            mode='lines',
                                            line=dict(color=data.target_properties['sums_color']['expected'], width=2),
-                                           name=f"Expected charge at 50% up",
+                                           name=trace_name,
                                            showlegend=showlegend,
                                            # Only one legend at the end.
                                            legendgroup="group2",
                                            ),
                                 secondary_y=True
                             )
+
                             max_expected_charge.append(plot_expected_charge_v[-1])
-                            print(f"max_expected_charge = {max_expected_charge}  for target {targ}")
+                            max_expected_lumi.append(plot_expected_charge_v[-1] * luminosity_scale *
+                                                     data.target_properties['density'][targ])
+                            if args.debug:
+                                print(f"max_expected_charge = {max_expected_charge[-1]:5.3f}, "
+                                      f"max_lumi={max_expected_lumi[-1]:5.3f}, "
+                                      f" for target {targ}")
 
             # run_sub_annotation = f"<b>E<sub>b</sub> = {run_sub_energy[sub_i]} GeV</b><br>"
             # if data.target_properties['current']['scale'][sub_i] != 1.:
@@ -652,7 +700,7 @@ def main(argv=None):
 
     # End sub run period loop.
     if args.plot:
-        # Set x-axis title
+        # Sign the plot in light grey in small font.
         fig.add_annotation(
             x=0.85,
             xanchor="left",
@@ -672,6 +720,7 @@ def main(argv=None):
             title = "<b>RGE 2024 Progress</b>  FCup"
         else:
             title = "<b>RGE 2024 Progress</b>  IPM2C21"
+
         fig.update_layout(
             title=go.layout.Title(
                 text=title,
@@ -712,6 +761,7 @@ def main(argv=None):
             if args.debug:
               print(f"max_expected_charge: {max_expected_charge}")
             max_y_2nd_scale = 1.1*np.max(max_expected_charge)
+
             # max_y_2nd_scale = 7.
             if args.debug:
                 print(f"max_y_2nd_scale = {max_y_2nd_scale}")
@@ -723,6 +773,26 @@ def main(argv=None):
             fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>",
                              titlefont=dict(size=22),
                              range=[0, max_charge],
+                             secondary_y=True,
+                             tickfont=dict(size=18)
+                             )
+
+        if args.lumi:
+            max_expected_lumi.append(max_y_value_lumi)
+            if args.debug:
+              print(f"max_expected_lumi: {max_expected_lumi}")
+            max_y_2nd_scale = 1.1*np.max(max_expected_lumi)
+
+            if args.debug:
+                print(f"max_y_2nd_scale = {max_y_2nd_scale}")
+
+            if args.max_charge is not None and args.max_charge > 0.:
+                max_lumi = args.max_charge
+            else:
+                max_lumi = max_y_2nd_scale
+            fig.update_yaxes(title_text="<b>Luminosity ("+luminosity_scale_unit+")</b>",
+                             titlefont=dict(size=22),
+                             range=[0, max_lumi],
                              secondary_y=True,
                              tickfont=dict(size=18)
                              )
@@ -749,9 +819,15 @@ def main(argv=None):
             )
 
         print("Show plots.")
-        fig.write_image("RGE2024_progress"+run_period_name+".pdf", width=2048, height=900)
-        fig.write_image("RGE2024_progress"+run_period_name+".png", width=2048, height=900)
-        fig.write_html("RGE2024_progress"+run_period_name+".html")
+        plot_type = ""
+        if args.charge:
+            plot_type = "charge"
+        if args.lumi:
+            plot_type = "lumi"
+
+        fig.write_image("RGE2024_progress"+run_period_name+"_"+plot_type+".pdf", width=2048, height=900)
+        fig.write_image("RGE2024_progress"+run_period_name+"_"+plot_type+".png", width=2048, height=900)
+        fig.write_html("RGE2024_progress"+run_period_name+"_"+plot_type+".html")
         if args.chart:
             charts.plot(fig, filename='RGE_edit', width=2048, height=900, auto_open=True)
         if args.live:
