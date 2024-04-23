@@ -133,6 +133,7 @@ def target_properties():
             'LD2Sn': 'rgba( 135, 135, 255, 0.7)',
         },
         'sums_color': {  # Plot color: r,g,b,a
+            'expected': 'rgba(0, 0, 0, 0.7)',
             'empty': 'rgba(150, 90, 90, 0.8)',
             'C': 'rgba(55, 31, 122, 0.8)',
             'CxC': 'rgba(100, 100, 180, 0.8)',
@@ -141,7 +142,6 @@ def target_properties():
             'LD2': 'rgba(80, 200, 200, 0.8)',
             'CuSn': 'rgba(180, 50, 50, 0.8)',
             'LD2C12': 'rgba(80, 200, 200, 0.8)',
-            'expected': 'rgba(0, 0, 0, 0.7)',
             'NH3': 'rgba(255, 100, 255, 0.7)',
             'LD2Pb': 'rgba(30, 55, 121, 0.8)',
             'LD2C': 'rgba(100, 100, 100, 0.8)',
@@ -246,7 +246,8 @@ def main(argv=None):
     parser.add_argument('-m', '--max_rate', type=float, help="Maximum for date rate axis ", default=None)
     parser.add_argument('-M', '--max_charge', type=float, help="Maximum for charge axis ", default=None)
     parser.add_argument('-r', '--runperiod', type=int,
-                        help="Run sub-period, 0=all, 1, 2, 3, 4, or 12 for 1+2", default=0),
+                        help="Run sub-period, 0=all, 1, 2, 3, 4, or 12 for 1+2", default=0)
+    parser.add_argument('-x', '--extra', type=int, help="Special bit-wise configuration.", default=0)
     parser.add_argument('--return_data', action="store_true", help="Internal use: return the data at end.", default=None)
 
     continue_charge_sums = False
@@ -289,7 +290,7 @@ def main(argv=None):
     run_sub_y_placement = [0.90]
     run_period_name = ""
 
-    Excluded_runs = []   # Explicitly exclude these runs from all further processing.
+    excluded_runs = []   # Explicitly exclude these runs from all further processing.
 
     run_period_sub_num = range(len(run_sub_periods))
     if args.runperiod == 0:
@@ -309,9 +310,9 @@ def main(argv=None):
     max_expected_charge = []
     max_expected_lumi = []
 
-    if args.plot:
-        fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
 
+    excel_output = None
     if args.excel:
         excel_output = pd.DataFrame()
 
@@ -344,7 +345,7 @@ def main(argv=None):
 
         targets = '.*'
 
-        for r in Excluded_runs:
+        for r in excluded_runs:
             if r in data.All_Runs.index:
                data.All_Runs.drop(r, inplace=True)
 
@@ -360,12 +361,10 @@ def main(argv=None):
             plot_runs = plot_runs.loc[~plot_runs.index.isin(calib_run_numbers)]  # Take the calibration runs out.
         else:
             calib_run_numbers = []
-            calib_runs = []
-
+            calib_runs = None
 
     #    calib_starts = calib_runs["start_time"]
     #    calib_ends = calib_runs["end_time"]
-
 
         starts = plot_runs["start_time"]
         ends = plot_runs["end_time"]
@@ -426,7 +425,7 @@ def main(argv=None):
                            ),
                     secondary_y=False, )
 
-            if len(calib_runs) > 0:
+            if calib_runs is not None and len(calib_runs) > 0:
                 fig.add_trace(
                      go.Bar(x=calib_runs['center'],
                             y=calib_runs['event_rate'],
@@ -486,6 +485,14 @@ def main(argv=None):
                             plot_expected_charge_t = [st.iloc[0]]
                             plot_expected_charge_v = [0]
 
+                            # Extra option bit0 = Adjust for PB and C targets by request of Will Brooks, April 20, 2024.
+                            if args.extra & 0x01:
+                                data.target_properties['sums_color']['expected'] = "rgba(255, 20, 0, 0.7)"
+                                if targ == "LD2Pb":
+                                  plot_expected_charge_t = [datetime(2024, 3, 17, 8, 0)]
+                                elif targ == "LD2C":
+                                   plot_expected_charge_t = [datetime(2024, 4, 9, 8, 0)]
+
                         for i in range(1, len(sumch)):
                             # Detect if there is a run number gap and also
                             # check if all the intermediate runs have the same target. If so, these were calibration
@@ -499,6 +506,7 @@ def main(argv=None):
                                 y_plot = np.array([plot_sumcharge_target_v[-2], plot_sumcharge_target_v[-2]])
                                 if args.lumi:
                                     y_plot = luminosity_scale * y_plot * data.target_properties['density'][targ]
+
 
                                 fig.add_trace(
                                     go.Scatter(x=[en.iloc[i-1], st.iloc[i]],
@@ -579,7 +587,8 @@ def main(argv=None):
 
                         y_plot = np.array(plot_sumcharge_target_v)
                         if args.lumi:
-                            y_plot = luminosity_scale * y_plot * data.target_properties['density'][targ]
+                            # We need to carefully slice around the None values to avoid float*NoneType error.
+                            y_plot[y_plot != None] *= luminosity_scale * data.target_properties['density'][targ]
 
                         if args.charge:
                             line_text = f"Total Charge on {targ}"
@@ -603,7 +612,7 @@ def main(argv=None):
 
                         y_plot = plot_sumcharge_target_v[-1]
                         if args.lumi:
-                            y_plot = luminosity_scale * y_plot * data.target_properties['density'][targ]
+                            y_plot *= luminosity_scale * data.target_properties['density'][targ]
 
                         # Store the maximum value for the y-axis, so we don't run off the top.
                         max_y_value_sums = max(max_y_value_sums, plot_sumcharge_target_v[-1])
@@ -654,13 +663,20 @@ def main(argv=None):
                             y_plot = np.array(plot_expected_charge_v)
                             trace_name = "Expected charge at 50% up"
                             if args.lumi:
-                                y_plot *= luminosity_scale * data.target_properties['density'][targ]
+                                y_plot[y_plot != None] *= luminosity_scale * data.target_properties['density'][targ]
                                 trace_name = "Expected lumi at 50% up"
+
+                            if args.extra & 0x01:
+                                width = 5
+                            else:
+                                width = 2
+
                             fig.add_trace(
                                 go.Scatter(x=plot_expected_charge_t,
                                            y=y_plot,
                                            mode='lines',
-                                           line=dict(color=data.target_properties['sums_color']['expected'], width=2),
+                                           line=dict(color=data.target_properties['sums_color']['expected'],
+                                                     width=width),
                                            name=trace_name,
                                            showlegend=showlegend,
                                            # Only one legend at the end.
