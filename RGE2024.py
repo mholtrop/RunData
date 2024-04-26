@@ -55,6 +55,9 @@ def target_properties():
             'ND3': 'ND3',
             'CH2': 'CH2',
             'CD2': 'CD2',
+            'Pb': 'Pb',
+            'Pb + Empty': 'Pb',
+            'Empty + Pb': 'Pb',
             'LD2 + Pb': 'LD2Pb',
             'LD2 + C': 'LD2C',
             'LD2 + Al': 'LD2Al',
@@ -76,6 +79,7 @@ def target_properties():
             'CuSn': 0.08333 + 0.125,  # Cu and Sn, the LD2 is empty.
             'LD2C12': 2*0.440,  # Two foils, the LD2 is empty.
             'NH3': 0.820,
+            'Pb':  0.152,  # Lead
             'LD2Pb': 0.152,  # target density for solid only in g/cm^2. Values from Hayk Hakobyan.
             'LD2C': 0.257,   # ...
             'LD2Al': 0.314,  # ...
@@ -94,6 +98,7 @@ def target_properties():
             'LD2C12': [50., 50., 50., 50.],
             'CH2': [125., 125., 125., 125.],
             'NH3': [125., 125., 125., 125.],
+            'Pb': [150., 150., 150., 150.],
             'LD2Pb': [70., 70., 70., 70.],
             'LD2C': [85., 85., 85., 85.],
             'LD2Al': [80., 80., 80., 80.],
@@ -109,6 +114,7 @@ def target_properties():
             'CuSn': 1,
             'LD2C12': 1,
             'NH3': 1,
+            'Pb': 1,
             'LD2Pb': 1,
             'LD2C': 1,
             'LD2Al': 1,
@@ -126,6 +132,7 @@ def target_properties():
             'LD2C12': 'rgba(120, 120, 250, 0.7)',
             'calibration': 'rgba(220,220,220,0.5)',
             'NH3': 'rgba(0, 100, 255, 0.7)',
+            'Pb': 'rgba( 50, 80, 115, 0.7)',
             'LD2Pb': 'rgba( 90, 125, 215, 0.7)',
             'LD2C': 'rgba( 80, 80, 80, 0.7)',
             'LD2Al': 'rgba( 140, 200, 250, 0.7)',
@@ -143,6 +150,7 @@ def target_properties():
             'CuSn': 'rgba(180, 50, 50, 0.8)',
             'LD2C12': 'rgba(80, 200, 200, 0.8)',
             'NH3': 'rgba(255, 100, 255, 0.7)',
+            'Pb': 'rgba( 30, 50, 80, 0.8)',
             'LD2Pb': 'rgba(30, 55, 121, 0.8)',
             'LD2C': 'rgba(100, 100, 100, 0.8)',
             'LD2Al': 'rgba(10, 125, 200, 0.8)',
