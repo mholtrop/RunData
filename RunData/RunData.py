@@ -91,7 +91,7 @@ warnings.filterwarnings("ignore", 'This pattern has match groups')   # Turn off 
 class RunData:
 
     def __init__(self, i_am_at_jlab=False, cache_file=None, sqlcache=True,
-                 username=None, password=None):
+                 username=None, password=None, debug=0):
         """ Set things up. If not at JLab you will be asked for CUE username and password.
         sqlcache=False will prevent caching querries in a local sqlite3 database.
         sqlcache='mysql://user.pwd@host/db' will use that DB as the cache. String is a sqlalchemy style DB string.
@@ -122,7 +122,7 @@ class RunData:
         self.atten_dict = {}
         self.at_jlab = i_am_at_jlab
         self.All_Runs = None
-        self._debug = 0
+        self._debug = debug
 
         self.Current_Channel = "scaler_calc1b"  # Mya Channel for the current from FCUP.
         self.LiveTime_Channel = "B_DAQ_HPS:TS:livetime"  # Mya Channel for the livetime.
@@ -137,7 +137,10 @@ class RunData:
 
         self.start_rcdb()
         self.start_cache(sqlcache)
-        self.Mya = MyaData(i_am_at_jlab, username=username, password=password, cache=self._cache_engine)
+        self.Mya = MyaData(i_am_at_jlab, username=username, password=password, cache=self._cache_engine,
+                           debug=self.debug)
+        if not self.Mya.is_connected:
+            print("Connecting to the MYA system failed.")
 
     @property
     def debug(self):
@@ -890,6 +893,8 @@ class RunData:
             elif type(self.Production_run_type) is str:
                 if self.debug > 5:
                     print(f"select_good_runs: rnum={rnum:6d} run_type: '{self.All_Runs.loc[rnum, 'run_type']}'")
+
+                test_str = self.All_Runs.loc[rnum, "run_type"]
                 if self.All_Runs.loc[rnum, "run_type"] is not None and \
                         re.match(self.Production_run_type, self.All_Runs.loc[rnum, "run_type"]):
                     test1 = True

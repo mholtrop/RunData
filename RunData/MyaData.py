@@ -1,6 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-
+#
+# This package is part of RunData and will retrieve MYA data from JLAB using https request.
+#
+# NOTE:
+# When using the Python requests package > 2.29.0, you may get an error about the TLS handshake. See this article:
+# https://quentin.pradet.me/blog/fixing-sslv3_alert_handshake_failure-with-urllib3-20.html on what is going on and
+# the **** in the ***, er, relative difficulty, to fix it. So, just down grade to requests 2.29.0 until JLab fixes
+# their server?
+#
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
@@ -29,7 +37,7 @@ class MyaData:
     will be interpolated to have the same time intervals as the first channel.
     """
 
-    def __init__(self, i_am_at_jlab=False, username=None, password=None, cache=None):
+    def __init__(self, i_am_at_jlab=False, username=None, password=None, cache=None, debug=0):
         """Connect to the Mya database using MyQuery.
         At JLab, no password is needed, but offsite we need a password to connect to the epicsweb server.
         If needed and not provided, ask for the CUE username and password to setup the connection.
@@ -47,7 +55,7 @@ class MyaData:
         """
 
         self.at_jlab = i_am_at_jlab
-        self._debug = 0
+        self._debug = debug
         self._session = requests.session()
         self._cache_engine = None
         self.start_cache_engine(cache)
@@ -80,6 +88,10 @@ class MyaData:
                     password = getpass.getpass("Password: ")
 
             url = "https://epicsweb.jlab.org/"
+            if self.debug > 2:
+                print(f"Connecting to {url}")
+                print(f"Username: {username} Password: ********")
+
             try:
                 # page =
                 self._session.get(url)
@@ -91,6 +103,10 @@ class MyaData:
                 print(e)
                 print("Session connecting to epicsweb.jlab.org failed. ")
                 self._session = None
+
+    @property
+    def is_connected(self):
+        return self._session is not None
 
     @property
     def debug(self):
