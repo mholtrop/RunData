@@ -137,7 +137,7 @@ def target_properties():
             'LD2C': 'rgba( 80, 80, 80, 0.7)',
             'LD2Al': 'rgba( 140, 200, 250, 0.7)',
             'LD2Cu': 'rgba( 250, 100, 100, 0.7)',
-            'LD2Sn': 'rgba( 135, 135, 255, 0.7)',
+            'LD2Sn': 'rgba( 100, 180, 100,0.7)',
         },
         'sums_color': {  # Plot color: r,g,b,a
             'expected': 'rgba(0, 0, 0, 0.7)',
@@ -155,7 +155,7 @@ def target_properties():
             'LD2C': 'rgba(100, 100, 100, 0.8)',
             'LD2Al': 'rgba(10, 125, 200, 0.8)',
             'LD2Cu': 'rgba(145, 10, 10, 0.8)',
-            'LD2Sn': 'rgba(80, 80, 255, 0.8)',
+            'LD2Sn': 'rgba(60, 100, 60, 0.8)',
         },
     }
 
@@ -284,11 +284,13 @@ def main(argv=None):
         at_jlab = False
 
     if not args.nocache:
-        data = RunData(cache_file="RGE.sqlite3", i_am_at_jlab=at_jlab)
+        data = RunData(cache_file="RGE.sqlite3", i_am_at_jlab=at_jlab, debug=args.debug)
     else:
-        data = RunData(cache_file="", sqlcache=False, i_am_at_jlab=at_jlab)
-    # data._cache_engine=None   # Turn OFF cache?
-    data.debug = args.debug
+        data = RunData(cache_file="", sqlcache=False, i_am_at_jlab=at_jlab, debug=args.debug)
+
+    if data is None or not data.Mya.is_connected:
+        print("Could not initialize the RunData object.")
+        return
 
     run_sub_periods = [
         (datetime(2024, 4, 3, 8, 0), datetime.now())
