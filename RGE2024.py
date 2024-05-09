@@ -848,7 +848,7 @@ def main(argv=None):
 
         fig.write_image("RGE2024_progress"+run_period_name+"_"+plot_type+"_unzoom.pdf", width=2048, height=900)
         fig.write_image("RGE2024_progress"+run_period_name+"_"+plot_type+"_unzoom.png", width=2048, height=900)
-        fig.write_html("RGE2024_progress"+run_period_name+"_"+plot_type+"._unzoom.html")
+        fig.write_html("RGE2024_progress"+run_period_name+"_"+plot_type+"_unzoom.html")
 
         if args.max_rate is not None and args.max_rate > 0:
             max_rate = args.max_rate
