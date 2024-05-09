@@ -37,6 +37,7 @@ def target_properties():
             'empty': 'empty',
             'None': 'empty',
             'Unknown': 'empty',
+            'empty+Wire': 'empty',
             'LH2': 'LH2',
             'H': 'LH2',
             'Liquid Hydrogen Target': 'LH2',
@@ -176,6 +177,7 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data_lo
     runs["event_rate"] = [runs.loc[r, 'event_count'] / runs.loc[r, 'dt'] for r in runs.index]
 
     runs["hover"] = [f"Run: {r}<br />"
+    #                 f"Target: {runs.loc[r, 'target']}<br />"
                      f"Trigger:{runs.loc[r, 'run_config']}<br />"
                      f"Start: {runs.loc[r, 'start_time']}<br />"
                      f"End: {runs.loc[r, 'end_time']}<br />"
@@ -192,7 +194,7 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data_lo
 def used_triggers():
     """Set up the triggers used."""
     good_triggers = '.*'
-    calibration_triggers = []
+    calibration_triggers = ['rge_v1.0_30kHz_200MeV.cnf']
 
     return good_triggers, calibration_triggers
 
@@ -251,7 +253,7 @@ def main(argv=None):
     parser.add_argument('-f', '--date_from', type=str, help="Plot from date, eg '2021,11,09' ", default=None)
     parser.add_argument("-F", '--fcup', action="store_true", help="Use the Faraday cup instead of IPM2C21A.")
     parser.add_argument('-t', '--date_to', type=str, help="Plot to date, eg '2022,01,22' ", default=None)
-    parser.add_argument('-m', '--max_rate', type=float, help="Maximum for date rate axis ", default=None)
+    parser.add_argument('-m', '--max_rate', type=float, help="Maximum for dat axis ", default=None)
     parser.add_argument('-M', '--max_charge', type=float, help="Maximum for charge axis ", default=None)
     parser.add_argument('-r', '--runperiod', type=int,
                         help="Run sub-period, 0=all, 1, 2, 3, 4, or 12 for 1+2", default=0)
@@ -296,11 +298,16 @@ def main(argv=None):
         (datetime(2024, 4, 3, 8, 0), datetime.now())
         ]
 
+    # Requested to adjust to the actual start date of run period. (Will Brooks request, April 20, 2024)
+    if args.extra & 0x01:
+        run_sub_periods[0] = (datetime(2024, 3, 17, 8, 0), datetime.now())
+
     run_sub_energy = [10.]
     run_sub_y_placement = [0.90]
     run_period_name = ""
 
     excluded_runs = []   # Explicitly exclude these runs from all further processing.
+    ignore_interspersed_runs = [20072]  # Ignore these runs when there is a gap in the run numbers.
 
     run_period_sub_num = range(len(run_sub_periods))
     if args.runperiod == 0:
@@ -482,6 +489,11 @@ def main(argv=None):
 
                 for targ in data.target_properties['sums_color']:
                     sumch = plot_runs.loc[plot_runs["target"] == targ, "sum_charge_targ"]*current_plotting_scale
+
+                    # Drop the the runs that should not add into the sum charge and count as a break in the line.
+                    sumch.drop(set(sumch.keys()) & set(ignore_interspersed_runs), inplace=True)
+                    compare_runs = data.All_Runs.drop(ignore_interspersed_runs)
+
                     st = plot_runs.loc[plot_runs["target"] == targ, "start_time"]
                     en = plot_runs.loc[plot_runs["target"] == targ, "end_time"]
 
@@ -495,12 +507,12 @@ def main(argv=None):
                             plot_expected_charge_t = [st.iloc[0]]
                             plot_expected_charge_v = [0]
 
-                            # Extra option bit0 = Adjust for PB and C targets by request of Will Brooks, April 20, 2024.
-                            if args.extra & 0x01:
+                            # Extra option bit1 = Adjust for PB and C targets (request from Will Brooks, April 20, 2024)
+                            if args.extra & 0x02:
                                 data.target_properties['sums_color']['expected'] = "rgba(255, 20, 0, 0.7)"
-                                if targ == "LD2Pb":
-                                  plot_expected_charge_t = [datetime(2024, 3, 17, 8, 0)]
-                                elif targ == "LD2C":
+                                #if targ == "LD2Pb":
+                                #  plot_expected_charge_t = [datetime(2024, 3, 17, 8, 0)]
+                                if targ == "LD2C":
                                    plot_expected_charge_t = [datetime(2024, 4, 9, 8, 0)]
 
                         for i in range(1, len(sumch)):
@@ -508,15 +520,16 @@ def main(argv=None):
                             # check if all the intermediate runs have the same target. If so, these were calibration
                             # or junk runs and we continue normally. If there were other targets, we make a break in the
                             # line.
-                            if sumch.keys()[i] - sumch.keys()[i - 1] > 1 and \
-                                    not np.all(data.All_Runs.loc[sumch.keys()[i-1]:sumch.keys()[i]].target == targ):
+
+                            if sumch.keys()[i] - sumch.keys()[i - 1] > 1 \
+                                    and not np.all(compare_runs.loc[sumch.keys()[i-1]:sumch.keys()[i]].target == targ):
+
                                 plot_sumcharge_target_t.append(st.iloc[i])
                                 plot_sumcharge_target_v.append(None)        # None causes line break.
 
                                 y_plot = np.array([plot_sumcharge_target_v[-2], plot_sumcharge_target_v[-2]])
                                 if args.lumi:
                                     y_plot = luminosity_scale * y_plot * data.target_properties['density'][targ]
-
 
                                 fig.add_trace(
                                     go.Scatter(x=[en.iloc[i-1], st.iloc[i]],
@@ -676,7 +689,7 @@ def main(argv=None):
                                 y_plot[y_plot != None] *= luminosity_scale * data.target_properties['density'][targ]
                                 trace_name = "Expected lumi at 50% up"
 
-                            if args.extra & 0x01:
+                            if args.extra & 0x02:
                                 width = 5
                             else:
                                 width = 2
@@ -766,11 +779,8 @@ def main(argv=None):
             )
         )
 
-        if args.max_rate is not None and args.max_rate > 0:
-            max_rate = args.max_rate
-        else:
-            all_runs = (plot_runs.selected == True)
-            max_rate = 1.05*plot_runs.loc[all_runs, 'event_rate'].max()
+        all_runs = (plot_runs.selected == 1)
+        max_rate = 1.05*plot_runs.loc[all_runs, 'event_rate'].max()
 
         # Set y-axes titles
         fig.update_yaxes(
@@ -785,7 +795,7 @@ def main(argv=None):
         if args.charge:
             max_expected_charge.append(max_y_value_sums)
             if args.debug:
-              print(f"max_expected_charge: {max_expected_charge}")
+                print(f"max_expected_charge: {max_expected_charge}")
             max_y_2nd_scale = 1.1*np.max(max_expected_charge)
 
             # max_y_2nd_scale = 7.
@@ -829,6 +839,29 @@ def main(argv=None):
             tickfont=dict(size=18),
         )
 
+        print("Write out plots.")
+        plot_type = ""
+        if args.charge:
+            plot_type = "charge"
+        if args.lumi:
+            plot_type = "lumi"
+
+        fig.write_image("RGE2024_progress"+run_period_name+"_"+plot_type+"_unzoom.pdf", width=2048, height=900)
+        fig.write_image("RGE2024_progress"+run_period_name+"_"+plot_type+"_unzoom.png", width=2048, height=900)
+        fig.write_html("RGE2024_progress"+run_period_name+"_"+plot_type+"._unzoom.html")
+
+        if args.max_rate is not None and args.max_rate > 0:
+            max_rate = args.max_rate
+            # Set y-axes titles
+            fig.update_yaxes(
+                title_text="<b>Event rate kHz</b>",
+                titlefont=dict(size=22),
+                secondary_y=False,
+                tickfont=dict(size=18),
+                # range=[0, 1.05*max(25., plot_runs.loc[runs, 'event_rate'].max())]
+                range=[0, max_rate]
+            )
+
         if (args.date_from is not None) or (args.date_to is not None):
             if args.date_from is not None:
                 date_from = datetime.strptime(args.date_from, '%Y,%m,%d')
@@ -844,16 +877,11 @@ def main(argv=None):
                 range=[date_from, date_to]
             )
 
-        print("Show plots.")
-        plot_type = ""
-        if args.charge:
-            plot_type = "charge"
-        if args.lumi:
-            plot_type = "lumi"
+        # Write out again with the zoomed in x-axis.
+        fig.write_image("RGE2024_progress" + run_period_name + "_" + plot_type + ".pdf", width=2048, height=900)
+        fig.write_image("RGE2024_progress" + run_period_name + "_" + plot_type + ".png", width=2048, height=900)
+        fig.write_html("RGE2024_progress" + run_period_name + "_" + plot_type + ".html")
 
-        fig.write_image("RGE2024_progress"+run_period_name+"_"+plot_type+".pdf", width=2048, height=900)
-        fig.write_image("RGE2024_progress"+run_period_name+"_"+plot_type+".png", width=2048, height=900)
-        fig.write_html("RGE2024_progress"+run_period_name+"_"+plot_type+".html")
         if args.chart:
             charts.plot(fig, filename='RGE_edit', width=2048, height=900, auto_open=True)
         if args.live:
