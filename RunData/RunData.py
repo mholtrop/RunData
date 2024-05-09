@@ -718,7 +718,7 @@ class RunData:
         self.All_Runs = pd.DataFrame(runs)
         self.All_Runs["target"] = [x.strip() for x in self.All_Runs["target"]]   # Squeeze spaces.
 
-        self.All_Runs.loc[:, "selected"] = True  # Default to selected
+        self.All_Runs.loc[:, "selected"] = 1  # Default to selected
         # Rewrite the run_config to eliminate the long directory name, which is not useful.
         self.All_Runs.loc[:, "run_config"] = [self.All_Runs.loc[r, "run_config"].split('/')[-1]
                                               for r in self.All_Runs.index]
@@ -913,9 +913,12 @@ class RunData:
             if not test2:
                 if trigger not in self.not_good_triggers:
                     self.not_good_triggers.append(trigger)
-            self.All_Runs.loc[rnum, "selected"] = test1 & test2
-            if test1 & test2:
+
+            if test1 and test2:
+                self.All_Runs.loc[rnum, "selected"] = 1
                 good_runs.append(rnum)
+            else:
+                self.All_Runs.loc[rnum, "selected"] = 0
 
         return good_runs
 
