@@ -237,10 +237,17 @@ def main(argv=None):
         argv.insert(0, sys.argv[0])  # add the program name.
 
     parser = argparse.ArgumentParser(
-        description="""Make a plot, an excel spreadsheet and/or an sqlite3 database for the current run using
-        conditions from the RCDB and MYA.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Make a plot, an excel spreadsheet and/or an sqlite3 database for the current run using "
+        "conditions from the RCDB and MYA.",
         epilog="""
-        For more info, read the script ^_^, or email maurik@physics.unh.edu.""")
+Extra options:
+    bit0: 0x01: Plot only after the beam down event.
+    bit1: 0x02: Keep the expected charge line going during the beam down events & make thicker red line.
+    bit2: 0x04: Put a gray box in the plot for the beam down periods.
+    bit3: 0x08: Create the zoomed and unzoomed versions of the plots.
+            
+For more info, read the script ^_^, or email maurik@physics.unh.edu.""")
 
     parser.add_argument('-d', '--debug', action="count", help="Be more verbose if possible. ", default=0)
     parser.add_argument('-N', '--nocache', action="store_true", help="Do not use a sqlite3 cache")
@@ -295,12 +302,12 @@ def main(argv=None):
         return
 
     run_sub_periods = [
-        (datetime(2024, 4, 3, 8, 0), datetime.now())
+        (datetime(2024, 3, 17, 8, 0), datetime.now())
         ]
 
-    # Requested to adjust to the actual start date of run period. (Will Brooks request, April 20, 2024)
+    # Plot only the part of the run after the beam down event.
     if args.extra & 0x01:
-        run_sub_periods[0] = (datetime(2024, 3, 17, 8, 0), datetime.now())
+        run_sub_periods[0] = (datetime(2024, 4, 3, 8, 0), datetime.now())
 
     beam_down_periods = []
     if args.extra & 0x04:
@@ -878,9 +885,10 @@ def main(argv=None):
         if args.lumi:
             plot_type = "lumi"
 
-        fig.write_image("RGE2024_progress"+run_period_name+"_"+plot_type+"_unzoom.pdf", width=2048, height=900)
-        fig.write_image("RGE2024_progress"+run_period_name+"_"+plot_type+"_unzoom.png", width=2048, height=900)
-        fig.write_html("RGE2024_progress"+run_period_name+"_"+plot_type+"_unzoom.html")
+        if args.extra & 0x08:
+            fig.write_image("RGE2024_progress"+run_period_name+"_"+plot_type+"_unzoom.pdf", width=2048, height=900)
+            fig.write_image("RGE2024_progress"+run_period_name+"_"+plot_type+"_unzoom.png", width=2048, height=900)
+            fig.write_html("RGE2024_progress"+run_period_name+"_"+plot_type+"_unzoom.html")
 
         if args.max_rate is not None and args.max_rate > 0:
             max_rate = args.max_rate
@@ -909,7 +917,7 @@ def main(argv=None):
                 range=[date_from, date_to]
             )
 
-        # Write out again with the zoomed in x-axis.
+        # Write out again with the zoomed in x-axis and/or y-axis.
         fig.write_image("RGE2024_progress" + run_period_name + "_" + plot_type + ".pdf", width=2048, height=900)
         fig.write_image("RGE2024_progress" + run_period_name + "_" + plot_type + ".png", width=2048, height=900)
         fig.write_html("RGE2024_progress" + run_period_name + "_" + plot_type + ".html")
