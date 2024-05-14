@@ -302,12 +302,21 @@ def main(argv=None):
     if args.extra & 0x01:
         run_sub_periods[0] = (datetime(2024, 3, 17, 8, 0), datetime.now())
 
+    beam_down_periods = []
+    if args.extra & 0x04:
+        beam_down_periods = [(datetime(2024, 3, 21, 10, 30),
+                              datetime(2024, 4, 3, 8, 0))]
+#                             (datetime(2024, 4, 8, 8, 30),
+#                              datetime(2024, 4, 11, 0, 0))]
+
     run_sub_energy = [10.]
     run_sub_y_placement = [0.90]
     run_period_name = ""
 
     excluded_runs = []   # Explicitly exclude these runs from all further processing.
-    ignore_interspersed_runs = [20072]  # Ignore these runs when there is a gap in the run numbers.
+    ignore_interspersed_runs = []
+    if args.extra & 0x02:
+        ignore_interspersed_runs = [20072]  # Ignore these runs when there is a gap in the run numbers.
 
     run_period_sub_num = range(len(run_sub_periods))
     if args.runperiod == 0:
@@ -838,6 +847,29 @@ def main(argv=None):
             titlefont=dict(size=22),
             tickfont=dict(size=18),
         )
+
+        for i in range(len(beam_down_periods)):
+            fig.add_vrect(x0=beam_down_periods[i][0], x1=beam_down_periods[i][1],
+                          fillcolor="rgba(190, 190, 190, 0.5)", line_width=0)
+            current_expected_sum_charge = (beam_down_periods[i][1] - beam_down_periods[i][0]).\
+                total_seconds() * data.target_properties['current']['LD2Pb'][0] * 1e-6 * 0.5
+            lumi_expected = current_expected_sum_charge * luminosity_scale * data.target_properties['density']['LD2Pb']
+            mid_datetime = beam_down_periods[i][0] + (beam_down_periods[i][1] - beam_down_periods[i][0])/2
+            fig.add_annotation(
+                x=mid_datetime,
+                y=0.8,
+                xref="x",
+                yref="paper",
+                text=f"<b>Beam Down</b><br>\n"
+                     f"Lost charge: {current_expected_sum_charge:5.3f} mC<br>\n"
+                     f"Lost lumi:   {lumi_expected:5.3f} "+luminosity_scale_unit,
+                showarrow=False,
+                font=dict(
+                    family="Arial, sans-serif",
+                    color="rgba(10,10,10,0.9)",
+                    size=12),
+                #bgcolor="rgba(255,255,255,0.6)"
+            )
 
         print("Write out plots.")
         plot_type = ""
