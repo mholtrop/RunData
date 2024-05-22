@@ -74,12 +74,16 @@ LT_clock = data.Mya.get("B_DAQ:livetime_pulser", start_time, end_time,
                         do_not_clean=True, run_number=1)
 
 #
-# Clean up the MYA data. Sometimes extra columns, 'x' an 't' are added. Drop them.
+# Clean up the MYA data. Sometimes extra columns, 'x' an 't' are added. The seem to be caused when there was a network interruptopn.
+# We need to drop them. We also need to drop entries with the same time. These are rare. They are not perfectly correlated with the
+# network issues.
 #
 for dat in [current_IPM2C21A, current_IPM2C24A, current_IPM2H01, current_scalerS2b, current_FCup, FCup_offset, FCup_slope, FCup_beam_stop, FCup_beam_atten, LT_DAQ, LT_Trigger, LT_clock]:
     if 'x' in dat.keys():
         dat.drop(columns=['x','t'], inplace=True)
-
+    duplicates = dat.loc[((dat.time.shift(-1)==dat.time))].index  # Selects all but the last duplicate.
+    if len(duplicates):
+        dat.drop(duplicates, inplace=True)  # Drop them.
 #
 # We use the IPM2C21A channel to detect the periods where the beam was tripped. 
 # We find the trip times with the condition that the beam *current* is less than 0.01, and the measurement before was
