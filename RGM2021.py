@@ -9,6 +9,7 @@ import sys
 import os
 from datetime import datetime, timedelta
 import numpy as np
+import pandas as pd
 
 from RunData.RunData import RunData
 
@@ -252,7 +253,7 @@ def main(argv=None):
 
     if args.excel:
         print("Write new Excel table.")
-        output = plot_runs.append(calib_runs).sort_index()
+        output = pd.concat([plot_runs,calib_runs]).sort_index()
         output.to_excel("RGM2021_progress.xlsx",
                         columns=['start_time', 'end_time', 'target', 'beam_energy', 'run_config', 'selected',
                                  'event_count', 'sum_event_count', 'charge', 'sum_charge', 'luminosity', 'sum_lumi',
