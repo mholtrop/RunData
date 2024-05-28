@@ -251,7 +251,7 @@ class MyaData:
             'a': 'on'}  # a = on - Adjust the ms timestamp to the server timezone.
 
         if self.debug > 3:
-            print("Fetching channel '{}'".format(channel))
+            print(f"Fetching channel '{channel}' from {start} to {end} for deployment {deployment}.")
 
         try:
             if self.debug > 5:
