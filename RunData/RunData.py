@@ -685,10 +685,14 @@ class RunData:
 
             for c in self.Useful_conditions:
                 value = R.get_condition_value(c)
-                if value is not None:          # Try to scrub for junk input. This may need expanding depending on junk.
-                    run_dict[c] = value
-                else:
-                    run_dict[c] = "None"
+                run_dict[c] = value
+
+                # It seems better perhaps, to stay with None. In a dataframe the None becomes Nan for numeric columns,
+                # which is easier to handle than "None" which turns the column one of objects.
+                # if value is not None:     # Try to scrub for junk input. This may need expanding depending on junk.
+                #     run_dict[c] = value
+                # else:
+                #     run_dict[c] = "None"
 
                 # Do Target name translation if the target_properties are set and contain an entry, "names"
                 if (c == "target") and (self.target_properties is not None) and ("names" in self.target_properties):
@@ -761,7 +765,9 @@ class RunData:
                                self.All_Runs.loc[runnumber, "end_time"],
                                run_number=runnumber)
 
-        current.fillna(0, inplace=True)     # Replace Nan or None with 0
+        if np.any(current.value.isna()):
+            current.loc[current.value.isna(), 'value'] = 0.  # Replace Nan or None with 0
+            # current.fillna(dict(value=0.), inplace=True)     # Replace Nan or None with 0
         live_time = self.Mya.get(livetime_channel,
                                  self.All_Runs.loc[runnumber, "start_time"],
                                  self.All_Runs.loc[runnumber, "end_time"],
@@ -777,10 +783,13 @@ class RunData:
                                       'time': [start, end]})
 
         if len(live_time) < 3:
-            live_time.fillna(1., inplace=True)  # Replace Nan or None with 1 - no data returned.
+            if np.any(live_time.value.isna()):
+                live_time.loc[live_time.value.isna(), 'value'] = 1.
+                #live_time.fillna(dict(value=1.), inplace=True)  # Replace Nan or None with 1 - no data returned.
         else:
-            live_time.fillna(0, inplace=True)  # Replace Nan or None with 0
-            live_time.loc[live_time.value.isna(), 'value'] = 0
+            if np.any(live_time.value.isna()):
+                live_time.loc[live_time.value.isna(), 'value'] = 0.
+                # Replace Nan or None with 0
 
         if current_channel == "scaler_calc1b":
             # Getting the target thickness dependend FCup charge correction
