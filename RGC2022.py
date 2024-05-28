@@ -37,6 +37,8 @@ def rgc_2022_target_properties():
             'Empty': 'empty',
             'empty': 'empty',
             'Empty  - Raster': 'empty',
+            'Empty Empty': 'empty',
+            'Empty with L He bath=72%': 'empty',
             'None': 'empty',
             'LH2': 'LH2',
             'H': 'LH2',
@@ -49,6 +51,9 @@ def rgc_2022_target_properties():
             '12C': 'C',
             'Carbon target 2 mm': 'C',
             'NH3': 'NH3',
+            'NH3 polarization +46.5%': 'NH3',
+            'NH3 polarization 46.9%': 'NH3',
+            'NH3 polarization 48.2% 1/2 waveplate OUT': 'NH3',
             'ND3': 'ND3',
             'ND3 Positive': 'ND3',
             'ND3 Negative': 'ND3',
@@ -331,7 +336,11 @@ def main(argv=None):
 
                 if targ in ['NH3', 'ND3']:
                     # also select + polarization
-                    runs_p = runs & (plot_runs.target_polarization != "None") & (plot_runs.target_polarization >= 0.)
+                    if np.any(plot_runs.target_polarization.isna()):
+                        print(f"Warning: Target {targ} has runs with no polarization.")
+                        print(plot_runs.loc[plot_runs.target_polarization == "None"].index)
+                        # (plot_runs.target_polarization != "None")
+                    runs_p = runs & (plot_runs.loc[runs].target_polarization >= 0.)
                     data_x_p = plot_runs.loc[runs_p, 'center']
                     data_y_p = plot_runs.loc[runs_p, 'event_rate']
                     data_width_p = plot_runs.loc[runs_p, 'dt']
