@@ -24,8 +24,39 @@ except ImportError:
     sys.exit(1)
 
 import requests
+
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.poolmanager import PoolManager
+from requests.packages.urllib3.util import ssl_
+
 # from requests.packages.urllib3.exceptions import InsecureRequestWarning
 requests.packages.urllib3.disable_warnings(requests.packages.urllib3.exceptions.InsecureRequestWarning)
+
+CIPHERS = (
+    'ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA384:'
+    'ECDHE-ECDSA-AES256-SHA384:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-SHA256:AES256-SHA'
+)
+
+
+class TlsAdapter(HTTPAdapter):
+    """This code sets the cyphers for the TLS connection to the JLab Mya database. Since they use old ones.
+    See: https://stackoverflow.com/questions/40373115/
+         how-to-select-specific-the-cipher-while-sending-request-via-python-request-modul/46186957#46186957"""
+
+    def __init__(self, ssl_options=0, **kwargs):
+        self.ssl_options = ssl_options
+        super(TlsAdapter, self).__init__(**kwargs)
+
+    def init_poolmanager(self, *pool_args, **pool_kwargs):
+        #ctx = ssl_.create_urllib3_context(ciphers=CIPHERS, cert_reqs=ssl_.CERT_REQUIRED, options=self.ssl_options)
+        ctx = ssl_.create_urllib3_context(ciphers=CIPHERS, cert_reqs=ssl_.CERT_REQUIRED, options=self.ssl_options)
+        # The following is needed to avoid the issue:
+        # ValueError: Cannot set verify_mode to CERT_NONE when check_hostname is enabled.
+        # which is triggered with the verify=False in the get() call.
+        ctx.check_hostname = False
+        self.poolmanager = PoolManager(*pool_args,
+                                       ssl_context=ctx,
+                                       **pool_kwargs)
 
 
 class MyaData:
@@ -57,6 +88,8 @@ class MyaData:
         self.at_jlab = i_am_at_jlab
         self._debug = debug
         self._session = requests.session()
+        self.adapter = TlsAdapter()
+        self._session.mount("https://", self.adapter)
         self._cache_engine = None
         self.start_cache_engine(cache)
         #
@@ -94,14 +127,15 @@ class MyaData:
 
             try:
                 # page =
-                self._session.get(url)
+                print("url = ", url)
+                self._session.get(url, verify=False)
                 payload = {'httpd_username': username, 'httpd_password': password, "login": "Login"}
                 # page =
-                self._session.post(url, data=payload)
+                self._session.post(url, data=payload, verify=False)
                 # print(page.cookies.items())
             except requests.exceptions.ConnectionError as e:
                 print(e)
-                print("Session connecting to epicsweb.jlab.org failed. ")
+                print("Session connecting to epicsweb.jlab.org failed. Probably the $%^&!! certificates.")
                 self._session = None
 
     @property
