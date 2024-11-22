@@ -18,7 +18,7 @@ try:
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
     import plotly.io as pio
-    import chart_studio.plotly as charts
+    # import chart_studio.plotly as charts
 
     pio.renderers.default = "browser"
     pio.templates.default = "plotly_white"
@@ -237,7 +237,7 @@ def main(argv=None):
         # (datetime(2023, 2, 20,  0, 0),  datetime(2023, 2, 25, 0, 0)),
         #(datetime(2023, 10, 4, 6, 0), datetime(2023, 10, 31,0,0)),
         #(datetime(2023, 10, 31, 0, 0), datetime.now())
-        (datetime(2023, 10, 4, 6, 0), datetime(2023,12, 15, 8, 0))
+        (datetime(2023, 10, 4, 6, 0), datetime(2023,12, 15, 12, 0))
         ]
 
     run_sub_energy = [10.]
@@ -307,6 +307,8 @@ def main(argv=None):
             plot_runs = pd.DataFrame()
 
         calib_run_numbers = data.list_selected_runs(targets='.*', run_config=data.Calibration_triggers)
+
+        print("Calibration runs: ", calib_run_numbers)
 
         calib_runs = plot_runs.loc[calib_run_numbers]
     #    calib_starts = calib_runs["start_time"]
