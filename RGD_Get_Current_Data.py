@@ -23,8 +23,8 @@ data = RunData(sqlcache=False, i_am_at_jlab=False)
 #
 # Start time and End time of the data period to fetch.
 
-start_time = datetime(2023, 10, 4, 16, 0, 0)
-end_time = datetime(2023, 12, 15, 5, 0, 0)
+start_time = datetime(2023, 10, 4, 9, 0, 0)
+end_time = datetime(2023, 12, 15, 8, 0, 0)
 output_file_name = "RGD_raw_mya_data.h5"
 
 #

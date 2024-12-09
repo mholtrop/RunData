@@ -99,6 +99,13 @@ class MyaData:
         if self.at_jlab:
             self._url_head = "https://myaweb.acc.jlab.org/myquery/interval"
         else:
+            print("""
+WARNING:
+As of late 2024 remote access to epicsweb.jlab.org is severely complicated due to a new 
+authorization method. This code will not work remotely until I can fix this issue.
+
+            """)
+
             self._url_head = "https://epicsweb.jlab.org/myquery/interval"
             if os.path.exists(os.environ['HOME']+'/.password-store/JLAB/username.gpg'):
                 # We can use the 'pass' utility to get the password safely.
@@ -132,7 +139,7 @@ class MyaData:
                 payload = {'httpd_username': username, 'httpd_password': password, "login": "Login"}
                 # page =
                 self._session.post(url, data=payload, verify=False)
-                # print(page.cookies.items())
+                # print(self._session.cookies.items())
             except requests.exceptions.ConnectionError as e:
                 print(e)
                 print("Session connecting to epicsweb.jlab.org failed. Probably the $%^&!! certificates.")
