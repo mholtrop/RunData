@@ -99,6 +99,12 @@ class MyaData:
         if self.at_jlab:
             self._url_head = "https://myaweb.acc.jlab.org/myquery/interval"
         else:
+            print("""
+WARNING:
+As of late 2024 access to epicsweb.jlab.org is severely complicated due to a new authentication scheme.
+The code will work at JLab, but not from offsite until I can figure out a fix for this issue.
+
+""")
             self._url_head = "https://epicsweb.jlab.org/myquery/interval"
             if os.path.exists(os.environ['HOME']+'/.password-store/JLAB/username.gpg'):
                 # We can use the 'pass' utility to get the password safely.
