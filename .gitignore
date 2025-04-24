@@ -4,6 +4,8 @@
 *.pdf
 *.html
 *.sqlite3
+*.csv
+*.h5
 working_dir/
 
 # Byte-compiled / optimized / DLL files
