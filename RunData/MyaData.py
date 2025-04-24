@@ -47,6 +47,7 @@ class TlsAdapter(HTTPAdapter):
     def __init__(self, ssl_options=0, **kwargs):
         self.ssl_options = ssl_options
         self._proxies = None
+        self._ssh_proc = None
         super(TlsAdapter, self).__init__(**kwargs)
 
     def init_poolmanager(self, *pool_args, **pool_kwargs):
@@ -170,9 +171,9 @@ is started up by the scipt. You must have your ssh setup to do correct password-
 
     def __del__(self):
         # Cleanup
-        self._ssh_proc.terminate()
-        pass
-
+        if self._ssh_proc is not None:
+            self._ssh_proc.terminate()
+    
     @property
     def is_connected(self):
         return self._session is not None
