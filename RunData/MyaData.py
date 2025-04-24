@@ -11,8 +11,9 @@
 #
 import numpy as np
 import pandas as pd
+import time
 from datetime import datetime, timedelta
-
+import subprocess
 import sys
 import os
 
@@ -45,6 +46,7 @@ class TlsAdapter(HTTPAdapter):
 
     def __init__(self, ssl_options=0, **kwargs):
         self.ssl_options = ssl_options
+        self._proxies = None
         super(TlsAdapter, self).__init__(**kwargs)
 
     def init_poolmanager(self, *pool_args, **pool_kwargs):
@@ -97,52 +99,79 @@ class MyaData:
     # Setup the connection to the Mya Database through the MyQuery web interface.
     #
         if self.at_jlab:
-            self._url_head = "https://myaweb.acc.jlab.org/myquery/interval"
+            self._url_head = "https://epicsweb.jlab.org/myquery/interval"
+                # "https://myaweb.acc.jlab.org/myquery/interval"  -- Old URL no longer works.
         else:
             print("""
 WARNING:
 As of late 2024 access to epicsweb.jlab.org is severely complicated due to a new authentication scheme.
 The code will work at JLab, but not from offsite until I can figure out a fix for this issue.
 
+The current attempt will be to use https://epicsweb.jlab.org/myquery/interval though an ssh tunnel that
+is started up by the scipt. You must have your ssh setup to do correct password-less authentication with ssh.
 """)
+
             self._url_head = "https://epicsweb.jlab.org/myquery/interval"
-            if os.path.exists(os.environ['HOME']+'/.password-store/JLAB/username.gpg'):
-                # We can use the 'pass' utility to get the password safely.
-                if self.debug:
-                    print("Using the pass utility to get the JLAB username and password.")
-                import subprocess
-                if username is None:
-                    sub_out = subprocess.run(['pass', 'show', 'JLAB/username'], capture_output=True, text=True)
-                    username = sub_out.stdout.strip()
-                sub_out = subprocess.run(['pass', 'show', 'JLAB/login'], capture_output=True, text=True)
-                if password is None:
-                    password = sub_out.stdout.strip()
-            else:
-                import getpass
-                if username is None:
-                    print("Please enter your CUE login credentials.")
-                    print("Username: ", file=sys.stderr, end="")  # so stdout can be piped.
-                    username = input("")
-                if password is None:
-                    password = getpass.getpass("Password: ")
+            self._proxies = {
+                'http': 'socks5://localhost:8080',
+                'https': 'socks5://localhost:8080',
+            }
 
-            url = "https://epicsweb.jlab.org/"
-            if self.debug > 2:
-                print(f"Connecting to {url}")
-                print(f"Username: {username} Password: ********")
+            # Start the SSH SOCKS5 proxy
+            self._ssh_proc = subprocess.Popen(
+                ["ssh", "-N", "-D", "localhost:8080"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
 
-            try:
-                # page =
-                print("url = ", url)
-                self._session.get(url, verify=False)
-                payload = {'httpd_username': username, 'httpd_password': password, "login": "Login"}
-                # page =
-                self._session.post(url, data=payload, verify=False)
-                # print(page.cookies.items())
-            except requests.exceptions.ConnectionError as e:
-                print(e)
-                print("Session connecting to epicsweb.jlab.org failed. Probably the $%^&!! certificates.")
-                self._session = None
+            # Wait a bit to let the proxy start up
+            time.sleep(2)
+
+            #
+            # OLD CODE THAT NO LONGER WORKS/
+            # self._url_head = "https://epicsweb.jlab.org/myquery/interval"
+            # if os.path.exists(os.environ['HOME']+'/.password-store/JLAB/username.gpg'):
+            #     # We can use the 'pass' utility to get the password safely.
+            #     if self.debug:
+            #         print("Using the pass utility to get the JLAB username and password.")
+            #     import subprocess
+            #     if username is None:
+            #         sub_out = subprocess.run(['pass', 'show', 'JLAB/username'], capture_output=True, text=True)
+            #         username = sub_out.stdout.strip()
+            #     sub_out = subprocess.run(['pass', 'show', 'JLAB/login'], capture_output=True, text=True)
+            #     if password is None:
+            #         password = sub_out.stdout.strip()
+            # else:
+            #     import getpass
+            #     if username is None:
+            #         print("Please enter your CUE login credentials.")
+            #         print("Username: ", file=sys.stderr, end="")  # so stdout can be piped.
+            #         username = input("")
+            #     if password is None:
+            #         password = getpass.getpass("Password: ")
+            #
+            # url = "https://epicsweb.jlab.org/"
+            # if self.debug > 2:
+            #     print(f"Connecting to {url}")
+            #     print(f"Username: {username} Password: ********")
+            #
+            # try:
+            #     # page =
+            #     print("url = ", url)
+            #     self._session.get(url, verify=False)
+            #     payload = {'httpd_username': username, 'httpd_password': password, "login": "Login"}
+            #     # page =
+            #     self._session.post(url, data=payload, verify=False)
+            #     # print(page.cookies.items())
+            # except requests.exceptions.ConnectionError as e:
+            #     print(e)
+            #     print("Session connecting to epicsweb.jlab.org failed. Probably the $%^&!! certificates.")
+            #     self._session = None
+
+    def __del__(self):
+        # Cleanup
+        self._ssh_proc.terminate()
+        pass
 
     @property
     def is_connected(self):
@@ -276,7 +305,7 @@ The code will work at JLab, but not from offsite until I can figure out a fix fo
 
         data_age = (datetime.now() - start).days
         if deployment is None:
-            if data_age > 365:   # More than two years old, get from history deployment.
+            if data_age > 365:   # More than a years old, get from history deployment.
                 deployment = 'history'
             else:
                 deployment = 'ops'
@@ -296,7 +325,7 @@ The code will work at JLab, but not from offsite until I can figure out a fix fo
         try:
             if self.debug > 5:
                 print(f"Asking for data: {self._url_head} params={params}")
-            my_dat = self._session.get(self._url_head, verify=False, params=params)
+            my_dat = self._session.get(self._url_head, verify=False, params=params, proxies=self._proxies)
         except ConnectionError:
             print("Could not connect to the Mya myQuery website. Was the password correctly entered? ")
             raise ConnectionError("Could not connect to ", self._url_head)

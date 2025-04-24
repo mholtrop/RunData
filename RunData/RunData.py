@@ -25,7 +25,7 @@
 # run_type              str                                        PROD66
 # target                str                                       20 um W
 # beam_current_request  str                                           120
-# operators             str   expert: Mathew Graham, worker: Hakop Voskanyan
+# operators             str                expert: Neo, worker: Mr. Smith
 # event_count           int                                      96056017
 # events_rate           float                                     169.888     =
 # run_config            str                                 hps_v12_1.cnf
@@ -73,7 +73,7 @@ try:
     import pandas as pd
 except ImportError:
     print("Sorry, but you really need a computer with 'pandas' installed.")
-    print("Try 'anaconda' python, which should have both.")
+    print("Try 'anaconda' python, which should have both pandas and plotly and scipy.")
     sys.exit(1)
 
 import numpy as np
