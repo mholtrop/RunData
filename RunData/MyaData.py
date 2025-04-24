@@ -46,8 +46,6 @@ class TlsAdapter(HTTPAdapter):
 
     def __init__(self, ssl_options=0, **kwargs):
         self.ssl_options = ssl_options
-        self._proxies = None
-        self._ssh_proc = None
         super(TlsAdapter, self).__init__(**kwargs)
 
     def init_poolmanager(self, *pool_args, **pool_kwargs):
@@ -95,6 +93,8 @@ class MyaData:
         self._session.mount("https://", self.adapter)
         self._cache_engine = None
         self.start_cache_engine(cache)
+        self._proxies = None
+        self._ssh_proc = None
         #
     # When onsite, no password is needed so don't bother the user.
     # Setup the connection to the Mya Database through the MyQuery web interface.
@@ -173,7 +173,7 @@ is started up by the scipt. You must have your ssh setup to do correct password-
         # Cleanup
         if self._ssh_proc is not None:
             self._ssh_proc.terminate()
-    
+
     @property
     def is_connected(self):
         return self._session is not None
