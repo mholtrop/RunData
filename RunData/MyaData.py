@@ -120,7 +120,7 @@ is started up by the scipt. You must have your ssh setup to do correct password-
 
             # Start the SSH SOCKS5 proxy
             self._ssh_proc = subprocess.Popen(
-                ["ssh", "-N", "-D", "localhost:8080"],
+                ["ssh", "-N", "-D", "8080"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
