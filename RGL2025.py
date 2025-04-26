@@ -87,6 +87,7 @@ def target_properties():
             'D2': ['rgba(100, 180, 180, 0.7)', 'rgba(100, 180, 180, 0.7)'],
             'He4': ['rgba(150, 150, 255, 0.7)', 'rgba(200, 200, 200, 0.7)'],
             'calibration': ['rgba(220,220,220,0.5)', 'rgba(220,220,220,0.5)'],
+            'commissioning': ['rgba(220,220,255,0.5)', 'rgba(220,220,255,0.5)'],
         },
         'sums_color': {  # Plot color: r,g,b,a
             'empty': 'rgba(150, 90, 90, 0.8)',
@@ -228,7 +229,8 @@ def main(argv=None):
     run_sub_y_placement = [0.99, 0.99]
     run_period_name = ""
 
-    Excluded_runs = []   # Explicitly exclude these runs from all further processing.
+    Excluded_runs = [21527]   # Explicitly exclude these runs from all further processing.
+    commissioning_run_numbers = [x for x in range(21447, 21494)]
 
     run_period_sub_num = range(len(run_sub_periods))
     if args.runperiod == 0:
@@ -297,7 +299,12 @@ def main(argv=None):
     #    calib_starts = calib_runs["start_time"]
     #    calib_ends = calib_runs["end_time"]
 
+        valid_run_numbers = set(plot_runs.index)
+        commissioning_run_numbers = [x for x in commissioning_run_numbers if x in valid_run_numbers]
+        commissioning_runs = plot_runs.loc[commissioning_run_numbers]
+
         plot_runs = plot_runs.loc[~plot_runs.index.isin(calib_run_numbers)]  # Take the calibration runs out.
+        plot_runs = plot_runs.loc[~plot_runs.index.isin(commissioning_run_numbers)]  # take commissioning runs out.
 
         starts = plot_runs["start_time"]
         ends = plot_runs["end_time"]
@@ -366,6 +373,17 @@ def main(argv=None):
                         legendgroup="group1",
                         ),
                  secondary_y=False, )
+
+            fig.add_trace(
+                go.Bar(x=commissioning_runs['center'],
+                       y=commissioning_runs['event_rate'],
+                       width=commissioning_runs['dt'],
+                       hovertext=commissioning_runs['hover'],
+                       name="Commissioning runs",
+                       marker=dict(color=data.target_properties['color']['commissioning'][0]),
+                       legendgroup="group1",
+                       ),
+                secondary_y=False, )
 
             if args.charge and not plot_runs.empty:
                 current_plotting_scale = data.target_properties['current']['scale'][sub_i]
