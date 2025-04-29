@@ -148,7 +148,7 @@ def setup_rundata_structures(data_loc, dates, current_channel=None):
     data_loc.target_dens = data_loc.target_properties['density']
     data_loc.atten_dict = None
     if current_channel is None:
-        data_loc.Current_Channel = "IPM2C21A"  # "scaler_calc1b" # "IPM2C21A"
+        data_loc.Current_Channel = "IPM2C24A"  # "scaler_calc1b" was "IPM2C21A"
     else:
         data_loc.Current_Channel = current_channel
     data_loc.LiveTime_Channel = "B_DAQ:livetime"
@@ -189,7 +189,7 @@ def main(argv=None):
     parser.add_argument('-c', '--charge', action="store_true", help="Make a plot of charge not luminosity.")
 #    parser.add_argument('-C', '--chart', action="store_true", help="Put plot on plotly charts website.")
     parser.add_argument('-f', '--date_from', type=str, help="Plot from date, eg '2021,11,09' ", default=None)
-    parser.add_argument("-F", '--fcup', action="store_true", help="Use the Faraday cup instead of IPM2C21A.")
+    parser.add_argument("-F", '--fcup', action="store_true", help="Use the Faraday cup instead of IPM2C24A.")
     parser.add_argument('-t', '--date_to', type=str, help="Plot to date, eg '2022,01,22' ", default=None)
     parser.add_argument('-m', '--max_rate', type=float, help="Maximum for date rate axis ", default=None)
     parser.add_argument('-M', '--max_charge', type=float, help="Maximum for charge axis ", default=None)
@@ -633,7 +633,7 @@ def main(argv=None):
         if args.fcup:
             title = "<b>RGL/ALERT 2025 Progress</b>  FCup"
         else:
-            title = "<b>RGL/ALERT 2025 Progress</b>  IPM2C21"
+            title = "<b>RGL/ALERT 2025 Progress</b>  IPM2C24"
         fig.update_layout(
             title=go.layout.Title(
                 text=title,
