@@ -39,6 +39,7 @@ def target_properties():
             'None': 'empty',
             'Unknown': 'empty',
             'Empty (<10 psig)': 'empty',
+            'Empty (< 10 psig)': 'empty',
             'Empty (<5 psig)': 'empty',
             'LH2': 'H2',
             'H': 'H2',
