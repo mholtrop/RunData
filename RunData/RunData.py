@@ -50,6 +50,7 @@ import re
 
 try:
     import sqlalchemy
+    from sqlalchemy.exc import OperationalError
 except ImportError:
     print("We need the sqlalchemy installed for the database, but I could not find it in:")
     print("sys.path: ", sys.path)
@@ -175,6 +176,15 @@ class RunData:
             print("WARNING: Cannot connect to the RCDB. Will try with data from Cache only.")
             self._db = None
 
+    def is_db_alive(self):
+        try:
+            # Try executing a lightweight query
+            #self._session.execute("SELECT 1")
+            self._db.session.execute(sqlalchemy.sql.text("SELECT 1"))
+            return True
+        except OperationalError:
+            return False
+
     def start_cache(self, connector_string=True):
         """Start up the cache backend according to connector_string.
         If connector_string is True, use a local sqlite3 file."""
@@ -263,6 +273,12 @@ class RunData:
         if num_runs == 0 and self._db is not None:
             # We still need to adjust the "end" time, so we don't end up in a endless loop.
             # Now data.All_Runs is likely empty, so use RCDB to get end of last run.
+            if not self.is_db_alive():
+                print("The DB died on the way here (277). Trying to reconnect....")
+                self._db.disconnect()
+                self._db.connect()
+                print("continuing.")
+
             rcdb_runs = self._db.session.query(Run).order_by(Run.start_time.desc()).limit(20)  # Set a limit to speedup
             use_index = 0
 
@@ -290,6 +306,12 @@ class RunData:
         #    incorrect number of events, files etc.
         #
         # To detect between 1 and 2, get the very last run from the database.
+
+        if not self.is_db_alive():
+            print("The DB died on the way here (311). Trying to reconnect....")
+            self._db.disconnect()
+            self._db.connect()
+            print("continuing.")
 
         last = self._db.session.query(Run).order_by(Run.start_time.desc()).limit(1).first()
 
@@ -621,6 +643,13 @@ class RunData:
          This will get the list directly from the rcdb database, not looking at the local cache.
          The output is then parsed through process_runs_from_rcdb."""
 
+        if not self.is_db_alive():
+            print("The DB died on the way here (647). Trying to reconnect....")
+            self._db.disconnect()
+            self._db.connect()
+            print("continuing")
+
+
         runs = self._db.get_runs(run_min, run_max)
         self.process_runs_from_rcdb(runs)
         # The RCDB is by and large a piece of ..., er, very unreliable. Translate "None" to 0.
@@ -643,15 +672,23 @@ class RunData:
             print("Getting runs from RCDB: {} - {} minevt: {}".format(start_time, end_time, min_event_count))
 
         if self._db is not None:
+            if not self.is_db_alive():
+                print("The DB died on the way here (676). Trying to reconnect....")
+                self._db.disconnect()
+                self._db.connect()
+                print("continuing")
+
             q = self._db.session.query(Run).join(Run.conditions).join(Condition.type) \
                 .filter(Run.start_time >= start_time).filter(Run.start_time <= end_time) \
                 .filter((ConditionType.name == "event_count") & (Condition.int_value >= min_event_count))
         else:
             return 0
 
-        if self.debug:
-            print("Found {} runs.\n".format(q.count()))
         num_runs = q.count()
+
+        if self.debug:
+            print(f"Found {num_runs} runs.\n")
+
         if num_runs == 0:
             return 0
         all_runs = q.all()

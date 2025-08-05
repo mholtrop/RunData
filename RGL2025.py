@@ -219,14 +219,11 @@ def main(argv=None):
     data.debug = args.debug
 
     run_sub_periods = [
-        # (datetime(2023, 2, 20,  0, 0),  datetime(2023, 2, 25, 0, 0)),
-        #(datetime(2023, 10, 4, 6, 0), datetime(2023, 10, 31,0,0)),
-        #(datetime(2023, 10, 31, 0, 0), datetime.now())
-        (datetime(2025, 4, 12, 8, 0), datetime.now())
-        #(datetime(2025, 5, 1, 8, 0), datetime.now())
+        (datetime(2025, 4, 12, 8, 0), datetime(2025, 7, 31, 8, 10)),
+        (datetime(2025, 7, 31, 15, 0), datetime.now())
     ]
 
-    run_sub_energy = [10.677, 10.677]
+    run_sub_energy = [10.677, 2.24]
     run_sub_y_placement = [0.99, 0.99]
     run_period_name = ""
 

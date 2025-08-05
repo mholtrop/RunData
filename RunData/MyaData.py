@@ -119,15 +119,16 @@ is started up by the scipt. You must have your ssh setup to do correct password-
             }
 
             # Start the SSH SOCKS5 proxy
+            print("Trying to start the SOCKS5 proxy...")
             self._ssh_proc = subprocess.Popen(
-                ["ssh", "-N", "-D", "8080"],
+                ["ssh", "-N", "-D", "8080","ifarm"],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
 
             # Wait a bit to let the proxy start up
             time.sleep(2)
-
+            print("Okay, I hoped that worked.")
             #
             # OLD CODE THAT NO LONGER WORKS/
             # self._url_head = "https://epicsweb.jlab.org/myquery/interval"
