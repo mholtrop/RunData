@@ -226,7 +226,7 @@ def main(argv=None):
     ]
 
     run_sub_energy = [10.677, 2.24, 6.473]
-    run_sub_y_placement = [0.95, 0.95, 0.95]
+    run_sub_y_placement = [0.95, 0.92, 0.99]
     run_period_name = ""
 
     Excluded_runs = [21527]   # Explicitly exclude these runs from all further processing.
