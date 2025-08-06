@@ -68,11 +68,11 @@ def target_properties():
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             # list of currents for each beam energy period.
             'scale': [1., 1, 1, 1],     # Special entry. Multiply sum charge by this factor,
-            'empty': [300., 300., 300., 300.],
-            'C': [30., 30., 30., 30.],
-            'H2': [65., 65., 65., 65.],
-            'D2': [300., 300., 300., 300.],
-            'He4': [300., 300., 300., 300.],
+            'empty': [300., 50., 250., 300.],
+            'C': [30., 50.,250., 30.],
+            'H2': [65., 50., 250., 65.],
+            'D2': [300., 50., 250., 300.],
+            'He4': [300., 50., 250., 300.],
         },
         'attenuation': {     # Units: number
             'empty': 1,
@@ -82,13 +82,13 @@ def target_properties():
             'He4': 1
         },
         'color': {  # Plot color: r,g,b,a
-            'empty': ['rgba(160, 110, 110, 0.7)', 'rgba(160, 110, 110, 0.7)'],
-            'C': ['rgba(80, 80, 200, 0.7)','rgba(80, 80, 200, 0.7)'],
-            'H2': ['rgba(0, 100, 200, 0.7)', 'rgba(0, 100, 150, 0.7)'],
-            'D2': ['rgba(100, 180, 180, 0.7)', 'rgba(100, 180, 180, 0.7)'],
-            'He4': ['rgba(150, 150, 255, 0.7)', 'rgba(200, 200, 200, 0.7)'],
-            'calibration': ['rgba(220,220,220,0.5)', 'rgba(220,220,220,0.5)'],
-            'commissioning': ['rgba(220,220,255,0.5)', 'rgba(220,220,255,0.5)'],
+            'empty': ['rgba(160, 110, 110, 0.7)', 'rgba(160, 110, 110, 0.7)', 'rgba(160, 110, 110, 0.7)'],
+            'C': ['rgba(80, 80, 200, 0.7)','rgba(80, 80, 200, 0.7)','rgba(80, 80, 200, 0.7)'],
+            'H2': ['rgba(0, 100, 200, 0.7)', 'rgba(0, 100, 150, 0.7)', 'rgba(0, 100, 150, 0.7)'],
+            'D2': ['rgba(100, 180, 180, 0.7)', 'rgba(100, 180, 180, 0.7)', 'rgba(100, 180, 180, 0.7)'],
+            'He4': ['rgba(150, 150, 255, 0.7)', 'rgba(200, 200, 200, 0.7)', 'rgba(200, 200, 200, 0.7)'],
+            'calibration': ['rgba(220,220,220,0.5)', 'rgba(220,220,220,0.5)', 'rgba(220,220,220,0.5)'],
+            'commissioning': ['rgba(220,220,255,0.5)', 'rgba(220,220,255,0.5)', 'rgba(220,220,255,0.5)'],
         },
         'sums_color': {  # Plot color: r,g,b,a
             'empty': 'rgba(150, 90, 90, 0.8)',
@@ -220,11 +220,13 @@ def main(argv=None):
 
     run_sub_periods = [
         (datetime(2025, 4, 12, 8, 0), datetime(2025, 7, 31, 8, 10)),
-        (datetime(2025, 7, 31, 15, 0), datetime.now())
+        (datetime(2025, 7, 31, 15, 0), datetime(2025, 8, 4, 8, 30)),
+        (datetime(2025, 8, 4, 14, 0), datetime.now())
+         #)
     ]
 
-    run_sub_energy = [10.677, 2.24]
-    run_sub_y_placement = [0.99, 0.99]
+    run_sub_energy = [10.677, 2.24, 6.473]
+    run_sub_y_placement = [0.95, 0.95, 0.95]
     run_period_name = ""
 
     Excluded_runs = [21527]   # Explicitly exclude these runs from all further processing.
@@ -239,6 +241,10 @@ def main(argv=None):
             run_period_name = ""
         else:
             run_period_name = "_r"+str(args.runperiod)
+    elif args.runperiod==12 or args.runperiod==23:
+        run_period_name = str(args.runperiod)
+        run_period_sub_num = [args.runperiod//10-1, args.runperiod%10-1]
+        print("Computing for run periods: ",run_period_sub_num)
     else:
         print("Incorrect choice for runperiod argument.")
         return
@@ -638,8 +644,9 @@ def main(argv=None):
                 yanchor="top",
                 y=0.95,
                 xanchor="left",
-                x=0.45),
-            titlefont=dict(size=24, color='rgba(0,0,100,1.)'),
+                x=0.45,
+                font=dict(size=24, color='rgba(0,0,100,1.)')
+            ),
             legend=dict(
                 x=0.02,
                 y=1.15,
@@ -653,8 +660,9 @@ def main(argv=None):
 
         # Set y-axes titles
         fig.update_yaxes(
-            title_text="<b>Event rate kHz</b>",
-            titlefont=dict(size=22),
+            title=go.layout.yaxis.Title(
+                text="<b>Event rate kHz</b>",
+                font=dict(size=22)),
             secondary_y=False,
             tickfont=dict(size=18),
             # range=[0, 1.05*max(25., plot_runs.loc[runs, 'event_rate'].max())]
@@ -674,16 +682,18 @@ def main(argv=None):
                 max_charge = args.max_charge
             else:
                 max_charge = max_y_2nd_scale
-            fig.update_yaxes(title_text="<b>Accumulated Charge (mC)</b>",
-                             titlefont=dict(size=22),
+            fig.update_yaxes(title=go.layout.yaxis.Title(
+                                text="<b>Accumulated Charge (mC)</b>",
+                                font=dict(size=22)),
                              range=[0, max_charge],
                              secondary_y=True,
                              tickfont=dict(size=18)
                              )
 
         fig.update_xaxes(
-            title_text="Date",
-            titlefont=dict(size=22),
+            title=go.layout.xaxis.Title(
+                text="Date",
+                font=dict(size=22)),
             tickfont=dict(size=18),
         )
 
