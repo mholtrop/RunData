@@ -276,7 +276,7 @@ class RunData:
             if not self.is_db_alive():
                 print("The DB died on the way here (277). Trying to reconnect....")
                 self._db.disconnect()
-                self._db.connect()
+                self.start_rcdb()
                 print("continuing.")
 
             rcdb_runs = self._db.session.query(Run).order_by(Run.start_time.desc()).limit(20)  # Set a limit to speedup
@@ -310,7 +310,7 @@ class RunData:
         if not self.is_db_alive():
             print("The DB died on the way here (311). Trying to reconnect....")
             self._db.disconnect()
-            self._db.connect()
+            self.start_rcdb()
             print("continuing.")
 
         last = self._db.session.query(Run).order_by(Run.start_time.desc()).limit(1).first()
@@ -646,7 +646,7 @@ class RunData:
         if not self.is_db_alive():
             print("The DB died on the way here (647). Trying to reconnect....")
             self._db.disconnect()
-            self._db.connect()
+            self.start_rcdb()
             print("continuing")
 
 
@@ -675,7 +675,7 @@ class RunData:
             if not self.is_db_alive():
                 print("The DB died on the way here (676). Trying to reconnect....")
                 self._db.disconnect()
-                self._db.connect()
+                self.start_rcdb()
                 print("continuing")
 
             q = self._db.session.query(Run).join(Run.conditions).join(Condition.type) \
