@@ -69,8 +69,8 @@ def target_properties():
             # list of currents for each beam energy period.
             'scale': [1., 1, 1, 1],     # Special entry. Multiply sum charge by this factor,
             'empty': [300., 50., 250., 300.],
-            'C': [30., 50.,250., 30.],
-            'H2': [65., 50., 250., 65.],
+            'C': [30., 50.,250., 300.],
+            'H2': [65., 50., 250., 300.],
             'D2': [300., 50., 250., 300.],
             'He4': [300., 50., 250., 300.],
         },
@@ -86,7 +86,7 @@ def target_properties():
             'C': ['rgba(80, 80, 200, 0.7)','rgba(80, 80, 200, 0.7)','rgba(80, 80, 200, 0.7)'],
             'H2': ['rgba(0, 100, 200, 0.7)', 'rgba(0, 100, 150, 0.7)', 'rgba(0, 100, 150, 0.7)'],
             'D2': ['rgba(100, 180, 180, 0.7)', 'rgba(100, 180, 180, 0.7)', 'rgba(100, 180, 180, 0.7)'],
-            'He4': ['rgba(150, 150, 255, 0.7)', 'rgba(200, 200, 200, 0.7)', 'rgba(200, 200, 200, 0.7)'],
+            'He4': ['rgba(150, 150, 255, 0.7)', 'rgba(150, 150, 255, 0.7)', 'rgba(150, 150, 255, 0.7)'],
             'calibration': ['rgba(220,220,220,0.5)', 'rgba(220,220,220,0.5)', 'rgba(220,220,220,0.5)'],
             'commissioning': ['rgba(220,220,255,0.5)', 'rgba(220,220,255,0.5)', 'rgba(220,220,255,0.5)'],
         },
@@ -133,7 +133,7 @@ def compute_plot_runs(targets, run_config, date_min=None, date_max=None, data_lo
 def used_triggers():
     """Setup the triggers used."""
     good_triggers = '.*'
-    calibration_triggers = ["rgk_v1.0_zero_.*"]
+    calibration_triggers = ["rgl_calibration_trigger_.*"]  # No calibration triggers were identified.
 
     return good_triggers, calibration_triggers
 
