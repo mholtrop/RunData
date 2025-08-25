@@ -68,11 +68,11 @@ def target_properties():
         'current': {  # Nominal current in nA.  If 0, no expected charge line will be drawn.
             # list of currents for each beam energy period.
             'scale': [1., 1, 1, 1],     # Special entry. Multiply sum charge by this factor,
-            'empty': [300., 50., 250., 300.],
-            'C': [30., 50.,250., 300.],
-            'H2': [65., 50., 250., 300.],
-            'D2': [300., 50., 250., 300.],
-            'He4': [300., 50., 250., 300.],
+            'empty': [300., 50., 300., 300.],
+            'C': [30., 50., 300., 300.],
+            'H2': [65., 50., 300., 300.],
+            'D2': [300., 50., 300., 300.],
+            'He4': [300., 50., 300., 300.],
         },
         'attenuation': {     # Units: number
             'empty': 1,
