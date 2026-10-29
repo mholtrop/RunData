@@ -508,7 +508,7 @@ class RunData:
         num_runs_cache = self._cache_get_runs(start, end, min_event)  # Get whatever we have in the cache already.
 
         if self._db is None:  # No DB so we are done
-            if self.All_Runs:
+            if len(self.All_Runs):
                 return len(self.All_Runs)
             else:
                 return 0
